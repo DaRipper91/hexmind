@@ -29,6 +29,8 @@ DIRECT_CMDS: dict[str, list[str]] = {
     "opencode-ultra": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3-ultra-free"],
     "opencode-muse": ["opencode", "run", "--auto", "-m", "opencode/muse-spark-1.3-contributor-free"],
     "opencode-mimo": ["opencode", "run", "--auto", "-m", "opencode/mimo-v2.6-flash-free"],
+    "opencode-pickle": ["opencode", "run", "--auto", "-m", "opencode/big-pickle"],
+    "opencode-ling": ["opencode", "run", "--auto", "-m", "opencode/ling-3.0-flash-fin-free"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
     # kimi's -p takes the prompt as an argv token, not stdin -- its only stdin-driven mode is the

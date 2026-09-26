@@ -23,6 +23,8 @@ ROSTER: dict[str, str] = {
     "opencode-ultra": "NVIDIA Nemotron 3 Ultra (Free): deep architectural audits and complex logic validation",
     "opencode-muse": "Meta Muse Spark (Free): massive 1M context repo scanning and cross-file documentation analysis",
     "opencode-mimo": "Xiaomi MiMo (Free): low-latency small tasks — quick edits, short scripts, fast second opinions",
+    "opencode-pickle": "Big Pickle (Free): deliberate reasoning model for multi-step problem solving and tool automation",
+    "opencode-ling": "Ling 3.0 Flash (Free): quantitative, financial logic, metric calculations, and structured data tasks",
     "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
     "jules": ("Google Jules, an async cloud agent. It works on the GitHub copy of this repo, NOT local files or "
               "uncommitted changes, takes minutes to hours, and finishes with a pull request. Give it only "
