@@ -120,3 +120,23 @@ def test_narrow_table_is_compact_and_rebuilds_on_resize():
             assert app.sub_title == "test backend · lead: claude · audit: off"
 
     asyncio.run(go())
+
+
+def test_task_sheet_copies_output(monkeypatch):
+    import hexmind.tui as tui
+    monkeypatch.setattr(tui.shutil, "which", lambda _: None)
+    plan = json.dumps({"reply": "on it", "tasks": [{"id": "a", "agent": "claude", "title": "alpha"}]})
+
+    async def go():
+        app = HexmindApp(FakeBackend(plan), ["claude"], "claude", "test")
+        copied = []
+        app.copy_to_clipboard = copied.append
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.press(*"go", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.press("escape", "v", "enter")
+            await pilot.click("#copy")
+            assert copied == [app.tasks["1.a"].output]
+
+    asyncio.run(go())

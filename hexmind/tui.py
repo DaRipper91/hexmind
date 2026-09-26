@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -18,6 +20,7 @@ from .core import Orchestrator, Task
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
 AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "you": "bold white"}
+BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
 HELP = """[b]Keys[/b] (when the input is not focused — press [b]Esc[/b] first)
 
@@ -65,21 +68,41 @@ class TaskScreen(ModalScreen):
     """
     BINDINGS = [("escape,q", "dismiss", "Close")]
 
-    def __init__(self, write) -> None:
+    def __init__(self, write, output: str) -> None:
         super().__init__()
-        self.write = write  # fills a RichLog with the task detail
+        self.write, self.output = write, output  # write fills a RichLog with the task detail
 
     def compose(self) -> ComposeResult:
         with Vertical(id="sheet"):
             yield RichLog(wrap=True)
             with Horizontal():
                 yield Button("Close", id="close", compact=True)
+                yield Button("Copy", id="copy", compact=True, disabled=not self.output)
 
     def on_mount(self) -> None:
         self.write(self.query_one(RichLog))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss()
+        if event.button.id == "copy":
+            self.app.copy_to_clipboard(self.output)  # OSC 52; Termux may not honour it, so also try termux-api
+            if shutil.which("termux-clipboard-set"):
+                self.termux_copy()
+            self.notify("Copied task output")
+        else:
+            self.dismiss()
+
+    @work(exclusive=True)
+    async def termux_copy(self) -> None:
+        # termux-api hangs if the Termux:API app is missing, so never block the UI on it
+        proc = await asyncio.create_subprocess_exec("termux-clipboard-set", stdin=asyncio.subprocess.PIPE,
+                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        try:
+            await asyncio.wait_for(proc.communicate(self.output.encode()), 5)
+        except asyncio.TimeoutError:
+            pass
+        finally:  # also runs if the sheet is closed and the worker cancelled
+            if proc.returncode is None:
+                proc.kill()
 
 
 class HexmindApp(App):
@@ -300,12 +323,12 @@ class HexmindApp(App):
             state = " · ".join(parts) or "idle"
             if m == self.lead and self.lead_state != "idle":
                 state = self.lead_state + (f" · {state}" if busy else "")
-            dot = "●" if state != "idle" else "○"
+            dot = BUSY if state != "idle" else IDLE
             busy_count += state != "idle"
             lines.append(f"[{AGENT_COLOR.get(m, 'white')}]{dot} {self.orch.name(m)}[/]{f' [dim]({m})[/]' if m in self.orch.nicknames else ''}{' (lead)' if m == self.lead else ''}  [dim]{state}[/]")
         if self.has_class("short"):  # soft keyboard open: one-line summary leaves rows for the task list
             idle = len(self.members) - busy_count
-            lines = [f"[yellow]●[/] {busy_count} busy · [dim]○ {idle} idle · lead: {self.orch.name(self.lead)}[/]"]
+            lines = [f"[yellow]{BUSY}[/] {busy_count} busy · [dim]{IDLE} {idle} idle · lead: {self.orch.name(self.lead)}[/]"]
         self.query_one("#team", Static).update("\n".join(lines))
 
     # ---------- task detail ----------
@@ -315,7 +338,8 @@ class HexmindApp(App):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if self.has_class("narrow") and event.row_key.value in self.tasks:
-            self.push_screen(TaskScreen(lambda log: self.write_task(log, event.row_key.value)))
+            key = event.row_key.value
+            self.push_screen(TaskScreen(lambda log: self.write_task(log, key), self.tasks[key].output))
 
     def show_task(self, key: str) -> None:
         self.write_task(self.query_one("#detail", RichLog), key)
