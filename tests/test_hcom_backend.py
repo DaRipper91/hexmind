@@ -50,7 +50,8 @@ class FakeHcom:
             directory = command[command.index("--dir") + 1]
             tag = command[command.index("--tag") + 1]
             member = {"claude": "claude", "antigravity": "agy", "codex": "codex"}[tool]
-            self.agents.append({"name": f"hexmind-{member}", "tool": tool, "tag": tag,
+            self.agents.append({"name": f"hexmind-{member}", "base_name": member,
+                                "tool": tool, "tag": tag,
                                 "directory": directory, "status": "launching"})
             out = "Still launching after 10.0s"
             return FakeProcess(out, returncode=2)
@@ -97,6 +98,8 @@ def test_run_waits_for_readiness_and_reuses_agent_with_isolated_threads(monkeypa
     assert threads[0] != threads[1]
     assert all(call[call.index("--thread") + 1] == thread
                for call, thread in zip(waits, threads))
+    assert all(call[call.index("--from") + 1] == "agy" for call in waits)
+    assert all(call[1] == "@hexmind-agy" for call in sends)
     assert capsys.readouterr().out == ""  # launch progress is captured, never shown as a model reply
 
 

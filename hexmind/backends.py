@@ -99,7 +99,7 @@ class HcomBackend:
                  if a.get("tool", "").lower() in HCOM_MEMBERS}
         return [m for m in HCOM_TOOLS if m in found]
 
-    async def _agent(self, member: str, cwd: str) -> str:
+    async def _agent(self, member: str, cwd: str) -> tuple[str, str]:
         if member not in HCOM_TOOLS:
             raise ValueError(f"unsupported hcom member: {member}")
         cwd = os.path.abspath(cwd)
@@ -138,7 +138,7 @@ class HcomBackend:
                             raise RuntimeError(f"{message} Stopping the blocked agent also failed: {e}") from e
                         raise RuntimeError(message)
                     if agent.get("status") in {"listening", "active"}:
-                        return agent["name"]
+                        return agent["name"], agent.get("base_name", agent["name"])
                 await asyncio.sleep(0.25)
             if agent:
                 raise RuntimeError(f"hcom {member} agent {agent.get('name')} did not become ready "
@@ -146,12 +146,12 @@ class HcomBackend:
             raise RuntimeError(f"hcom did not start a {member} agent for {cwd}")
 
     async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
-        agent_name = await self._agent(agent, cwd or self.cwd)
+        agent_name, event_from = await self._agent(agent, cwd or self.cwd)
         thread = f"{self.tag}-{agent}-{uuid.uuid4().hex[:16]}"
         await self._command("send", f"@{agent_name}", "--intent", "request", "--thread", thread,
                             "--from", "hexmind", "--", prompt)
         raw = await self._command("events", "--wait", str(max(1, self.timeout)), "--type", "message",
-                                  "--from", agent_name, "--thread", thread,
+                                  "--from", event_from, "--thread", thread,
                                   timeout=self.timeout + 5)
         try:
             event = json.loads(raw)
