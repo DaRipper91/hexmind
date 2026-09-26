@@ -63,6 +63,7 @@ a track record that decides who gets trusted with what.
 | `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `codex exec --sandbox workspace-write … -` |
 | `opencode` | [OpenCode](https://opencode.ai) | `opencode run --auto` |
 | `copilot` | [GitHub Copilot CLI](https://github.com/github/copilot-cli) | `copilot -s --allow-tool=write` (file edits yes, shell no) |
+| `kimi` | [Kimi Code CLI](https://moonshotai.github.io/kimi-code/) | `kimi -p … --output-format stream-json` — prompt goes on argv, not stdin (kimi's only stdin mode is the heavier ACP protocol), so very large prompts may hit an OS arg-length limit unlike every other member |
 | `qwen` *(opt-in: `--with qwen`)* | local `qwen3:4b` via [Ollama](https://ollama.com) | text only: no files, no tools; never leads or audits; skipped by relay rotation |
 
 Hexmind only includes members whose CLI is on your `PATH`.
@@ -373,7 +374,7 @@ Every backend has the same interface: `await backend.run(agent, prompt, cwd) -> 
 
 | backend | status | how it works |
 |---|---|---|
-| **direct** | ✅ default | Hexmind launches each CLI in non-interactive mode itself and sends the prompt on stdin, so prompts of any size work (`claude -p`, `agy` stream-json, `codex exec -`). Nothing else to install; each call has a 30-minute timeout, and a timed-out process is killed and reaped. |
+| **direct** | ✅ default | Hexmind launches each CLI in non-interactive mode itself and sends the prompt on stdin, so prompts of any size work (`claude -p`, `agy` stream-json, `codex exec -`) — except `kimi`, whose `-p` takes the prompt as an argv token instead. Nothing else to install; each call has a 30-minute timeout, and a timed-out process is killed and reaped. |
 | **hcom** | ✅ live-tested with Claude | `--backend hcom`: each model is a persistent, headless [hcom](https://pypi.org/project/hcom/) agent, started the first time it gets work and reused after that (a warm request took under 4 s). Every request runs on its own thread, so replies never mix. Hexmind waits until an agent is ready, and never inherits the hcom identity of whatever launched it. Requires `hcom`. A folder a CLI has never opened stops at that CLI's trust prompt: Hexmind stops the agent and tells you to open the folder once (`cd <folder> && claude`) and accept. |
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>

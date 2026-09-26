@@ -15,7 +15,10 @@ from .core import Orchestrator, Task
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
-AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow", "opencode": "bright_blue", "copilot": "white", "you": "bold white"}
+AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow",
+               "qwen-large": "gold1",
+               "opencode": "bright_blue", "opencode-ultra": "blue", "opencode-muse": "sky_blue1",
+               "opencode-mimo": "turquoise2", "copilot": "white", "kimi": "red", "you": "bold white"}
 
 
 def audit_cell(t: Task, name=lambda m: m) -> str:
