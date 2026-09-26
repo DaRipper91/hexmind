@@ -8,20 +8,50 @@ from rich.panel import Panel
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
+from textual.screen import ModalScreen
+from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
 from .core import Orchestrator, Task
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
 AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "you": "bold white"}
+NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
+HELP = """[b]Keys[/b] (when the input is not focused — press [b]Esc[/b] first)
+
+  [b]v[/b]        switch Chat / Tasks
+  [b]i[/b] / Enter  type a message
+  [b]j[/b] / [b]k[/b]    scroll chat / move task cursor
+  [b]c[/b]        clear chat
+  [b]q[/b]        quit
+  [b]?[/b]        this help
+
+Ctrl+Q / Ctrl+L still work everywhere."""
 
 
 def audit_cell(t: Task, name=lambda m: m) -> str:
     """'pass·agy' / 'fixed·codex' / 'disputed·claude'; blank until audited. `name` maps model -> nickname."""
     audit, auditor = getattr(t, "audit", ""), getattr(t, "auditor", "")
     return f"{audit}·{name(auditor)}" if audit and auditor else audit or ""
+
+
+class HelpScreen(ModalScreen):
+    CSS = """
+    HelpScreen { align: center middle; }
+    #help { width: auto; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; border: solid $primary; background: $surface; }
+    #help Button { margin-top: 1; }
+    """
+    BINDINGS = [("escape,q,question_mark", "dismiss", "Close")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="help"):
+            yield Static(HELP)
+            yield Button("Close", id="close", compact=True)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss()
 
 
 class HexmindApp(App):
@@ -33,8 +63,25 @@ class HexmindApp(App):
     #team { height: auto; padding: 0 1; border-bottom: solid $primary; }
     #tasks { height: 1fr; }
     #detail { height: 1fr; border-top: solid $primary; }
+    #tabs { display: none; height: 1; }
+    #tabs Button { width: auto; min-width: 0; margin-right: 1; }
+    #tabs .spacer { width: 1fr; }
+    #tabs .active { text-style: bold reverse; }
+    .narrow #tabs { display: block; }
+    .narrow #left, .narrow #right { width: 1fr; }
+    .narrow #right { border-left: none; }
+    .narrow.view-chat #right, .narrow.view-tasks #left { display: none; }
+    .short #team { border-bottom: none; }
+    .tiny Header, .tiny Footer { display: none; }
+    .tiny #input { height: 1; border: none; padding: 0 1; }
     """
-    BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat")]
+    BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat"),
+                # single-key alternatives for soft keyboards; Input consumes printable keys, so these only fire when it is blurred
+                Binding("escape", "blur", "Leave input", show=False),
+                Binding("q", "quit", "Quit", show=False), Binding("c", "clear", "Clear chat", show=False),
+                Binding("v", "toggle_view", "Chat/Tasks", show=False), Binding("i,enter", "focus_input", "Type", show=False),
+                Binding("j", "move(1)", "Down", show=False), Binding("k", "move(-1)", "Up", show=False),
+                Binding("question_mark", "help", "Help", show=False)]
 
     def __init__(self, backend, members: list[str], lead: str, backend_name: str, audit: bool = False, stats=None):
         super().__init__()
@@ -45,10 +92,18 @@ class HexmindApp(App):
         self.lead_state = "idle"
         self.turn = asyncio.Lock()  # one request at a time; later ones queue
         self.round = 0
+        self.view = "chat"  # which pane shows in narrow (tabbed) mode
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Horizontal():
+        with Horizontal(id="tabs"):  # touch targets; only shown in narrow mode
+            yield Button("Chat", id="tab-chat", compact=True, classes="active")
+            yield Button("Tasks", id="tab-tasks", compact=True)
+            yield Static(classes="spacer")
+            yield Button("Clear", id="do-clear", compact=True)
+            yield Button("Quit", id="do-quit", compact=True)
+            yield Button("?", id="do-help", compact=True)
+        with Horizontal(id="body"):
             with Vertical(id="left"):
                 yield RichLog(id="chat", wrap=True, markup=True)
                 yield Input(placeholder="Ask the team anything…", id="input")
@@ -62,9 +117,57 @@ class HexmindApp(App):
         table = self.query_one("#tasks", DataTable)
         for col in ("task", "agent", "status", "audit", "title"):
             table.add_column(col, key=col)
+        self.set_class(True, "view-chat")
+        self.apply_size(self.size.width, self.size.height)
         self.refresh_team()
         self.say("Hexmind", f"Team ready: {', '.join(self.members)}. Type a request; the lead splits it up.")
         self.query_one("#input").focus()
+
+    # ---------- responsive layout ----------
+    def on_resize(self, event) -> None:
+        self.apply_size(event.size.width, event.size.height)
+
+    def apply_size(self, width: int, height: int) -> None:
+        short = height < SHORT
+        changed = short != self.has_class("short")
+        self.set_class(width < NARROW, "narrow")
+        self.set_class(short, "short")
+        self.set_class(height < TINY, "tiny")
+        if changed:
+            self.refresh_team()
+
+    def set_view(self, view: str) -> None:
+        self.view = view
+        self.set_class(view == "chat", "view-chat")
+        self.set_class(view == "tasks", "view-tasks")
+        self.query_one("#tab-chat").set_class(view == "chat", "active")
+        self.query_one("#tab-tasks").set_class(view == "tasks", "active")
+        self.query_one("#input" if view == "chat" else "#tasks").focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        action = {"tab-chat": lambda: self.set_view("chat"), "tab-tasks": lambda: self.set_view("tasks"),
+                  "do-clear": self.action_clear, "do-quit": self.exit, "do-help": self.action_help}.get(event.button.id)
+        if action:
+            action()
+
+    def action_toggle_view(self) -> None:
+        self.set_view("tasks" if self.view == "chat" else "chat")
+
+    def action_focus_input(self) -> None:
+        self.set_view("chat")
+
+    def action_blur(self) -> None:
+        if isinstance(self.focused, Input):
+            self.query_one("#chat" if self.view == "chat" or not self.has_class("narrow") else "#tasks").focus()
+
+    def action_move(self, step: int) -> None:
+        if isinstance(self.focused, DataTable):
+            self.focused.move_cursor(row=self.focused.cursor_row + step)
+        else:
+            self.query_one("#chat", RichLog).scroll_relative(y=step)
+
+    def action_help(self) -> None:
+        self.push_screen(HelpScreen())
 
     # ---------- chat ----------
     def say(self, who: str, text: str) -> None:
@@ -128,7 +231,9 @@ class HexmindApp(App):
         self.refresh_team()
 
     def refresh_team(self) -> None:
-        lines = []
+        active = sum(t.status in ("pending", "running", "auditing", "revising") for t in self.tasks.values())
+        self.query_one("#tab-tasks", Button).label = f"Tasks ({active})" if active else "Tasks"
+        lines, busy_count = [], 0
         for m in self.members:
             busy = [k for k, t in self.tasks.items() if t.agent == m and t.status in ("running", "revising")]
             auditing = [k for k, t in self.tasks.items() if getattr(t, "auditor", "") == m and t.status == "auditing"]
@@ -137,7 +242,11 @@ class HexmindApp(App):
             if m == self.lead and self.lead_state != "idle":
                 state = self.lead_state + (f" · {state}" if busy else "")
             dot = "●" if state != "idle" else "○"
+            busy_count += state != "idle"
             lines.append(f"[{AGENT_COLOR.get(m, 'white')}]{dot} {self.orch.name(m)}[/]{f' [dim]({m})[/]' if m in self.orch.nicknames else ''}{' (lead)' if m == self.lead else ''}  [dim]{state}[/]")
+        if self.has_class("short"):  # soft keyboard open: one-line summary leaves rows for the task list
+            idle = len(self.members) - busy_count
+            lines = [f"[yellow]●[/] {busy_count} busy · [dim]○ {idle} idle · lead: {self.orch.name(self.lead)}[/]"]
         self.query_one("#team", Static).update("\n".join(lines))
 
     # ---------- task detail ----------
