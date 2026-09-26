@@ -1,0 +1,16 @@
+[project]
+name = "hexmind"
+version = "0.1.0"
+description = "Multi-model agent team (Claude, agy, Codex, Jules) in one chat room"
+requires-python = ">=3.11"
+dependencies = ["textual>=0.80"]
+
+[project.scripts]
+hexmind = "hexmind.__main__:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["hexmind"]
