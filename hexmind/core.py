@@ -18,7 +18,17 @@ ROSTER: dict[str, str] = {
     "claude": "careful multi-file code changes, refactoring, code review, debugging, planning, writing docs",
     "agy": "Google Gemini: very large context reading, deep reasoning, polyglot code generation, web research, UI/frontend work",
     "codex": "OpenAI Codex: fast focused implementation, writing tests, shell scripting and automation",
+    "opencode": "OpenCode CLI: model-agnostic coding agent (its default is a free hosted model): general implementation, second opinions",
+    "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
+    "qwen": ("local qwen3:4b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
+             "it cannot read or edit files or run commands. Give it only small self-contained text jobs "
+             "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions"),
 }
+
+# Members that only see the prompt (no tools). Never lead, never auditor, not rotated into relays.
+TEXT_ONLY = {"qwen"}
+# Members that only join with --with NAME. qwen runs on CPU and starves an 8 GB machine running other agents.
+OPT_IN = {"qwen"}
 
 
 @dataclass
@@ -251,5 +261,6 @@ class Orchestrator:
                        " — read it first. Hexmind appends your final reply to it; don't edit it yourself.")
         if self.audit and self.stats is not None:
             from .auditor import audited_run
-            return await audited_run(self.backend, t, prompt, self.members, self.stats, self.emit)
+            auditors = [m for m in self.members if m not in TEXT_ONLY]  # auditors must inspect real files
+            return await audited_run(self.backend, t, prompt, auditors, self.stats, self.emit)
         return await self.backend.run(t.agent, prompt, cwd=t.cwd)

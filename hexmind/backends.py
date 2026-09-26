@@ -12,6 +12,7 @@ import os
 import shlex
 import shutil
 import tempfile
+import urllib.request
 import uuid
 
 # Per-agent argv for a one-shot, non-interactive turn. Prompts go over stdin.
@@ -22,12 +23,46 @@ DIRECT_CMDS: dict[str, list[str]] = {
             "--mode", "accept-edits", "--disable-slash-commands"],
     "codex": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
               "--output-last-message", "{outfile}", "-"],
+    "opencode": ["opencode", "run", "--auto"],
+    # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
+    "copilot": ["copilot", "-s", "--allow-tool=write"],
 }
 
 
+# Local models served by Ollama. Text in, text out: no tools, no files.
+LOCAL_MODELS: dict[str, str] = {"qwen": "qwen3:4b"}
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+
+
+def _ollama_models() -> set[str]:
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=3) as r:
+            return {m["name"] for m in json.load(r).get("models", [])}
+    except (OSError, ValueError):
+        return set()
+
+
 def available(members: list[str]) -> list[str]:
-    """Members whose CLI is actually installed."""
-    return [m for m in members if m in DIRECT_CMDS and shutil.which(DIRECT_CMDS[m][0])]
+    """Members whose CLI is installed, or whose local model is pulled in a running Ollama."""
+    pulled = _ollama_models() if any(m in LOCAL_MODELS for m in members) else set()
+    return [m for m in members if (m in DIRECT_CMDS and shutil.which(DIRECT_CMDS[m][0]))
+            or LOCAL_MODELS.get(m) in pulled]
+
+
+async def run_local(agent: str, prompt: str, timeout: int) -> str:
+    """One Ollama generate call; thinking off so the reply is just the answer."""
+    body = json.dumps({"model": LOCAL_MODELS[agent], "prompt": prompt, "stream": False,
+                       "think": False}).encode()
+    req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=body,
+                                 headers={"Content-Type": "application/json"})
+
+    def call() -> str:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r).get("response", "")
+    try:
+        return await asyncio.to_thread(call)
+    except OSError as e:
+        raise RuntimeError(f"{agent} (Ollama {LOCAL_MODELS[agent]}) failed: {e}") from e
 
 
 class DirectBackend:
@@ -36,6 +71,8 @@ class DirectBackend:
         self.timeout = timeout
 
     async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
+        if agent in LOCAL_MODELS:
+            return await run_local(agent, prompt, self.timeout)
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
             argv = [a.replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
@@ -71,8 +108,8 @@ class DirectBackend:
             return out.decode(errors="replace")
 
 
-HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex"}
-HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex"}
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
+HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
 
 
 class HcomBackend:
@@ -163,6 +200,8 @@ class HcomBackend:
             raise RuntimeError(f"hcom did not start a {member} agent for {cwd}")
 
     async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
+        if agent in LOCAL_MODELS:  # local models are not hcom agents; call Ollama directly
+            return await run_local(agent, prompt, self.timeout)
         agent_name, event_from = await self._agent(agent, cwd or self.cwd)
         thread = f"{self.tag}-{agent}-{uuid.uuid4().hex[:16]}"
         await self._command("send", f"@{agent_name}", "--intent", "request", "--thread", thread,
