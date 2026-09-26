@@ -1,15 +1,25 @@
-"""qwen: a local, text-only Ollama member."""
+"""qwen: local, text-only Ollama members that share one memory slot (see backends.run_local)."""
 import asyncio
 import json
 from unittest import mock
+
+import pytest
 
 import hexmind.backends as backends
 from hexmind.core import Orchestrator, TEXT_ONLY
 from hexmind.relay import Chain, Stage, assign
 
 
-def test_direct_backend_calls_ollama_with_thinking_off():
-    sent = {}
+@pytest.fixture(autouse=True)
+def _reset_active_local():
+    backends._active_local = None
+    yield
+    backends._active_local = None
+
+
+def _capture():
+    """A fake urlopen that records every request body it's called with."""
+    calls = []
 
     class Resp:
         def __enter__(self): return self
@@ -17,19 +27,60 @@ def test_direct_backend_calls_ollama_with_thinking_off():
         def read(self): return json.dumps({"response": "OK"}).encode()
 
     def fake_urlopen(req, timeout):
-        sent.update(json.loads(req.data))
+        calls.append(json.loads(req.data))
         return Resp()
 
+    return calls, fake_urlopen
+
+
+def test_direct_backend_calls_ollama_with_thinking_off():
+    calls, fake_urlopen = _capture()
     with mock.patch.object(backends.urllib.request, "urlopen", fake_urlopen):
         out = asyncio.run(backends.DirectBackend(".").run("qwen", "hi"))
-    assert out == "OK" and sent == {"model": "qwen3:4b", "prompt": "hi", "stream": False, "think": False}
+    assert out == "OK"
+    assert calls == [{"model": "qwen2.5-coder:7b", "prompt": "hi", "stream": False, "think": False}]
 
 
 def test_available_needs_the_model_pulled():
-    with mock.patch.object(backends, "_ollama_models", return_value={"qwen3:4b"}):
+    with mock.patch.object(backends, "_ollama_models", return_value={"qwen2.5-coder:7b"}):
         assert "qwen" in backends.available(["qwen"])
     with mock.patch.object(backends, "_ollama_models", return_value=set()):
         assert backends.available(["qwen"]) == []
+
+
+def test_switching_local_models_unloads_the_previous_one():
+    calls, fake_urlopen = _capture()
+    with mock.patch.object(backends.urllib.request, "urlopen", fake_urlopen):
+        asyncio.run(backends.run_local("qwen", "hi", 5))
+        asyncio.run(backends.run_local("qwen-large", "hi", 5))
+    assert calls == [
+        {"model": "qwen2.5-coder:7b", "prompt": "hi", "stream": False, "think": False},
+        {"model": "qwen2.5-coder:7b", "prompt": "", "stream": False, "think": False, "keep_alive": 0},
+        {"model": "qwen2.5-coder:latest", "prompt": "hi", "stream": False, "think": False},
+    ]
+
+
+def test_reusing_the_same_local_model_does_not_unload_it():
+    calls, fake_urlopen = _capture()
+    with mock.patch.object(backends.urllib.request, "urlopen", fake_urlopen):
+        asyncio.run(backends.run_local("qwen", "one", 5))
+        asyncio.run(backends.run_local("qwen", "two", 5))
+    assert len(calls) == 2 and all("keep_alive" not in c for c in calls)
+
+
+def test_unload_failure_does_not_block_the_switch():
+    calls, fake_urlopen = _capture()
+
+    def flaky(req, timeout):
+        body = json.loads(req.data)
+        if body.get("keep_alive") == 0:
+            raise OSError("connection refused")
+        return fake_urlopen(req, timeout)
+
+    with mock.patch.object(backends.urllib.request, "urlopen", flaky):
+        asyncio.run(backends.run_local("qwen", "hi", 5))
+        out = asyncio.run(backends.run_local("qwen-large", "hi", 5))
+    assert out == "OK" and calls[-1]["model"] == "qwen2.5-coder:latest"
 
 
 class Fake:

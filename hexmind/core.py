@@ -19,22 +19,31 @@ ROSTER: dict[str, str] = {
     "claude": "careful multi-file code changes, refactoring, code review, debugging, planning, writing docs",
     "agy": "Google Gemini: very large context reading, deep reasoning, polyglot code generation, web research, UI/frontend work",
     "codex": "OpenAI Codex: fast focused implementation, writing tests, shell scripting and automation",
-    "opencode": "OpenCode CLI: model-agnostic coding agent (its default is a free hosted model): general implementation, second opinions",
+    "opencode": "NVIDIA Nemotron 3.5 Lightning (Free): fast implementation, refactoring, and general coding",
+    "opencode-ultra": "NVIDIA Nemotron 3 Ultra (Free): deep architectural audits and complex logic validation",
+    "opencode-muse": "Meta Muse Spark (Free): massive 1M context repo scanning and cross-file documentation analysis",
+    "opencode-mimo": "Xiaomi MiMo (Free): low-latency small tasks — quick edits, short scripts, fast second opinions",
     "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
     "jules": ("Google Jules, an async cloud agent. It works on the GitHub copy of this repo, NOT local files or "
               "uncommitted changes, takes minutes to hours, and finishes with a pull request. Give it only "
               "self-contained, long-running coding tasks on code that is already pushed"),
-    "qwen": ("local qwen3:4b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
+    "qwen": ("local qwen2.5-coder:7b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
              "it cannot read or edit files or run commands. Give it only small self-contained text jobs "
-             "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions"),
-    "jules": "Google Jules: asynchronous coding agent for GitHub repos; dispatches cloud sessions that produce PRs, tests, and refactors",
+             "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions. "
+             "Shares one Ollama slot with qwen-large — only one of the two is ever loaded at a time, so pick "
+             "whichever one fits the job rather than assigning both in the same room"),
+    "qwen-large": ("local qwen2.5-coder:latest via Ollama: same free/private/TEXT-ONLY deal as qwen, but the "
+                   "larger build — slower, better for anything qwen would struggle with. Shares one Ollama slot "
+                   "with qwen: picking this one unloads qwen if it was warm, and vice versa"),
+    "kimi": ("Moonshot AI's Kimi Code: 1M-token context with deep extended thinking (effort defaults to max), "
+             "general implementation and second opinions on large-context tasks"),
 }
 
 # Members that can't see local files (qwen: no tools; jules: works on the GitHub copy).
 # Never lead, never auditor, not rotated into relays.
-TEXT_ONLY = {"qwen", "jules"}
+TEXT_ONLY = {"qwen", "qwen-large", "jules"}
 # Members that only join with --with NAME. qwen starves an 8 GB machine; jules spends cloud quota and opens PRs.
-OPT_IN = {"qwen", "jules"}
+OPT_IN = {"qwen", "qwen-large", "jules"}
 
 # A member failure that means "out of quota", not "bad work": hand the task to someone else.
 QUOTA_RE = re.compile(r"usage limit|quota|rate.?limit|\b429\b|exceeded your|credit balance|"

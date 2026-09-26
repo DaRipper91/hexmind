@@ -58,7 +58,7 @@ class FakeProcess:
         self.killed = True
 
 
-@pytest.mark.parametrize("agent", DIRECT_CMDS)
+@pytest.mark.parametrize("agent", [a for a in DIRECT_CMDS if a != "kimi"])  # kimi: see test below
 def test_direct_backend_sends_prompt_over_stdin(monkeypatch, tmp_path, agent):
     prompt = "x" * 200_000
     proc = None
@@ -76,6 +76,22 @@ def test_direct_backend_sends_prompt_over_stdin(monkeypatch, tmp_path, agent):
         assert json.loads(proc.stdin.written)["message"]["content"] == prompt
     else:
         assert proc.stdin.written == prompt.encode()
+
+
+def test_kimi_receives_prompt_as_arg_not_stdin(monkeypatch, tmp_path):
+    """kimi's -p has no stdin-driven mode, so (unlike every other member) its prompt goes on argv
+    and stdin is left empty."""
+    proc = None
+
+    async def create(*args, **kwargs):
+        nonlocal proc
+        proc = FakeProcess(args, stdout=json.dumps({"role": "assistant", "content": "answer"}) + "\n")
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    assert asyncio.run(DirectBackend(str(tmp_path)).run("kimi", "prompt text")) == "answer"
+    assert "prompt text" in proc.args
+    assert proc.input == b""
 
 
 def test_timeout_kills_and_waits_for_child(monkeypatch, tmp_path):

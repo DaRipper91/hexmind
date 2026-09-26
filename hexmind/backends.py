@@ -24,14 +24,22 @@ DIRECT_CMDS: dict[str, list[str]] = {
             "--mode", "accept-edits", "--dangerously-skip-permissions", "--disable-slash-commands"],
     "codex": ["codex", "exec", "--sandbox", "workspace-write", "-a", "never", "--skip-git-repo-check",
               "--output-last-message", "{outfile}", "-"],
-    "opencode": ["opencode", "run", "--auto"],
+    # Free OpenCode Zen models
+    "opencode": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3.5-lightning-free"],
+    "opencode-ultra": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3-ultra-free"],
+    "opencode-muse": ["opencode", "run", "--auto", "-m", "opencode/muse-spark-1.3-contributor-free"],
+    "opencode-mimo": ["opencode", "run", "--auto", "-m", "opencode/mimo-v2.6-flash-free"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
+    # kimi's -p takes the prompt as an argv token, not stdin -- its only stdin-driven mode is the
+    # much heavier ACP protocol, so very large prompts may hit an OS arg-length limit here unlike
+    # every other member (see {prompt} substitution in DirectBackend.run).
+    "kimi": ["kimi", "-p", "{prompt}", "--output-format", "stream-json"],
 }
 
 
 # Local models served by Ollama. Text in, text out: no tools, no files.
-LOCAL_MODELS: dict[str, str] = {"qwen": "qwen3:4b"}
+LOCAL_MODELS: dict[str, str] = {"qwen": "qwen2.5-coder:7b", "qwen-large": "qwen2.5-coder:latest"}
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MAX_OUTPUT_BYTES = 1_000_000
 TERMINATE_GRACE_SECONDS = 1
@@ -73,6 +81,11 @@ async def _terminate_group(proc: asyncio.subprocess.Process) -> None:
     _signal_group(proc.pid, signal.SIGKILL)
     await proc.wait()
 
+# Both are loadable, but Ollama shares one memory budget between them, so only one stays
+# resident at a time: switching local models unloads whichever one was active before it.
+_local_lock = asyncio.Lock()
+_active_local: str | None = None
+
 
 def _ollama_models() -> set[str]:
     try:
@@ -90,20 +103,35 @@ def available(members: list[str]) -> list[str]:
             or (m == "jules" and bool(os.environ.get("JULES_API_KEY")))]
 
 
-async def run_local(agent: str, prompt: str, timeout: int) -> str:
-    """One Ollama generate call; thinking off so the reply is just the answer."""
-    body = json.dumps({"model": LOCAL_MODELS[agent], "prompt": prompt, "stream": False,
-                       "think": False}).encode()
-    req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=body,
+def _ollama_generate(model: str, prompt: str, timeout: int, keep_alive: int | None = None) -> str:
+    body = {"model": model, "prompt": prompt, "stream": False, "think": False}
+    if keep_alive is not None:
+        body["keep_alive"] = keep_alive
+    req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r).get("response", "")
 
-    def call() -> str:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r).get("response", "")
-    try:
-        return await asyncio.to_thread(call)
-    except OSError as e:
-        raise RuntimeError(f"{agent} (Ollama {LOCAL_MODELS[agent]}) failed: {e}") from e
+
+async def run_local(agent: str, prompt: str, timeout: int) -> str:
+    """One Ollama generate call; thinking off so the reply is just the answer.
+
+    Serialized across all local models: if a different one is currently loaded, it's evicted
+    first (keep_alive=0, no prompt) so the two never both sit in memory at once.
+    """
+    global _active_local
+    async with _local_lock:
+        if _active_local is not None and _active_local != agent:
+            try:
+                await asyncio.to_thread(_ollama_generate, LOCAL_MODELS[_active_local], "", 10, keep_alive=0)
+            except OSError:
+                pass  # best-effort: Ollama frees it on its own keep_alive timeout regardless
+        try:
+            result = await asyncio.to_thread(_ollama_generate, LOCAL_MODELS[agent], prompt, timeout)
+        except OSError as e:
+            raise RuntimeError(f"{agent} (Ollama {LOCAL_MODELS[agent]}) failed: {e}") from e
+        _active_local = agent
+        return result
 
 
 class DirectBackend:
@@ -120,7 +148,7 @@ class DirectBackend:
             return await run_local(agent, prompt, self.timeout)
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
-            argv = [a.replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
+            argv = [a.replace("{outfile}", outfile).replace("{prompt}", prompt) for a in DIRECT_CMDS[agent]]
             if schema is not None and agent == "claude":
                 argv.extend(["--json-schema", json.dumps(schema, separators=(",", ":"))])
             elif schema is not None and agent == "agy":
@@ -133,8 +161,9 @@ class DirectBackend:
             proc = await asyncio.create_subprocess_exec(
                 *argv, cwd=cwd or self.cwd, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
-            payload = (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
-                       if agent == "agy" else prompt).encode()
+            payload = (b"" if agent == "kimi" else
+                       (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n").encode()
+                       if agent == "agy" else prompt.encode())
             stdin_task = asyncio.create_task(_write_stdin(proc, payload))
             stdout_task = asyncio.create_task(_read_capped(proc.stdout))
             stderr_task = asyncio.create_task(_read_capped(proc.stderr))
@@ -164,11 +193,25 @@ class DirectBackend:
                 if result is None:
                     raise RuntimeError("agy stream did not contain a result")
                 return result
+            if agent == "kimi":
+                events = []
+                for line in out.decode(errors="replace").splitlines():
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+                result = next((e["content"] for e in reversed(events)
+                               if isinstance(e, dict) and e.get("role") == "assistant"), None)
+                if result is None:
+                    raise RuntimeError("kimi stream did not contain an assistant reply")
+                return result
             return out.decode(errors="replace")
 
 
-HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
-HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode",
+              "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
+HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex",
+                "opencode": "opencode", "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
 
 
 class HcomBackend:

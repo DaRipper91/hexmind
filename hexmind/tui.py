@@ -19,7 +19,13 @@ from .core import Orchestrator, Task
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
-AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow", "opencode": "bright_blue", "copilot": "white", "you": "bold white"}
+AGENT_COLOR = {
+    "claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow",
+    "qwen-large": "gold1",
+    "opencode": "bright_blue", "opencode-ultra": "blue", "opencode-muse": "sky_blue1",
+    "opencode-mimo": "turquoise2", "opencode-pickle": "yellow3", "opencode-ling": "green3",
+    "copilot": "white", "kimi": "red", "you": "bold white"
+}
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
 HELP = """[b]Keys[/b] (press [b]Esc[/b] to leave the input)
