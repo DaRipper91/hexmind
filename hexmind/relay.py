@@ -163,6 +163,13 @@ Stages:
 
 Answer ONLY with JSON: {{"agents": ["<member for stage 1>", "<member for stage 2>", ...]}}"""
 
+DESIGN_SCHEMA = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "stages": {"type": "array", "items": {"type": "object", "properties": {
+        "name": {"type": "string"}, "instructions": {"type": "string"}}, "required": ["name", "instructions"]}}},
+    "required": ["name", "stages"],
+}
+
 END_PROMPTS = {
     "merge": "Merge the chains' results into ONE combined result for the user. Findings several chains agree on "
              "are high confidence; flag findings only one chain reported as needing a second look.",
@@ -201,6 +208,7 @@ HELP = """**Commands**
 - `/chains` list chain files
 - `/audit on|off` runner-up model reviews every task (bounded revise loop; `gate = true` tasks block on failure)
 - `/ranks` each model's audit track record by domain
+- `/drafts on|off` the lead's plan waits for approval before anything runs · `/approve` run it · `/discard` drop it
 - `/nick MODEL NAME` give a model a nickname · `/nick MODEL` clear it · `/nick` list
 - `/help` this list"""
 
@@ -220,6 +228,21 @@ async def command(orch, text: str) -> str:
             except BrokenChain as e:
                 lines.append(f"- **{n}** (broken: {e})")
         reply = "\n".join(lines) or "No chain files. Add some to ~/.config/hexmind/chains/"
+    elif cmd == "/drafts":
+        if args and args[0] in ("on", "off"):
+            orch.approve_plans = args[0] == "on"
+        reply = f"Draft plans are **{'on' if orch.approve_plans else 'off'}**" + (
+            ": the lead's plan waits for `/approve` or `/discard`." if orch.approve_plans else ": plans run right away.")
+    elif cmd in ("/approve", "/discard"):
+        if not orch.pending:
+            reply = "No draft plan is waiting."
+        else:
+            request, tasks = orch.pending
+            orch.pending = None
+            if cmd == "/discard":
+                reply = f"Discarded the draft plan ({len(tasks)} tasks). Nothing ran."
+            else:
+                return await orch.execute(request, tasks)  # execute posts its own messages
     elif cmd == "/audit":
         if args and args[0] in ("on", "off"):
             orch.audit = args[0] == "on"
@@ -274,7 +297,8 @@ async def run_relay(orch, ns) -> str:
     else:  # the lead designs the chain
         goal = target + (f"\n{ns.goal}" if ns.goal else "")
         orch.emit("status", {"agent": orch.lead, "state": "designing chain"})
-        raw = await orch.backend.run(orch.lead, DESIGN_PROMPT.format(goal=goal, members=", ".join(orch.members)))
+        raw = await orch.ask(orch.lead, DESIGN_PROMPT.format(goal=goal, members=", ".join(orch.members)),
+                             schema=DESIGN_SCHEMA)
         orch.emit("status", {"agent": orch.lead, "state": "idle"})
         data = extract_json(raw)
         stages = data.get("stages")
@@ -290,7 +314,9 @@ async def run_relay(orch, ns) -> str:
     best = None
     if ns.assign == "best":
         stages = "\n".join(f"{i + 1}. {s.name}: {s.instructions[:300]}" for i, s in enumerate(chain.stages))
-        raw = await orch.backend.run(orch.lead, BEST_PROMPT.format(roster=orch._roster(), stages=stages))
+        raw = await orch.ask(orch.lead, BEST_PROMPT.format(roster=orch._roster(), stages=stages),
+                             schema={"type": "object", "properties": {"agents": {"type": "array", "items": {"type": "string"}}},
+                                     "required": ["agents"]})
         picks = extract_json(raw).get("agents")
         picks = picks if isinstance(picks, list) else []
         best = [a if a in orch.members else orch.lead for a in picks] + [orch.lead] * len(chain.stages)
@@ -324,7 +350,7 @@ async def run_relay(orch, ns) -> str:
                                                          for t in reversed(ts) if t.status == "done"), "no stage finished")
                          for k, ts in enumerate(per_chain))
     orch.emit("status", {"agent": orch.lead, "state": f"{ns.end} results"})
-    final = await orch.backend.run(orch.lead, END_WRAPPER.format(
+    final = await orch.ask(orch.lead, END_WRAPPER.format(
         n=n, chain=chain.name, goal=goal, notes=", ".join(notes), cwds=", ".join(dict.fromkeys(cwds)),
         finals=finals, instruction=END_PROMPTS[ns.end]))
     orch.emit("status", {"agent": orch.lead, "state": "idle"})

@@ -7,11 +7,22 @@ import pytest
 from hexmind.backends import HcomBackend
 
 
+class FakeStream:
+    def __init__(self, data):
+        self.data = data
+
+    async def read(self, size):
+        data, self.data = self.data[:size], self.data[size:]
+        return data
+
+
 class FakeProcess:
     def __init__(self, stdout="", stderr="", returncode=0):
         self.stdout = stdout.encode()
         self.stderr = stderr.encode()
         self.returncode = returncode
+        self.stdout = FakeStream(self.stdout)
+        self.stderr = FakeStream(self.stderr)
 
     async def communicate(self):
         return self.stdout, self.stderr
@@ -70,6 +81,7 @@ class FakeHcom:
 
 
 def test_members_maps_hcom_tools_to_hexmind_aliases(monkeypatch, tmp_path):
+    monkeypatch.delenv("JULES_API_KEY", raising=False)
     hcom = FakeHcom()
     hcom.agents = [
         {"tool": "claude"}, {"tool": "antigravity"}, {"tool": "codex"}, {"tool": "other"},

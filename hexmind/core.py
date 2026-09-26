@@ -8,6 +8,7 @@ Flow for one user message:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 from dataclasses import dataclass, field
@@ -20,15 +21,45 @@ ROSTER: dict[str, str] = {
     "codex": "OpenAI Codex: fast focused implementation, writing tests, shell scripting and automation",
     "opencode": "OpenCode CLI: model-agnostic coding agent (its default is a free hosted model): general implementation, second opinions",
     "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
+    "jules": ("Google Jules, an async cloud agent. It works on the GitHub copy of this repo, NOT local files or "
+              "uncommitted changes, takes minutes to hours, and finishes with a pull request. Give it only "
+              "self-contained, long-running coding tasks on code that is already pushed"),
     "qwen": ("local qwen3:4b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
              "it cannot read or edit files or run commands. Give it only small self-contained text jobs "
              "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions"),
 }
 
-# Members that only see the prompt (no tools). Never lead, never auditor, not rotated into relays.
-TEXT_ONLY = {"qwen"}
-# Members that only join with --with NAME. qwen runs on CPU and starves an 8 GB machine running other agents.
-OPT_IN = {"qwen"}
+# Members that can't see local files (qwen: no tools; jules: works on the GitHub copy).
+# Never lead, never auditor, not rotated into relays.
+TEXT_ONLY = {"qwen", "jules"}
+# Members that only join with --with NAME. qwen starves an 8 GB machine; jules spends cloud quota and opens PRs.
+OPT_IN = {"qwen", "jules"}
+
+# A member failure that means "out of quota", not "bad work": hand the task to someone else.
+QUOTA_RE = re.compile(r"usage limit|quota|rate.?limit|\b429\b|exceeded your|credit balance|"
+                      r"subscription does not have access|out of credits", re.I)
+
+# Lead plans are forced into this shape on CLIs that support structured output.
+PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reply": {"type": "string"},
+        "tasks": {"type": "array", "items": {"type": "object", "properties": {
+            "id": {"type": "string"}, "title": {"type": "string"}, "agent": {"type": "string"},
+            "instructions": {"type": "string"}, "depends_on": {"type": "array", "items": {"type": "string"}},
+            "domain": {"type": "string"}, "gate": {"type": "boolean"}},
+            "required": ["id", "title", "agent", "instructions", "depends_on"]}},
+    },
+    "required": ["reply", "tasks"],
+}
+
+# Control chars (incl. ESC) and bidi overrides, from repohub core/textsafe.py. Keeps \n and \t.
+_UNSAFE = re.compile("[\x00-\x08\x0b\x0c\r\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069\u200e\u200f]")
+
+
+def clean_text(text: str) -> str:
+    """Model output feeds other models' prompts and the TUI: strip anything that can hide or spoof text."""
+    return _UNSAFE.sub("", text or "")
 
 
 @dataclass
@@ -162,6 +193,14 @@ class Orchestrator:
         self.stats = stats  # auditor.Stats: pass/fail record per model per domain
         from .config import load_nicknames
         self.nicknames: dict[str, str] = load_nicknames()  # model -> user's display name
+        self.approve_plans = False  # True: the lead's plan waits for /approve or /discard
+        self.pending: tuple[str, list[Task]] | None = None  # (request, tasks) awaiting approval
+
+    async def ask(self, agent: str, prompt: str, cwd: str | None = None, schema: dict | None = None) -> str:
+        """backend.run, passing a JSON schema when the backend supports one; output is always cleaned."""
+        if schema is not None and "schema" in inspect.signature(self.backend.run).parameters:
+            return clean_text(await self.backend.run(agent, prompt, cwd=cwd, schema=schema))
+        return clean_text(await self.backend.run(agent, prompt, cwd=cwd))
 
     def name(self, m: str) -> str:
         """What the user sees: the nickname if one is set, else the model name."""
@@ -191,8 +230,9 @@ class Orchestrator:
             return reply
         self.emit("status", {"agent": self.lead, "state": "planning"})
         from .auditor import DOMAINS
-        raw = await self.backend.run(self.lead, LEAD_PROMPT.format(
-            roster=self._roster(), request=request, history=self._history(), domains=", ".join(DOMAINS)))
+        raw = await self.ask(self.lead, LEAD_PROMPT.format(
+            roster=self._roster(), request=request, history=self._history(), domains=", ".join(DOMAINS)),
+            schema=PLAN_SCHEMA)
         self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
             reply, tasks = parse_plan(raw, self.members, self.lead)
@@ -204,12 +244,24 @@ class Orchestrator:
             self.history.append((request, reply))
             return reply
 
+        if self.approve_plans:
+            self.pending = (request, tasks)
+            lines = [f"- **{t.id}** → {self.name(t.agent)}: {t.title}" +
+                     (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "") for t in tasks]
+            note = "**Draft plan: nothing runs until you decide.** `/approve` to run it, `/discard` to drop it."
+            self.emit("message", {"from": "hexmind", "text": note + "\n\n" + "\n".join(lines)})
+            self.history.append((request, reply))
+            return reply
+        return await self.execute(request, tasks)
+
+    async def execute(self, request: str, tasks: list[Task]) -> str:
+        """Run an (approved) plan, then have the lead summarize."""
         self.emit("plan", {"tasks": tasks})
         await self.run_tasks(request, tasks)
 
         results = "\n\n".join(f"[{t.id}] {t.title} ({t.agent}, {t.status}):\n{clip(t.output)}" for t in tasks)
         self.emit("status", {"agent": self.lead, "state": "summarizing"})
-        final = await self.backend.run(self.lead, SYNTH_PROMPT.format(request=request, results=results))
+        final = await self.ask(self.lead, SYNTH_PROMPT.format(request=request, results=results))
         self.emit("status", {"agent": self.lead, "state": "idle"})
         self.emit("message", {"from": self.lead, "text": final.strip()})
         self.history.append((request, final))
@@ -238,7 +290,7 @@ class Orchestrator:
             for f in finished:
                 t = running.pop(f)
                 try:
-                    t.output, t.status = f.result(), "done"
+                    t.output, t.status = clean_text(f.result()), "done"
                     if t.notes:
                         with open(t.notes, "a") as nf:
                             nf.write(f"\n## {t.title} ({t.agent})\n\n{t.output.strip()}\n")
@@ -259,8 +311,31 @@ class Orchestrator:
         if t.notes:
             prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"
                        " — read it first. Hexmind appends your final reply to it; don't edit it yourself.")
-        if self.audit and self.stats is not None:
-            from .auditor import audited_run
-            auditors = [m for m in self.members if m not in TEXT_ONLY]  # auditors must inspect real files
-            return await audited_run(self.backend, t, prompt, auditors, self.stats, self.emit)
-        return await self.backend.run(t.agent, prompt, cwd=t.cwd)
+        tried = {t.agent}
+        while True:
+            try:
+                if self.audit and self.stats is not None:
+                    from .auditor import audited_run
+                    auditors = [m for m in self.members if m not in TEXT_ONLY]  # auditors must inspect real files
+                    return clean_text(await audited_run(self.backend, t, prompt, auditors, self.stats, self.emit))
+                return await self.ask(t.agent, prompt, cwd=t.cwd)
+            except RuntimeError as e:
+                # backends prefix errors with the member name; only the primary's own quota failure hands off
+                if not (str(e).startswith(t.agent) and QUOTA_RE.search(str(e))):
+                    raise
+                spare = self.fallback(t, tried)
+                if spare is None:
+                    raise
+                self.emit("message", {"from": "hexmind", "text":
+                          f"{self.name(t.agent)} is out of quota; handing **{t.id}** to {self.name(spare)}."})
+                prompt = prompt.replace(f"You are {t.agent},", f"You are {spare},", 1)
+                t.agent = spare
+                tried.add(spare)
+                self.emit("task", {"task": t})
+
+    def fallback(self, t: Task, tried: set[str]) -> str | None:
+        """Next-best member for this task's domain that hasn't been tried and can see local files."""
+        spares = [m for m in self.members if m not in tried and m not in TEXT_ONLY]
+        if not spares:
+            return None
+        return self.stats.ranked(spares, t.domain)[0] if self.stats else spares[0]

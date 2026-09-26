@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import os
+import signal
 import shlex
 import shutil
 import tempfile
@@ -32,6 +33,45 @@ DIRECT_CMDS: dict[str, list[str]] = {
 # Local models served by Ollama. Text in, text out: no tools, no files.
 LOCAL_MODELS: dict[str, str] = {"qwen": "qwen3:4b"}
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+MAX_OUTPUT_BYTES = 1_000_000
+TERMINATE_GRACE_SECONDS = 1
+
+
+async def _read_capped(stream: asyncio.StreamReader, limit: int = MAX_OUTPUT_BYTES) -> bytes:
+    kept = bytearray()
+    while chunk := await stream.read(65536):
+        kept.extend(chunk)
+        if len(kept) > limit:
+            del kept[:len(kept) - limit]
+    return bytes(kept)
+
+
+async def _write_stdin(proc: asyncio.subprocess.Process, payload: bytes) -> None:
+    try:
+        proc.stdin.write(payload)
+        await proc.stdin.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+    finally:
+        proc.stdin.close()
+
+
+def _signal_group(pid: int, sig: int) -> None:
+    try:
+        os.killpg(pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+async def _terminate_group(proc: asyncio.subprocess.Process) -> None:
+    _signal_group(proc.pid, signal.SIGTERM)
+    try:
+        await asyncio.wait_for(proc.wait(), TERMINATE_GRACE_SECONDS)
+    except asyncio.TimeoutError:
+        pass
+    # A child may have exited while a descendant still holds inherited pipes.
+    _signal_group(proc.pid, signal.SIGKILL)
+    await proc.wait()
 
 
 def _ollama_models() -> set[str]:
@@ -46,7 +86,8 @@ def available(members: list[str]) -> list[str]:
     """Members whose CLI is installed, or whose local model is pulled in a running Ollama."""
     pulled = _ollama_models() if any(m in LOCAL_MODELS for m in members) else set()
     return [m for m in members if (m in DIRECT_CMDS and shutil.which(DIRECT_CMDS[m][0]))
-            or LOCAL_MODELS.get(m) in pulled]
+            or LOCAL_MODELS.get(m) in pulled
+            or (m == "jules" and bool(os.environ.get("JULES_API_KEY")))]
 
 
 async def run_local(agent: str, prompt: str, timeout: int) -> str:
@@ -70,23 +111,41 @@ class DirectBackend:
         self.cwd = cwd
         self.timeout = timeout
 
-    async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
+    async def run(self, agent: str, prompt: str, cwd: str | None = None,
+                  schema: dict | None = None) -> str:
+        if agent == "jules":
+            from .jules import run as run_jules
+            return await run_jules(prompt, cwd or self.cwd)
         if agent in LOCAL_MODELS:
             return await run_local(agent, prompt, self.timeout)
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
             argv = [a.replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
+            if schema is not None and agent == "claude":
+                argv.extend(["--json-schema", json.dumps(schema, separators=(",", ":"))])
+            elif schema is not None and agent == "agy":
+                argv.extend(["--json-schema", json.dumps(schema, separators=(",", ":"))])
+            elif schema is not None and agent == "codex":
+                schemafile = os.path.join(tmp, "schema.json")
+                with open(schemafile, "w") as f:
+                    json.dump(schema, f)
+                argv.extend(["--output-schema", schemafile])
             proc = await asyncio.create_subprocess_exec(
                 *argv, cwd=cwd or self.cwd, stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
+            payload = (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
+                       if agent == "agy" else prompt).encode()
+            stdin_task = asyncio.create_task(_write_stdin(proc, payload))
+            stdout_task = asyncio.create_task(_read_capped(proc.stdout))
+            stderr_task = asyncio.create_task(_read_capped(proc.stderr))
             try:
-                payload = (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
-                           if agent == "agy" else prompt).encode()
-                out, err = await asyncio.wait_for(proc.communicate(input=payload), self.timeout)
+                await asyncio.wait_for(asyncio.gather(proc.wait(), stdin_task, stdout_task, stderr_task),
+                                       self.timeout)
             except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
+                await _terminate_group(proc)
+                await asyncio.gather(stdin_task, stdout_task, stderr_task, return_exceptions=True)
                 raise RuntimeError(f"{agent} timed out after {self.timeout}s")
+            out, err = stdout_task.result(), stderr_task.result()
             if proc.returncode != 0:
                 detail = err.decode(errors="replace").strip() or out.decode(errors="replace").strip()
                 raise RuntimeError(f"{agent} exited {proc.returncode}: {detail[-500:]}")
@@ -126,13 +185,18 @@ class HcomBackend:
         env = {k: v for k, v in os.environ.items() if not k.startswith("HCOM") or k == "HCOM_DIR"}
         proc = await asyncio.create_subprocess_exec(
             "hcom", *args, cwd=cwd or self.cwd, stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env)
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env,
+            start_new_session=True)
+        stdout_task = asyncio.create_task(_read_capped(proc.stdout))
+        stderr_task = asyncio.create_task(_read_capped(proc.stderr))
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), timeout or self.timeout)
+            await asyncio.wait_for(asyncio.gather(proc.wait(), stdout_task, stderr_task),
+                                   timeout or self.timeout)
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            await _terminate_group(proc)
+            await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
             raise RuntimeError(f"hcom {' '.join(args[:2])} timed out")
+        out, err = stdout_task.result(), stderr_task.result()
         if proc.returncode not in accepted_returncodes:
             detail = err.decode(errors="replace").strip() or out.decode(errors="replace").strip()
             raise RuntimeError(f"hcom {' '.join(args[:2])} exited {proc.returncode}: {detail[-500:]}")
@@ -151,7 +215,10 @@ class HcomBackend:
         """Model aliases represented by currently available hcom agents."""
         found = {HCOM_MEMBERS[a.get("tool", "").lower()] for a in await self._agents()
                  if a.get("tool", "").lower() in HCOM_MEMBERS}
-        return [m for m in HCOM_TOOLS if m in found]
+        members = [m for m in HCOM_TOOLS if m in found]
+        if os.environ.get("JULES_API_KEY"):
+            members.append("jules")
+        return members
 
     async def _agent(self, member: str, cwd: str) -> tuple[str, str]:
         if member not in HCOM_TOOLS:
@@ -199,7 +266,11 @@ class HcomBackend:
                                    f"(status: {agent.get('status', 'unknown')})")
             raise RuntimeError(f"hcom did not start a {member} agent for {cwd}")
 
-    async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
+    async def run(self, agent: str, prompt: str, cwd: str | None = None,
+                  schema: dict | None = None) -> str:
+        if agent == "jules":
+            from .jules import run as run_jules
+            return await run_jules(prompt, cwd or self.cwd)
         if agent in LOCAL_MODELS:  # local models are not hcom agents; call Ollama directly
             return await run_local(agent, prompt, self.timeout)
         agent_name, event_from = await self._agent(agent, cwd or self.cwd)

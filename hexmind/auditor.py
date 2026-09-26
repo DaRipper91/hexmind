@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Callable
+from typing import Callable, Any
 
 from .core import clip
 
@@ -29,6 +29,15 @@ DOMAINS: list[str] = [
     "ui",
     "general",
 ]
+
+AUDIT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "verdict": {"enum": ["PASS", "FAIL"]},
+        "issues": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["verdict", "issues"],
+}
 
 AUDIT_PROMPT = """You are {auditor}, auditing the work done by {agent} on task {id}: {title}.
 Domain: {domain}
@@ -143,6 +152,29 @@ def pick_auditor(primary: str, members: list[str], domain: str, stats: Stats) ->
 
 
 def parse_verdict(text: str) -> tuple[bool, str]:
+    # Try parsing JSON first (handling optional markdown code blocks)
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict) and "verdict" in data:
+            passed = str(data.get("verdict", "")).upper() == "PASS"
+            issues_val = data.get("issues", [])
+            if isinstance(issues_val, list):
+                issues_str = "\n".join(f"- {issue}" for issue in issues_val if issue)
+            else:
+                issues_str = str(issues_val).strip()
+            return passed, issues_str
+    except Exception:
+        pass
+
     m = re.search(r"VERDICT:\s*(PASS|FAIL)", text, re.IGNORECASE)
     if not m:
         return False, text.strip()
@@ -188,7 +220,11 @@ async def audited_run(
             output=out,
             cwd=cwd or "current directory",
         )
-        audit_out = await backend.run(auditor, audit_prompt, cwd=cwd)
+        try:
+            audit_out = await backend.run(auditor, audit_prompt, cwd=cwd, schema=AUDIT_SCHEMA)
+        except TypeError:
+            audit_out = await backend.run(auditor, audit_prompt, cwd=cwd)
+
         passed, issues = parse_verdict(audit_out)
         last_issues = issues
 

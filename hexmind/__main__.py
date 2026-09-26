@@ -20,6 +20,8 @@ def main() -> None:
     p.add_argument("--with", dest="with_", action="append", default=[], metavar="AGENT",
                    help="add an opt-in member, e.g. --with qwen (local model; slow on small machines)")
     p.add_argument("--cwd", default=os.getcwd(), help="folder the team works in (default: current)")
+    p.add_argument("--approve-plans", action="store_true",
+                   help="the lead's plan waits for /approve or /discard (toggle in room: /drafts on|off)")
     p.add_argument("--audit", action="store_true", help="runner-up model reviews every task (toggle in room: /audit on|off)")
     p.add_argument("--once", metavar="REQUEST", help="run one request without the TUI and print the result")
     args = p.parse_args()
@@ -48,7 +50,9 @@ def main() -> None:
         return
 
     from .tui import HexmindApp
-    HexmindApp(backend, members, args.lead, args.backend, audit=args.audit, stats=stats).run()
+    app = HexmindApp(backend, members, args.lead, args.backend, audit=args.audit, stats=stats)
+    app.orch.approve_plans = args.approve_plans  # set here so tui.py stays untouched
+    app.run()
 
 
 if __name__ == "__main__":
