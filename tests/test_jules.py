@@ -22,6 +22,11 @@ from hexmind.auditor import (
 )
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 def test_parse_github_repo():
     assert parse_github_repo("https://github.com/DaRipper91/hexmind.git") == "DaRipper91/hexmind"
     assert parse_github_repo("https://github.com/DaRipper91/hexmind") == "DaRipper91/hexmind"

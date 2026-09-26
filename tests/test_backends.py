@@ -91,7 +91,7 @@ def test_kimi_receives_prompt_as_arg_not_stdin(monkeypatch, tmp_path):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
     assert asyncio.run(DirectBackend(str(tmp_path)).run("kimi", "prompt text")) == "answer"
     assert "prompt text" in proc.args
-    assert proc.input == b""
+    assert proc.stdin.written == b""
 
 
 def test_timeout_kills_and_waits_for_child(monkeypatch, tmp_path):
