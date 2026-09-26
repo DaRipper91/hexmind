@@ -30,12 +30,12 @@ class DirectBackend:
         self.cwd = cwd
         self.timeout = timeout
 
-    async def run(self, agent: str, prompt: str) -> str:
+    async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
             argv = [a.replace("{prompt}", prompt).replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
             proc = await asyncio.create_subprocess_exec(
-                *argv, cwd=self.cwd, stdin=asyncio.subprocess.DEVNULL,
+                *argv, cwd=cwd or self.cwd, stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
                 out, err = await asyncio.wait_for(proc.communicate(), self.timeout)

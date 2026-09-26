@@ -1,0 +1,19 @@
+# Generic build chain. Pin stages with agent = "claude" and use --assign pinned.
+name = "feature"
+description = "Spec, build, test, and review one feature (pass the feature with --goal)"
+
+[[stages]]
+name = "spec"
+instructions = "Read the codebase parts this feature touches. Write a short spec: behavior, files to change, edge cases, how to verify. Don't write code."
+
+[[stages]]
+name = "build"
+instructions = "Implement the spec from the notes file. Match the surrounding code style. Keep the diff minimal."
+
+[[stages]]
+name = "test"
+instructions = "Add or run tests that prove the feature works and cover the spec's edge cases. Fix bugs you find. Report exact test output."
+
+[[stages]]
+name = "review"
+instructions = "Review the full change as a skeptical senior engineer: bugs, missed edge cases, security, simplicity. Fix clear bugs; list anything that needs the user's decision."

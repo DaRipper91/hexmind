@@ -30,6 +30,8 @@ class Task:
     depends_on: list[str] = field(default_factory=list)
     status: str = "pending"  # pending | running | done | failed | skipped
     output: str = ""
+    cwd: str | None = None    # folder this task works in (None = the room's folder)
+    notes: str | None = None  # relay chain notes file; each finished stage is appended to it
 
 
 LEAD_PROMPT = """You are the lead of a team of AI coding agents working in one shared room.
@@ -136,6 +138,11 @@ class Orchestrator:
         return "Earlier in this room:\n" + "\n\n".join(lines) + "\n\n"
 
     async def handle(self, request: str) -> str:
+        if request.startswith("/"):
+            from .relay import command  # slash commands: /relay, /chains, /help
+            reply = await command(self, request)
+            self.history.append((request, reply))
+            return reply
         self.emit("status", {"agent": self.lead, "state": "planning"})
         raw = await self.backend.run(self.lead, LEAD_PROMPT.format(
             roster=self._roster(), request=request, history=self._history()))
@@ -185,6 +192,9 @@ class Orchestrator:
                 t = running.pop(f)
                 try:
                     t.output, t.status = f.result(), "done"
+                    if t.notes:
+                        with open(t.notes, "a") as nf:
+                            nf.write(f"\n## {t.title} ({t.agent})\n\n{t.output.strip()}\n")
                 except Exception as e:  # one agent failing must not kill the room
                     t.output, t.status = f"error: {e}", "failed"
                 self.emit("task", {"task": t})
@@ -199,4 +209,7 @@ class Orchestrator:
         prompt = TASK_PROMPT.format(agent=t.agent, lead=self.lead, request=request, id=t.id,
                                     title=t.title, instructions=t.instructions,
                                     deps=("\nInputs from earlier phases:" + dep_text) if deps else "")
-        return await self.backend.run(t.agent, prompt)
+        if t.notes:
+            prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"
+                       " — read it first. Hexmind appends your final reply to it; don't edit it yourself.")
+        return await self.backend.run(t.agent, prompt, cwd=t.cwd)

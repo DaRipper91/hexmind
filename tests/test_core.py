@@ -31,7 +31,7 @@ class FakeBackend:
         self.lead_plan, self.fail = lead_plan, set(fail)
         self.active = self.peak = 0
 
-    async def run(self, agent, prompt):
+    async def run(self, agent, prompt, cwd=None):
         if "Answer ONLY with a JSON object" in prompt:
             return self.lead_plan
         if "Write the final answer" in prompt:

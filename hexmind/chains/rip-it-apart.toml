@@ -1,0 +1,28 @@
+# Imports the existing Claude rip-it-apart stage agents; any model can run any stage.
+# Stages share .audit/SCRATCH.md, so run several chains with --workspace worktree (the default for -n > 1).
+name = "rip-it-apart"
+description = "Full honest repo audit ending in a cited, task-by-task fix plan in docs/plans/"
+
+[[stages]]
+name = "recon"
+from = "~/.claude/agents/rip-it-apart-recon-mapper.md"
+
+[[stages]]
+name = "verify"
+from = "~/.claude/agents/rip-it-apart-core-verifier.md"
+
+[[stages]]
+name = "bug-hunt"
+from = "~/.claude/agents/rip-it-apart-bug-hunter.md"
+
+[[stages]]
+name = "strengths"
+from = "~/.claude/agents/rip-it-apart-strengths-scout.md"
+
+[[stages]]
+name = "critic"
+from = "~/.claude/agents/rip-it-apart-audit-critic.md"
+
+[[stages]]
+name = "fix-plan"
+from = "~/.claude/agents/rip-it-apart-fixplan-writer.md"
