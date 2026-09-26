@@ -105,6 +105,15 @@ class TaskScreen(ModalScreen):
                 proc.kill()
 
 
+class TaskTable(DataTable):
+    async def _on_click(self, event) -> None:
+        row = self.cursor_row
+        await super()._on_click(event)
+        # DataTable selects only when the tapped row was already highlighted; on a phone one tap should open the task
+        if self.app.has_class("narrow") and self.cursor_row != row and event.style.meta.get("row", -1) >= 0:
+            self.action_select_cursor()
+
+
 class HexmindApp(App):
     TITLE = "Hexmind"
     CSS = """
@@ -163,7 +172,7 @@ class HexmindApp(App):
                 yield Input(placeholder="Ask the team anything…", id="input")
             with Vertical(id="right"):
                 yield Static(id="team")
-                yield DataTable(id="tasks", cursor_type="row")
+                yield TaskTable(id="tasks", cursor_type="row")
                 yield RichLog(id="detail", wrap=True)
         yield Footer()
 
