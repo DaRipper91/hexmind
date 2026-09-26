@@ -102,13 +102,23 @@ def clip(text: str, n: int = 4000) -> str:
 def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task]]:
     """Validate the lead's plan: known agents, known deps, no cycles."""
     data = extract_json(text)
+    if "tasks" in data and not isinstance(data["tasks"], list) and data.get("tasks") is not None:
+        raise ValueError("tasks field must be a list")
+    raw_tasks = data.get("tasks") or []
     tasks = []
-    for i, t in enumerate(data.get("tasks") or []):
-        agent = t.get("agent") if t.get("agent") in members else lead
-        tasks.append(Task(id=str(t.get("id") or f"t{i + 1}"), title=t.get("title", "task"),
-                          agent=agent, instructions=t.get("instructions", t.get("title", "")),
-                          depends_on=[str(d) for d in _as_list(t.get("depends_on"))],
-                          domain=str(t.get("domain") or "general"), gate=t.get("gate") is True))
+    if isinstance(raw_tasks, list):
+        for i, t in enumerate(raw_tasks):
+            if isinstance(t, str):
+                tasks.append(Task(id=f"t{i + 1}", title=t,
+                                  agent=lead, instructions=t,
+                                  depends_on=[],
+                                  domain="general", gate=False))
+            elif isinstance(t, dict):
+                agent = t.get("agent") if t.get("agent") in members else lead
+                tasks.append(Task(id=str(t.get("id") or f"t{i + 1}"), title=t.get("title", "task"),
+                                  agent=agent, instructions=t.get("instructions", t.get("title", "")),
+                                  depends_on=[str(d) for d in _as_list(t.get("depends_on"))],
+                                  domain=str(t.get("domain") or "general"), gate=t.get("gate") is True))
     ids = {t.id for t in tasks}
     if len(ids) != len(tasks):
         raise ValueError("duplicate task ids in plan")
@@ -121,7 +131,10 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
         if not ready:
             raise ValueError("plan has a dependency cycle")
         done |= ready
-    return data.get("reply", ""), tasks
+    reply = data.get("reply", "")
+    if not reply and not tasks:
+        raise ValueError("plan has neither reply nor tasks")
+    return reply, tasks
 
 
 Emit = Callable[[str, dict], None]  # (event kind, payload) -> UI
@@ -173,7 +186,7 @@ class Orchestrator:
         self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
             reply, tasks = parse_plan(raw, self.members, self.lead)
-        except (ValueError, json.JSONDecodeError):
+        except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
             # lead answered in prose instead of JSON: treat it as a direct answer
             reply, tasks = raw.strip(), []
         self.emit("message", {"from": self.lead, "text": reply})

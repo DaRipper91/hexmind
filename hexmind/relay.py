@@ -58,15 +58,24 @@ def read_agent_file(path: str) -> str:
     return text
 
 
+class BrokenChain(ValueError):
+    """A chain file that can't be loaded (bad TOML, no stages, missing `from =` agent file)."""
+
+
 def load_chain(path: Path) -> Chain:
-    data = tomllib.loads(path.read_text())
+    try:
+        data = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise BrokenChain(f"invalid TOML in {path}: {e}") from e
     stages = []
     for s in data.get("stages", []):
+        if s.get("from") and not Path(s["from"]).expanduser().is_file():
+            raise BrokenChain(f"missing {s['from']}")
         instr = read_agent_file(s["from"]) if s.get("from") else s.get("instructions", "")
         stages.append(Stage(s.get("name", f"stage {len(stages) + 1}"), instr, s.get("agent"),
                             s.get("domain", "general"), s.get("gate") is True))
     if not stages:
-        raise ValueError(f"{path} has no [[stages]]")
+        raise BrokenChain(f"{path} has no [[stages]]")
     return Chain(data.get("name", path.stem), data.get("description", ""), stages)
 
 
@@ -197,12 +206,20 @@ HELP = """**Commands**
 
 
 async def command(orch, text: str) -> str:
-    parts = shlex.split(text)
+    try:
+        parts = shlex.split(text)
+    except ValueError:  # natural language: "/relay fix the user's bug" has an unpaired quote
+        parts = text.split()
     cmd, args = parts[0], parts[1:]
     if cmd == "/chains":
-        loaded = {n: load_chain(p) for n, p in list_chains().items()}
-        reply = "\n".join(f"- **{n}** ({len(c.stages)} stages): {c.description}"
-                          for n, c in loaded.items()) or "No chain files. Add some to ~/.config/hexmind/chains/"
+        lines = []
+        for n, p in list_chains().items():
+            try:
+                c = load_chain(p)
+                lines.append(f"- **{n}** ({len(c.stages)} stages): {c.description}")
+            except BrokenChain as e:
+                lines.append(f"- **{n}** (broken: {e})")
+        reply = "\n".join(lines) or "No chain files. Add some to ~/.config/hexmind/chains/"
     elif cmd == "/audit":
         if args and args[0] in ("on", "off"):
             orch.audit = args[0] == "on"
@@ -232,8 +249,12 @@ async def command(orch, text: str) -> str:
         except (argparse.ArgumentError, SystemExit) as e:
             reply = f"Bad /relay arguments: {e}\n\n{HELP}"
         else:
-            reply = await run_relay(orch, ns)
-            return reply  # run_relay already posted its messages
+            try:
+                return await run_relay(orch, ns)  # run_relay posts its own messages
+            except BrokenChain as e:
+                reply = f"Chain `{' '.join(ns.target)}` is broken: {e}"
+            except (ValueError, RuntimeError, OSError) as e:  # bad lead JSON, git worktree, agent failure
+                reply = f"Relay failed: {e}"
     else:
         reply = HELP
     orch.emit("message", {"from": "hexmind", "text": reply})
@@ -256,9 +277,13 @@ async def run_relay(orch, ns) -> str:
         raw = await orch.backend.run(orch.lead, DESIGN_PROMPT.format(goal=goal, members=", ".join(orch.members)))
         orch.emit("status", {"agent": orch.lead, "state": "idle"})
         data = extract_json(raw)
-        chain = Chain(data.get("name", "custom"), goal,
-                      [Stage(s.get("name", f"stage {i + 1}"), s.get("instructions", ""))
-                       for i, s in enumerate(data.get("stages", []))])
+        stages = data.get("stages")
+        stages = stages if isinstance(stages, list) else []
+        # models sometimes send plain strings instead of stage objects; anything else is dropped
+        chain = Chain(str(data.get("name") or "custom"), goal,
+                      [Stage(str(s.get("name") or f"stage {i + 1}"), str(s.get("instructions", ""))) if isinstance(s, dict)
+                       else Stage(f"stage {i + 1}", s)
+                       for i, s in enumerate(x for x in stages if isinstance(x, (dict, str)))])
         if not chain.stages:
             raise ValueError("lead designed an empty chain")
 
@@ -266,7 +291,8 @@ async def run_relay(orch, ns) -> str:
     if ns.assign == "best":
         stages = "\n".join(f"{i + 1}. {s.name}: {s.instructions[:300]}" for i, s in enumerate(chain.stages))
         raw = await orch.backend.run(orch.lead, BEST_PROMPT.format(roster=orch._roster(), stages=stages))
-        picks = extract_json(raw).get("agents", [])
+        picks = extract_json(raw).get("agents")
+        picks = picks if isinstance(picks, list) else []
         best = [a if a in orch.members else orch.lead for a in picks] + [orch.lead] * len(chain.stages)
     grid = assign(chain, n, orch.members, ns.assign, best)
 

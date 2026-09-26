@@ -85,3 +85,23 @@ def test_parse_plan_accepts_string_depends_on_and_trailing_braces():
     text = plan([{"id": "t1", "agent": "claude"}, {"id": "t2", "agent": "claude", "depends_on": "t1"}])
     _, tasks = parse_plan(text + "\nNote: use {curly} braces carefully.", ["claude"], "claude")
     assert tasks[1].depends_on == ["t1"]
+
+
+def test_parse_plan_accepts_string_tasks_and_ignores_invalid_items():
+    text = plan(["write unit tests", {"id": "t2", "title": "fix bug", "agent": "agy"}, 12345, None])
+    reply, tasks = parse_plan(text, ["claude", "agy"], "claude")
+    assert reply == "ok"
+    assert len(tasks) == 2
+    assert tasks[0].id == "t1"
+    assert tasks[0].title == "write unit tests"
+    assert tasks[0].agent == "claude"
+    assert tasks[0].instructions == "write unit tests"
+    assert tasks[1].id == "t2"
+    assert tasks[1].title == "fix bug"
+    assert tasks[1].agent == "agy"
+
+
+def test_orchestrator_falls_back_to_prose_on_malformed_plan_data():
+    orch = Orchestrator(FakeBackend('{"tasks": "not a list or dict"}'), ["claude"], "claude")
+    reply = asyncio.run(orch.handle("hi"))
+    assert '{"tasks": "not a list or dict"}' in reply

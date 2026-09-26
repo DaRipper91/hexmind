@@ -14,13 +14,14 @@ import shutil
 import tempfile
 import uuid
 
-# Per-agent argv for a one-shot, non-interactive turn. {prompt} is filled in.
+# Per-agent argv for a one-shot, non-interactive turn. Prompts go over stdin.
 # Edits are auto-accepted so agents can actually do work in the room's folder.
 DIRECT_CMDS: dict[str, list[str]] = {
-    "claude": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits"],
-    "agy": ["agy", "-p", "{prompt}", "--mode", "accept-edits", "--disable-slash-commands"],
+    "claude": ["claude", "-p", "--permission-mode", "acceptEdits"],
+    "agy": ["agy", "--input-format", "stream-json", "--output-format", "stream-json",
+            "--mode", "accept-edits", "--disable-slash-commands"],
     "codex": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
-              "--output-last-message", "{outfile}", "{prompt}"],
+              "--output-last-message", "{outfile}", "-"],
 }
 
 
@@ -37,20 +38,36 @@ class DirectBackend:
     async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
-            argv = [a.replace("{prompt}", prompt).replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
+            argv = [a.replace("{outfile}", outfile) for a in DIRECT_CMDS[agent]]
             proc = await asyncio.create_subprocess_exec(
-                *argv, cwd=cwd or self.cwd, stdin=asyncio.subprocess.DEVNULL,
+                *argv, cwd=cwd or self.cwd, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
-                out, err = await asyncio.wait_for(proc.communicate(), self.timeout)
+                payload = (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n"
+                           if agent == "agy" else prompt).encode()
+                out, err = await asyncio.wait_for(proc.communicate(input=payload), self.timeout)
             except asyncio.TimeoutError:
                 proc.kill()
+                await proc.wait()
                 raise RuntimeError(f"{agent} timed out after {self.timeout}s")
             if proc.returncode != 0:
-                raise RuntimeError(f"{agent} exited {proc.returncode}: {err.decode(errors='replace')[-500:]}")
+                detail = err.decode(errors="replace").strip() or out.decode(errors="replace").strip()
+                raise RuntimeError(f"{agent} exited {proc.returncode}: {detail[-500:]}")
             if os.path.exists(outfile):  # codex writes its final message here; stdout is its log
                 with open(outfile) as f:
                     return f.read()
+            if agent == "agy":
+                events = []
+                for line in out.decode(errors="replace").splitlines():
+                    try:  # agy may print warnings between stream-json events
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+                result = next((e["result"]["response"] for e in reversed(events)
+                               if isinstance(e, dict) and e.get("event") == "result"), None)
+                if result is None:
+                    raise RuntimeError("agy stream did not contain a result")
+                return result
             return out.decode(errors="replace")
 
 
