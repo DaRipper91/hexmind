@@ -74,7 +74,7 @@ class TaskScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="sheet"):
-            yield RichLog(wrap=True)
+            yield RichLog(wrap=True, min_width=0)  # always visible, so wrap to the sheet instead of 78 cols
             with Horizontal():
                 yield Button("Close", id="close", compact=True)
                 yield Button("Copy", id="copy", compact=True, disabled=not self.output)
@@ -187,6 +187,9 @@ class HexmindApp(App):
                           else f"{self.orch.name(self.lead)} · audit:{'on' if self.audit else 'off'}" if width >= 45 else "")
         self.set_class(short, "short")
         self.set_class(height < TINY, "tiny")
+        # RichLog renders new lines at >= min_width (default 78), which scrolls sideways on a phone; the chat can be
+        # hidden (width 0) while it's written to, so size it from the terminal rather than letting it shrink to fit
+        self.query_one("#chat", RichLog).min_width = width - 2 if narrow else 78  # 78: RichLog default
         if changed:
             self.refresh_team()
 

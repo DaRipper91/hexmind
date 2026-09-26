@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from dataclasses import dataclass
 from hexmind.auditor import (
@@ -85,8 +87,11 @@ def test_parse_verdict():
     assert "Unformatted prose" in issues3
 
 
-@pytest.mark.anyio
-async def test_audited_run_first_round_pass(tmp_path):
+def test_audited_run_first_round_pass(tmp_path):
+    asyncio.run(_test_audited_run_first_round_pass(tmp_path))
+
+
+async def _test_audited_run_first_round_pass(tmp_path):
     stats = Stats(str(tmp_path / "stats.json"))
     task = DummyTask(agent="claude")
     backend = FakeBackend([
@@ -109,8 +114,11 @@ async def test_audited_run_first_round_pass(tmp_path):
     assert stats.score("claude", "implementation") == 2 / 3  # (1+1)/(1+2)
 
 
-@pytest.mark.anyio
-async def test_audited_run_revision_and_fix(tmp_path):
+def test_audited_run_revision_and_fix(tmp_path):
+    asyncio.run(_test_audited_run_revision_and_fix(tmp_path))
+
+
+async def _test_audited_run_revision_and_fix(tmp_path):
     stats = Stats(str(tmp_path / "stats.json"))
     task = DummyTask(agent="claude")
     backend = FakeBackend([
@@ -135,8 +143,11 @@ async def test_audited_run_revision_and_fix(tmp_path):
     assert stats.score("claude", "implementation") == 1 / 3  # (0+1)/(0+1+2)
 
 
-@pytest.mark.anyio
-async def test_audited_run_unresolved_ungated(tmp_path):
+def test_audited_run_unresolved_ungated(tmp_path):
+    asyncio.run(_test_audited_run_unresolved_ungated(tmp_path))
+
+
+async def _test_audited_run_unresolved_ungated(tmp_path):
     stats = Stats(str(tmp_path / "stats.json"))
     task = DummyTask(agent="claude", gate=False)
     backend = FakeBackend([
@@ -163,8 +174,11 @@ async def test_audited_run_unresolved_ungated(tmp_path):
     assert any("ESCALATION" in m.get("text", "") for m in messages)
 
 
-@pytest.mark.anyio
-async def test_audited_run_unresolved_gated_raises(tmp_path):
+def test_audited_run_unresolved_gated_raises(tmp_path):
+    asyncio.run(_test_audited_run_unresolved_gated_raises(tmp_path))
+
+
+async def _test_audited_run_unresolved_gated_raises(tmp_path):
     stats = Stats(str(tmp_path / "stats.json"))
     task = DummyTask(agent="claude", gate=True)
     backend = FakeBackend([
