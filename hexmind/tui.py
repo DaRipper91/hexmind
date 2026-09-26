@@ -402,7 +402,7 @@ class HexmindApp(App):
         Binding("q", "quit", "Quit", show=False),
         Binding("c", "clear", "Clear", show=False),
         Binding("v", "toggle_view", "Toggle View", key_display="v/Tab"),
-        Binding("tab", "toggle_view", "Toggle View", show=False),
+        Binding("tab", "toggle_view", "Toggle View", show=False, priority=True),
         Binding("i", "focus_input", "Focus Input", show=False),
         Binding("question_mark", "help", "Help", key_display="?"),
         Binding("?", "help", "Help", show=False),
@@ -422,6 +422,7 @@ class HexmindApp(App):
         self.turn = asyncio.Lock()  # one request at a time; later ones queue
         self.round = 0
         self.is_narrow = False
+        self.layout_width = 80
         self.active_tab = "chat"
 
     def compose(self) -> ComposeResult:
@@ -458,8 +459,9 @@ class HexmindApp(App):
         self.update_responsive_layout(event.size.width, event.size.height)
 
     def update_responsive_layout(self, width: int, height: int, force: bool = False) -> None:
-        was_narrow = self.is_narrow
+        was_narrow, was_width = self.is_narrow, self.layout_width
         self.is_narrow = width < 80
+        self.layout_width = width
         is_short = height < 20
         is_ultra_short = height < 12
 
@@ -489,11 +491,12 @@ class HexmindApp(App):
             audit_str = "on" if self.audit else "off"
             self.sub_title = f"{self.backend_name} backend · lead: {self.lead} · audit: {audit_str}"
 
-        # Reconfigure table columns if breakpoint changed or on initial mount
-        if force or was_narrow != self.is_narrow:
+        # Reconfigure table columns if breakpoint changed or on initial mount;
+        # narrow title width tracks the screen so the table never scrolls sideways
+        if force or was_narrow != self.is_narrow or (self.is_narrow and was_width != width):
             self.reconfigure_tasks_table()
-            if not force:
-                self.replay_chat()
+        if not force and was_narrow != self.is_narrow:
+            self.replay_chat()
 
         self.refresh_team()
 
@@ -525,7 +528,7 @@ class HexmindApp(App):
         elif btn_id == "btn-help":
             self.action_help()
         elif btn_id == "btn-quit":
-            self.action_quit()
+            self.exit()
 
     def action_escape(self) -> None:
         if isinstance(self.screen, (TaskSheet, HelpModal)):
@@ -541,6 +544,9 @@ class HexmindApp(App):
         self.query_one("#input", Input).focus()
 
     def action_toggle_view(self) -> None:
+        if isinstance(self.screen, ModalScreen):  # Tab is a priority binding; keep focus cycling in dialogs
+            self.screen.focus_next()
+            return
         if self.is_narrow:
             new_tab = "tasks" if self.active_tab == "chat" else "chat"
             self.switch_tab(new_tab)
@@ -690,7 +696,8 @@ class HexmindApp(App):
         if self.is_narrow:
             table.add_column("task", key="task", width=5)
             table.add_column("status", key="status", width=9)
-            table.add_column("title", key="title")
+            # full-width pane: task + status + 1-col cell padding each side + 2-col scrollbar
+            table.add_column("title", key="title", width=max(8, self.layout_width - 5 - 9 - 6 - 2))
         else:
             table.add_column("task", key="task", width=5)
             table.add_column("agent", key="agent", width=8)
