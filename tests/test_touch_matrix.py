@@ -359,3 +359,20 @@ def test_resize_keeps_table_cursor_and_tab():
             assert_on_screen(app, "#tasks")
 
     asyncio.run(go())
+
+
+def test_chat_wraps_to_screen_width_and_rewraps_on_rotate():
+    """RichLog's default min_width of 78 made the chat scroll sideways on a phone."""
+    async def go():
+        app = make_app()
+        async with app.run_test(size=(40, 24)) as pilot:
+            app.say("claude", "word " * 60)
+            await pilot.pause()
+            chat = app.query_one("#chat", RichLog)
+            for size in [(40, 24), (60, 30), (120, 40), (40, 24)]:
+                await pilot.resize_terminal(*size)
+                await pilot.pause()
+                await pilot.pause()
+                assert chat.virtual_size.width <= chat.scrollable_content_region.width, size
+                assert chat.virtual_size.width >= chat.scrollable_content_region.width - 2, size
+    asyncio.run(go())

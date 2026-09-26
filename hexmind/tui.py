@@ -86,6 +86,12 @@ def tasks_tab_label(ascii_mode: bool, count: int = 0) -> str:
 class TaskTable(DataTable):
     """DataTable enhanced for mobile touch/tap selection and responsive columns."""
 
+    BINDINGS = [
+        Binding("space", "select_cursor", "Open", show=False),
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
+    ]
+
     async def _on_click(self, event: events.Click) -> None:
         """Ensure single tap selects the row immediately on mobile/touch."""
         meta = event.style.meta if hasattr(event, "style") else {}
@@ -121,6 +127,16 @@ class TaskTable(DataTable):
         """Safely update cell if column is currently registered."""
         if column_key in self.columns:
             super().update_cell(row_key, column_key, value, update_width=update_width)
+
+
+class ChatLog(RichLog):
+    """Chat log that re-wraps its history when its width changes (rotation, pinch-zoom, tab switch)."""
+
+    BINDINGS = [Binding("j", "scroll_down", show=False), Binding("k", "scroll_up", show=False)]
+
+    def on_resize(self, event: events.Resize) -> None:
+        super().on_resize(event)
+        self.call_after_refresh(self.app.rewrap_chat)
 
 
 class TaskSheet(ModalScreen):
@@ -325,6 +341,7 @@ class HexmindApp(App):
     }
     #chat {
         height: 1fr;
+        scrollbar-gutter: stable;
     }
     #input {
         dock: bottom;
@@ -404,6 +421,7 @@ class HexmindApp(App):
         Binding("v", "toggle_view", "Toggle View", key_display="v/Tab"),
         Binding("tab", "toggle_view", "Toggle View", show=False, priority=True),
         Binding("i", "focus_input", "Focus Input", show=False),
+        Binding("enter", "focus_input", "Focus Input", show=False),
         Binding("question_mark", "help", "Help", key_display="?"),
         Binding("?", "help", "Help", show=False),
     ]
@@ -424,6 +442,7 @@ class HexmindApp(App):
         self.is_narrow = False
         self.layout_width = 80
         self.active_tab = "chat"
+        self.chat_width: int | None = None  # width the chat log was last wrapped at
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -438,12 +457,13 @@ class HexmindApp(App):
         with Horizontal(id="main-container"):
             with Vertical(id="left"):
                 placeholder = "Ask the team anything..." if self.ascii_mode else "Ask the team anything…"
-                yield RichLog(id="chat", wrap=True, markup=True)
+                # RichLog defaults to min_width=78, which scrolls sideways on a phone
+                yield ChatLog(id="chat", wrap=True, markup=True, min_width=1)
                 yield Input(placeholder=placeholder, id="input")
             with Vertical(id="right"):
                 yield Static(id="team")
                 yield TaskTable(id="tasks", cursor_type="row")
-                yield RichLog(id="detail", wrap=True)
+                yield RichLog(id="detail", wrap=True, min_width=1)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -495,8 +515,6 @@ class HexmindApp(App):
         # narrow title width tracks the screen so the table never scrolls sideways
         if force or was_narrow != self.is_narrow or (self.is_narrow and was_width != width):
             self.reconfigure_tasks_table()
-        if not force and was_narrow != self.is_narrow:
-            self.replay_chat()
 
         self.refresh_team()
 
@@ -571,18 +589,30 @@ class HexmindApp(App):
 
     def _write_chat_message(self, who: str, text: str) -> None:
         chat = self.query_one("#chat", RichLog)
+        # hidden behind the Tasks tab the log has no width; wrap at the last known one
+        # and let rewrap_chat() fix it up when it is shown again
+        width = chat.scrollable_content_region.width
+        if width:
+            self.chat_width = width
+        width = self.chat_width
         if text.startswith("ESCALATION"):
-            chat.write(Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"))
-            chat.write("")
+            chat.write(Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"), width=width)
+            chat.write("", width=width)
             return
         label = self.orch.name(who)
-        chat.write(Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")))
-        chat.write(Markdown(text) if who != "you" else Text(text))
-        chat.write("")
+        chat.write(Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")), width=width)
+        chat.write(Markdown(text) if who != "you" else Text(text), width=width)
+        chat.write("", width=width)
+
+    def rewrap_chat(self) -> None:
+        width = self.query_one("#chat", RichLog).scrollable_content_region.width
+        if width and width != self.chat_width:
+            self.replay_chat()
 
     def replay_chat(self) -> None:
         chat = self.query_one("#chat", RichLog)
         chat.clear()
+        self.chat_width = chat.scrollable_content_region.width or self.chat_width
         for who, text in self.chat_history:
             self._write_chat_message(who, text)
 
