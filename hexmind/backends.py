@@ -27,7 +27,6 @@ DIRECT_CMDS: dict[str, list[str]] = {
     "opencode": ["opencode", "run", "--auto"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
-    "jules": ["jules", "new"],
 }
 
 
