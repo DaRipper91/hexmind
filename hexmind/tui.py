@@ -11,7 +11,7 @@ from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
@@ -22,7 +22,7 @@ STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed"
 AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow", "opencode": "bright_blue", "copilot": "white", "you": "bold white"}
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
-HELP = """[b]Keys[/b] (when the input is not focused — press [b]Esc[/b] first)
+HELP = """[b]Keys[/b] (press [b]Esc[/b] to leave the input)
 
   [b]v[/b]        switch Chat / Tasks
   [b]i[/b] / Enter  type a message
@@ -31,7 +31,7 @@ HELP = """[b]Keys[/b] (when the input is not focused — press [b]Esc[/b] first)
   [b]q[/b]        quit
   [b]?[/b]        this help
 
-Ctrl+Q / Ctrl+L still work everywhere."""
+Ctrl+Q / Ctrl+L work anywhere."""
 
 
 def audit_cell(t: Task, name=lambda m: m) -> str:
@@ -43,13 +43,13 @@ def audit_cell(t: Task, name=lambda m: m) -> str:
 class HelpScreen(ModalScreen):
     CSS = """
     HelpScreen { align: center middle; }
-    #help { width: auto; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; border: solid $primary; background: $surface; }
+    #help { width: 44; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; border: solid $primary; background: $surface; }
     #help Button { margin-top: 1; }
     """
     BINDINGS = [("escape,q,question_mark", "dismiss", "Close")]
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="help"):
+        with VerticalScroll(id="help"):  # scrolls rather than pushing Close off a short screen
             yield Static(HELP)
             yield Button("Close", id="close", compact=True)
 
@@ -106,12 +106,12 @@ class TaskScreen(ModalScreen):
 
 
 class TaskTable(DataTable):
-    async def _on_click(self, event) -> None:
-        row = self.cursor_row
-        await super()._on_click(event)
-        # DataTable selects only when the tapped row was already highlighted; on a phone one tap should open the task
-        if self.app.has_class("narrow") and self.cursor_row != row and event.style.meta.get("row", -1) >= 0:
-            self.action_select_cursor()
+    def _on_click(self, event) -> None:
+        # DataTable only selects a row that is already highlighted, so on a phone every task would take two taps.
+        # Textual runs DataTable's own _on_click after this one (handlers run down the MRO), so highlight first.
+        row = event.style.meta.get("row", -1)
+        if self.app.has_class("narrow") and row >= 0:
+            self.move_cursor(row=row)
 
 
 class HexmindApp(App):
@@ -155,6 +155,7 @@ class HexmindApp(App):
         self.turn = asyncio.Lock()  # one request at a time; later ones queue
         self.round = 0
         self.view = "chat"  # which pane shows in narrow (tabbed) mode
+        self.table_width = 0  # terminal width the narrow task table's fixed columns were sized for
         self.history: list = []  # chat renderables, replayed to re-wrap when a narrow terminal changes width
 
     def compose(self) -> ComposeResult:
@@ -190,8 +191,9 @@ class HexmindApp(App):
     def apply_size(self, width: int, height: int) -> None:
         short, narrow = height < SHORT, width < NARROW
         changed = short != self.has_class("short")
-        if narrow != self.has_class("narrow") or not self.query_one("#tasks", DataTable).columns:
+        if narrow != self.has_class("narrow") or not self.query_one("#tasks", DataTable).columns or narrow and width != self.table_width:
             self.set_class(narrow, "narrow")
+            self.table_width = width
             self.build_table()
         self.sub_title = (f"{self.backend_name} backend · lead: {self.lead} · audit: {'on' if self.audit else 'off'}" if not narrow
                           else f"{self.orch.name(self.lead)} · audit:{'on' if self.audit else 'off'}" if width >= 45 else "")
@@ -200,18 +202,21 @@ class HexmindApp(App):
         # RichLog renders new lines at >= min_width (default 78), which scrolls sideways on a phone; the chat can be
         # hidden (width 0) while it's written to, so size it from the terminal rather than letting it shrink to fit
         chat = self.query_one("#chat", RichLog)
-        min_width = width - 2 if narrow else 78  # 78: RichLog default
+        min_width = (width if narrow else 2 * width // 3) - 2  # chat pane minus scrollbar; 78 (RichLog's default) at 120 cols
         if min_width != chat.min_width:
             chat.min_width = min_width
             chat.clear()  # RichLog never re-wraps written lines, so write them again at the new width
-            for renderable in self.history:
-                chat.write(renderable)
+            for renderable in self.history:  # layout hasn't caught up with the resize yet, so give the width explicitly
+                chat.write(renderable, width=min_width)
         if changed:
             self.refresh_team()
 
     # ---------- task board ----------
-    def columns(self) -> tuple[str, ...]:
-        return ("task", "status", "title") if self.has_class("narrow") else ("task", "agent", "status", "audit", "title")
+    def columns(self) -> dict[str, int | None]:
+        """Column -> fixed width (None: fit content). Narrow widths add up to the screen so the table never scrolls sideways."""
+        if not self.has_class("narrow"):
+            return dict.fromkeys(("task", "agent", "status", "audit", "title"))
+        return {"task": 5, "status": 12, "title": max(8, self.table_width - 25)}  # 25: those two, 1-cell padding each side, scrollbar
 
     def cells(self, key: str, t: Task) -> dict:
         audit = audit_cell(t, self.orch.name)
@@ -229,8 +234,8 @@ class HexmindApp(App):
         table = self.query_one("#tasks", DataTable)
         row = table.cursor_row
         table.clear(columns=True)
-        for col in self.columns():
-            table.add_column(col, key=col)
+        for col, width in self.columns().items():
+            table.add_column(col, key=col, width=width)
         for key, t in self.tasks.items():
             table.add_row(*self.cells(key, t).values(), key=key)
         if self.tasks:
