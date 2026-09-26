@@ -91,3 +91,32 @@ def test_short_terminal_collapses_team_to_one_line():
             assert app.has_class("tiny") and not app.query_one("Header").display
 
     asyncio.run(go())
+
+
+def test_narrow_table_is_compact_and_rebuilds_on_resize():
+    plan = json.dumps({"reply": "on it", "tasks": [{"id": "a", "agent": "claude", "title": "alpha"}]})
+
+    async def go():
+        app = HexmindApp(FakeBackend(plan), ["claude", "agy"], "claude", "test")
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.press(*"go", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            table = app.query_one("#tasks")
+            assert [c.value for c in table.columns] == ["task", "status", "title"]
+            assert str(table.get_cell("1.a", "title")) == "claude alpha"
+            assert app.sub_title == "claude · audit:off"
+            t = app.tasks["1.a"]
+            t.audit, t.auditor = "pass", "agy"
+            app.on_team_event("task", {"task": t})
+            assert str(table.get_cell("1.a", "status")) == "done pass·agy"
+            await pilot.press("escape", "v", "enter")  # open the task sheet
+            assert app.screen.__class__.__name__ == "TaskScreen"
+            await pilot.press("escape")
+            await pilot.resize_terminal(120, 40)
+            await pilot.pause()
+            assert [c.value for c in table.columns] == ["task", "agent", "status", "audit", "title"]
+            assert str(table.get_cell("1.a", "audit")) == "pass·agy" and table.row_count == 1
+            assert app.sub_title == "test backend · lead: claude · audit: off"
+
+    asyncio.run(go())

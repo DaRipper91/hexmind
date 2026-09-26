@@ -54,6 +54,34 @@ class HelpScreen(ModalScreen):
         self.dismiss()
 
 
+class TaskScreen(ModalScreen):
+    """Full-screen task detail for narrow terminals, where a split-off detail pane would be a sliver."""
+    CSS = """
+    TaskScreen { align: center middle; }
+    #sheet { width: 100%; height: 90%; border: solid $primary; background: $surface; }
+    #sheet RichLog { height: 1fr; }
+    #sheet Horizontal { height: 1; }
+    #sheet Button { width: auto; min-width: 0; margin-right: 1; }
+    """
+    BINDINGS = [("escape,q", "dismiss", "Close")]
+
+    def __init__(self, write) -> None:
+        super().__init__()
+        self.write = write  # fills a RichLog with the task detail
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="sheet"):
+            yield RichLog(wrap=True)
+            with Horizontal():
+                yield Button("Close", id="close", compact=True)
+
+    def on_mount(self) -> None:
+        self.write(self.query_one(RichLog))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss()
+
+
 class HexmindApp(App):
     TITLE = "Hexmind"
     CSS = """
@@ -74,6 +102,7 @@ class HexmindApp(App):
     .short #team { border-bottom: none; }
     .tiny Header, .tiny Footer { display: none; }
     .tiny #input { height: 1; border: none; padding: 0 1; }
+    .narrow #detail { display: none; }
     """
     BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat"),
                 # single-key alternatives for soft keyboards; Input consumes printable keys, so these only fire when it is blurred
@@ -86,6 +115,7 @@ class HexmindApp(App):
     def __init__(self, backend, members: list[str], lead: str, backend_name: str, audit: bool = False, stats=None):
         super().__init__()
         self.members, self.lead = members, lead
+        self.backend_name, self.audit = backend_name, audit
         self.sub_title = f"{backend_name} backend · lead: {lead} · audit: {'on' if audit else 'off'}"
         self.orch = Orchestrator(backend, members, lead, emit=self.on_team_event, audit=audit, stats=stats)
         self.tasks: dict[str, Task] = {}  # row key -> task, across all requests
@@ -114,9 +144,6 @@ class HexmindApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one("#tasks", DataTable)
-        for col in ("task", "agent", "status", "audit", "title"):
-            table.add_column(col, key=col)
         self.set_class(True, "view-chat")
         self.apply_size(self.size.width, self.size.height)
         self.refresh_team()
@@ -128,13 +155,44 @@ class HexmindApp(App):
         self.apply_size(event.size.width, event.size.height)
 
     def apply_size(self, width: int, height: int) -> None:
-        short = height < SHORT
+        short, narrow = height < SHORT, width < NARROW
         changed = short != self.has_class("short")
-        self.set_class(width < NARROW, "narrow")
+        if narrow != self.has_class("narrow") or not self.query_one("#tasks", DataTable).columns:
+            self.set_class(narrow, "narrow")
+            self.build_table()
+        self.sub_title = (f"{self.backend_name} backend · lead: {self.lead} · audit: {'on' if self.audit else 'off'}" if not narrow
+                          else f"{self.orch.name(self.lead)} · audit:{'on' if self.audit else 'off'}" if width >= 45 else "")
         self.set_class(short, "short")
         self.set_class(height < TINY, "tiny")
         if changed:
             self.refresh_team()
+
+    # ---------- task board ----------
+    def columns(self) -> tuple[str, ...]:
+        return ("task", "status", "title") if self.has_class("narrow") else ("task", "agent", "status", "audit", "title")
+
+    def cells(self, key: str, t: Task) -> dict:
+        audit = audit_cell(t, self.orch.name)
+        status = Text(t.status, style=STATUS_STYLE.get(t.status, ""))
+        if not self.has_class("narrow"):
+            return {"task": key, "agent": self.orch.name(t.agent), "status": status,
+                    "audit": Text(audit, style="red" if getattr(t, "audit", "") == "disputed" else ""), "title": t.title}
+        if audit:  # compact: fold audit into status and agent into title
+            status.append(f" {audit}", style="red" if getattr(t, "audit", "") == "disputed" else "dim")
+        return {"task": key, "status": status,
+                "title": Text.assemble((f"{self.orch.name(t.agent)} ", AGENT_COLOR.get(t.agent, "")), t.title)}
+
+    def build_table(self) -> None:
+        """(Re)create the columns for the current width and refill rows, keeping the cursor."""
+        table = self.query_one("#tasks", DataTable)
+        row = table.cursor_row
+        table.clear(columns=True)
+        for col in self.columns():
+            table.add_column(col, key=col)
+        for key, t in self.tasks.items():
+            table.add_row(*self.cells(key, t).values(), key=key)
+        if self.tasks:
+            table.move_cursor(row=row)
 
     def set_view(self, view: str) -> None:
         self.view = view
@@ -213,7 +271,7 @@ class HexmindApp(App):
             for t in data["tasks"]:
                 key = f"{self.round}.{t.id}"
                 self.tasks[key] = t
-                table.add_row(key, self.orch.name(t.agent), t.status, audit_cell(t, self.orch.name), t.title, key=key)
+                table.add_row(*self.cells(key, t).values(), key=key)
             lines = [f"- **{t.id}** → {self.orch.name(t.agent)}: {t.title}" + (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "")
                      for t in data["tasks"]]
             self.say("Hexmind", "**Plan**\n" + "\n".join(lines))
@@ -221,8 +279,9 @@ class HexmindApp(App):
             t = data["task"]
             key = f"{self.round}.{t.id}"
             table = self.query_one("#tasks", DataTable)
-            table.update_cell(key, "status", Text(t.status, style=STATUS_STYLE.get(t.status, "")))
-            table.update_cell(key, "audit", Text(audit_cell(t, self.orch.name), style="red" if getattr(t, "audit", "") == "disputed" else ""))
+            for col, value in self.cells(key, t).items():
+                if col in ("status", "audit"):
+                    table.update_cell(key, col, value)
             if t.status in ("done", "failed"):
                 first = t.output.strip().splitlines()[0][:200] if t.output.strip() else ""
                 self.say(t.agent, f"**{t.id} {t.status}** — {t.title}\n\n{first}")
@@ -254,9 +313,15 @@ class HexmindApp(App):
         if event.row_key is not None:
             self.show_task(event.row_key.value)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if self.has_class("narrow") and event.row_key.value in self.tasks:
+            self.push_screen(TaskScreen(lambda log: self.write_task(log, event.row_key.value)))
+
     def show_task(self, key: str) -> None:
+        self.write_task(self.query_one("#detail", RichLog), key)
+
+    def write_task(self, detail: RichLog, key: str) -> None:
         t = self.tasks.get(key)
-        detail = self.query_one("#detail", RichLog)
         detail.clear()
         if t:
             audit = audit_cell(t, self.orch.name)
