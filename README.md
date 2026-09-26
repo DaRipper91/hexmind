@@ -63,6 +63,7 @@ a track record that decides who gets trusted with what.
 | `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `codex exec --sandbox workspace-write … -` |
 | `opencode` | [OpenCode](https://opencode.ai) | `opencode run --auto` |
 | `copilot` | [GitHub Copilot CLI](https://github.com/github/copilot-cli) | `copilot -s --allow-tool=write` (file edits yes, shell no) |
+| `jules` | [Google Jules](https://jules.google) | `jules new` (cloud sessions that return as PRs) |
 | `qwen` *(opt-in: `--with qwen`)* | local `qwen3:4b` via [Ollama](https://ollama.com) | text only: no files, no tools; never leads or audits; skipped by relay rotation |
 
 Hexmind only includes members whose CLI is on your `PATH`.
@@ -388,7 +389,7 @@ Every backend has the same interface: `await backend.run(agent, prompt, cwd) -> 
 - [x] **Nicknames**: `/nick` display names that the lead also understands
 - [x] **Hardening pass** from an independent review: stdin prompts, apostrophes in `/relay`, malformed plans and broken chain files reported instead of crashing
 - [ ] **hcom split-terminal mode:** watch each model work in its own pane
-- [ ] **Jules** as a team member for long-running cloud tasks that come back as PRs
+- [x] **Jules** as a team member for long-running cloud tasks that come back as PRs
 - [ ] **`hexmind.qt.HexmindWidget`**: an embeddable Qt room, hosted by the rebuilt Aether (Hexmind never imports Aether)
 - [ ] **GUI** (PySide6), standalone
 

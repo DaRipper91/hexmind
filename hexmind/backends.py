@@ -19,14 +19,15 @@ import uuid
 # Per-agent argv for a one-shot, non-interactive turn. Prompts go over stdin.
 # Edits are auto-accepted so agents can actually do work in the room's folder.
 DIRECT_CMDS: dict[str, list[str]] = {
-    "claude": ["claude", "-p", "--permission-mode", "acceptEdits"],
+    "claude": ["claude", "-p", "--permission-mode", "bypassPermissions"],
     "agy": ["agy", "--input-format", "stream-json", "--output-format", "stream-json",
-            "--mode", "accept-edits", "--disable-slash-commands"],
-    "codex": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
+            "--mode", "accept-edits", "--dangerously-skip-permissions", "--disable-slash-commands"],
+    "codex": ["codex", "exec", "--sandbox", "workspace-write", "-a", "never", "--skip-git-repo-check",
               "--output-last-message", "{outfile}", "-"],
     "opencode": ["opencode", "run", "--auto"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
+    "jules": ["jules", "new"],
 }
 
 
@@ -167,8 +168,8 @@ class DirectBackend:
             return out.decode(errors="replace")
 
 
-HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
-HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
+HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
 
 
 class HcomBackend:
