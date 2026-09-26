@@ -146,6 +146,7 @@ class HexmindApp(App):
         self.turn = asyncio.Lock()  # one request at a time; later ones queue
         self.round = 0
         self.view = "chat"  # which pane shows in narrow (tabbed) mode
+        self.history: list = []  # chat renderables, replayed to re-wrap when a narrow terminal changes width
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -189,7 +190,13 @@ class HexmindApp(App):
         self.set_class(height < TINY, "tiny")
         # RichLog renders new lines at >= min_width (default 78), which scrolls sideways on a phone; the chat can be
         # hidden (width 0) while it's written to, so size it from the terminal rather than letting it shrink to fit
-        self.query_one("#chat", RichLog).min_width = width - 2 if narrow else 78  # 78: RichLog default
+        chat = self.query_one("#chat", RichLog)
+        min_width = width - 2 if narrow else 78  # 78: RichLog default
+        if min_width != chat.min_width:
+            chat.min_width = min_width
+            chat.clear()  # RichLog never re-wraps written lines, so write them again at the new width
+            for renderable in self.history:
+                chat.write(renderable)
         if changed:
             self.refresh_team()
 
@@ -255,15 +262,16 @@ class HexmindApp(App):
 
     # ---------- chat ----------
     def say(self, who: str, text: str) -> None:
-        chat = self.query_one("#chat", RichLog)
         if text.startswith("ESCALATION"):
-            chat.write(Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"))
-            chat.write("")
-            return
-        label = self.orch.name(who)
-        chat.write(Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")))
-        chat.write(Markdown(text) if who != "you" else Text(text))
-        chat.write("")
+            lines = [Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"), ""]
+        else:
+            label = self.orch.name(who)
+            lines = [Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")),
+                     Markdown(text) if who != "you" else Text(text), ""]
+        chat = self.query_one("#chat", RichLog)
+        for renderable in lines:
+            self.history.append(renderable)
+            chat.write(renderable)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value.strip()
@@ -358,4 +366,5 @@ class HexmindApp(App):
             detail.write(Markdown(t.output) if t.output else Text("(no output yet)", style="dim"))
 
     def action_clear(self) -> None:
+        self.history.clear()
         self.query_one("#chat", RichLog).clear()
