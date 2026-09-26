@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import shutil
 import tempfile
+import uuid
 
 # Per-agent argv for a one-shot, non-interactive turn. {prompt} is filled in.
 # Edits are auto-accepted so agents can actually do work in the room's folder.
@@ -48,3 +51,91 @@ class DirectBackend:
                 with open(outfile) as f:
                     return f.read()
             return out.decode(errors="replace")
+
+
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex"}
+HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex"}
+
+
+class HcomBackend:
+    """Persistent hcom agents, with each request isolated in its own thread."""
+
+    def __init__(self, cwd: str, timeout: int = 1800):
+        self.cwd = os.path.abspath(cwd)
+        self.timeout = timeout
+        self.tag = "hexmind-" + hashlib.sha256(self.cwd.encode()).hexdigest()[:10]
+        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+    async def _command(self, *args: str, cwd: str | None = None, timeout: int | None = None) -> str:
+        proc = await asyncio.create_subprocess_exec(
+            "hcom", *args, cwd=cwd or self.cwd, stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout or self.timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"hcom {' '.join(args[:2])} timed out")
+        if proc.returncode:
+            detail = err.decode(errors="replace").strip() or out.decode(errors="replace").strip()
+            raise RuntimeError(f"hcom {' '.join(args[:2])} exited {proc.returncode}: {detail[-500:]}")
+        return out.decode(errors="replace").strip()
+
+    async def _agents(self) -> list[dict]:
+        try:
+            agents = json.loads(await self._command("list", "--json"))
+        except json.JSONDecodeError as e:
+            raise RuntimeError("hcom list --json returned invalid JSON") from e
+        if not isinstance(agents, list):
+            raise RuntimeError("hcom list --json did not return an array")
+        return [a for a in agents if isinstance(a, dict)]
+
+    async def members(self) -> list[str]:
+        """Model aliases represented by currently available hcom agents."""
+        found = {HCOM_MEMBERS[a.get("tool", "").lower()] for a in await self._agents()
+                 if a.get("tool", "").lower() in HCOM_MEMBERS}
+        return [m for m in HCOM_TOOLS if m in found]
+
+    async def _agent(self, member: str, cwd: str) -> str:
+        if member not in HCOM_TOOLS:
+            raise ValueError(f"unsupported hcom member: {member}")
+        cwd = os.path.abspath(cwd)
+        lock = self._locks.setdefault((member, cwd), asyncio.Lock())
+        async with lock:
+            tool = HCOM_TOOLS[member]
+
+            def matching(agents: list[dict]) -> list[dict]:
+                return [a for a in agents if a.get("tag") == self.tag and a.get("tool") == tool
+                        and os.path.abspath(a.get("directory", "")) == cwd]
+
+            agents = matching(await self._agents())
+            if not agents:
+                await self._command("1", tool, "--headless", "--tag", self.tag, "--dir", cwd,
+                                    "--hcom-system-prompt",
+                                    f"You are the persistent {member} agent in a Hexmind team. "
+                                    "Respond to each incoming Hexmind request with its result.",
+                                    timeout=min(self.timeout, 60))
+                agents = matching(await self._agents())
+            if not agents:
+                raise RuntimeError(f"hcom did not start a {member} agent for {cwd}")
+            agent = agents[-1]
+            if agent.get("status") == "blocked":
+                raise RuntimeError(f"hcom {member} agent {agent.get('name')} is blocked")
+            return agent["name"]
+
+    async def run(self, agent: str, prompt: str, cwd: str | None = None) -> str:
+        agent_name = await self._agent(agent, cwd or self.cwd)
+        thread = f"{self.tag}-{agent}-{uuid.uuid4().hex[:16]}"
+        await self._command("send", f"@{agent_name}", "--intent", "request", "--thread", thread,
+                            "--from", "hexmind", "--", prompt)
+        raw = await self._command("events", "--wait", str(max(1, self.timeout)), "--type", "message",
+                                  "--from", agent_name, "--thread", thread,
+                                  timeout=self.timeout + 5)
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise RuntimeError("hcom events returned invalid JSON") from e
+        text = event.get("data", {}).get("text") if isinstance(event, dict) else None
+        if not isinstance(text, str):
+            raise RuntimeError("hcom event did not contain a message")
+        return text

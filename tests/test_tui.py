@@ -18,6 +18,12 @@ def test_room_runs_a_plan_and_fills_task_board():
             await app.workers.wait_for_complete()
             await pilot.pause()
             assert [t.status for t in app.tasks.values()] == ["done", "done"]
-            assert app.query_one("#tasks").row_count == 2
+            table = app.query_one("#tasks")
+            assert table.row_count == 2
+            assert str(table.get_cell("1.a", "audit")) == ""  # not audited
+            t = app.tasks["1.a"]
+            t.status, t.audit, t.auditor = "done", "fixed", "agy"
+            app.on_team_event("task", {"task": t})
+            assert str(table.get_cell("1.a", "audit")) == "fixed·agy"
 
     asyncio.run(go())

@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+    <linearGradient id="claudeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7e22ce"/>
+    </linearGradient>
+    <linearGradient id="agyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="codexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feComposite in="SourceGraphic" in2="b" operator="over"/>
+    </filter>
+  </defs>
+
+  <style>
+    @keyframes flow1 {
+      0% { offset-distance: 0%; opacity: 0; }
+      10% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { offset-distance: 100%; opacity: 0; }
+    }
+    @keyframes cellPulse {
+      0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 2px rgba(255,255,255,0.1)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
+    }
+    .token-1 {
+      offset-path: path("M 80 110 L 220 110 L 380 110 L 540 110 L 670 180 L 740 180");
+      animation: flow1 7s ease-in-out infinite;
+    }
+    .token-2 {
+      offset-path: path("M 80 180 L 220 180 L 380 180 L 540 180 L 670 180 L 740 180");
+      animation: flow1 7s ease-in-out infinite 2.3s;
+    }
+    .token-3 {
+      offset-path: path("M 80 250 L 220 250 L 380 250 L 540 250 L 670 180 L 740 180");
+      animation: flow1 7s ease-in-out infinite 4.6s;
+    }
+    .pulse-cell { animation: cellPulse 4s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .token-1, .token-2, .token-3, .pulse-cell { animation: none !important; }
+    }
+  </style>
+
+  <rect width="860" height="360" rx="14" fill="url(#bg2)" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- Header & Legend -->
+  <text x="40" y="44" font-family="system-ui, sans-serif" font-weight="800" font-size="20" fill="#f8fafc" letter-spacing="1">
+    HEXMIND RELAY CHAINS
+  </text>
+  <text x="40" y="66" font-family="system-ui, sans-serif" font-size="13" fill="#64748b">
+    Parallel N-way execution with cyclic model rotation &amp; unified artifact convergence
+  </text>
+
+  <!-- Legend Badges -->
+  <g transform="translate(520, 32)">
+    <rect x="0" y="0" width="94" height="22" rx="11" fill="#2e1065" stroke="#a855f7" stroke-width="1"/>
+    <circle cx="12" cy="11" r="4" fill="#c084fc"/>
+    <text x="24" y="15" font-family="ui-monospace, monospace" font-size="11" font-weight="600" fill="#e9d5ff">Claude</text>
+
+    <rect x="104" y="0" width="104" height="22" rx="11" fill="#082f49" stroke="#0ea5e9" stroke-width="1"/>
+    <circle cx="116" cy="11" r="4" fill="#38bdf8"/>
+    <text x="128" y="15" font-family="ui-monospace, monospace" font-size="11" font-weight="600" fill="#bae6fd">Gemini (agy)</text>
+
+    <rect x="218" y="0" width="94" height="22" rx="11" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+    <circle cx="230" cy="11" r="4" fill="#34d399"/>
+    <text x="242" y="15" font-family="ui-monospace, monospace" font-size="11" font-weight="600" fill="#a7f3d0">Codex</text>
+  </g>
+
+  <!-- Flow Paths / Connector Wires (Passing Through All Stages into Synthesis) -->
+  <g stroke="#334155" stroke-width="2" stroke-dasharray="4 4" fill="none">
+    <!-- Chain 1 Wire: Stage 1 -> Stage 2 -> Stage 3 -> Convergence -->
+    <path d="M 80 110 L 540 110 L 670 180 L 740 180"/>
+    <!-- Chain 2 Wire: Stage 1 -> Stage 2 -> Stage 3 -> Convergence -->
+    <path d="M 80 180 L 540 180 L 670 180 L 740 180"/>
+    <!-- Chain 3 Wire: Stage 1 -> Stage 2 -> Stage 3 -> Convergence -->
+    <path d="M 80 250 L 540 250 L 670 180 L 740 180"/>
+  </g>
+
+  <!-- Track Labels -->
+  <text x="40" y="115" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#94a3b8">CHAIN 1</text>
+  <text x="40" y="185" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#94a3b8">CHAIN 2</text>
+  <text x="40" y="255" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#94a3b8">CHAIN 3</text>
+
+  <!-- STAGE 1 Column (X=160) -->
+  <!-- Chain 1 Stage 1: Claude -->
+  <g transform="translate(160, 88)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="middle">Stage 1: Recon</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#a855f7" text-anchor="middle">Claude</text>
+  </g>
+  <!-- Chain 2 Stage 1: Gemini -->
+  <g transform="translate(160, 158)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#082f49" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#bae6fd" text-anchor="middle">Stage 1: Recon</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8" text-anchor="middle">Gemini</text>
+  </g>
+  <!-- Chain 3 Stage 1: Codex -->
+  <g transform="translate(160, 228)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#a7f3d0" text-anchor="middle">Stage 1: Recon</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#34d399" text-anchor="middle">Codex</text>
+  </g>
+
+  <!-- STAGE 2 Column (X=320) (Rotated) -->
+  <!-- Chain 1 Stage 2: Gemini -->
+  <g transform="translate(320, 88)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#082f49" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#bae6fd" text-anchor="middle">Stage 2: Refactor</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8" text-anchor="middle">Gemini</text>
+  </g>
+  <!-- Chain 2 Stage 2: Codex -->
+  <g transform="translate(320, 158)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#a7f3d0" text-anchor="middle">Stage 2: Refactor</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#34d399" text-anchor="middle">Codex</text>
+  </g>
+  <!-- Chain 3 Stage 2: Claude -->
+  <g transform="translate(320, 228)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="middle">Stage 2: Refactor</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#a855f7" text-anchor="middle">Claude</text>
+  </g>
+
+  <!-- STAGE 3 Column (X=480) (Rotated) -->
+  <!-- Chain 1 Stage 3: Codex -->
+  <g transform="translate(480, 88)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#a7f3d0" text-anchor="middle">Stage 3: Verify</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#34d399" text-anchor="middle">Codex</text>
+  </g>
+  <!-- Chain 2 Stage 3: Claude -->
+  <g transform="translate(480, 158)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="middle">Stage 3: Verify</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#a855f7" text-anchor="middle">Claude</text>
+  </g>
+  <!-- Chain 3 Stage 3: Gemini -->
+  <g transform="translate(480, 228)" class="pulse-cell">
+    <rect width="120" height="44" rx="8" fill="#082f49" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="60" y="20" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#bae6fd" text-anchor="middle">Stage 3: Verify</text>
+    <text x="60" y="34" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8" text-anchor="middle">Gemini</text>
+  </g>
+
+  <!-- CONVERGENCE / MERGE NODE (X=670) -->
+  <g transform="translate(670, 148)" filter="url(#glow2)">
+    <polygon points="70,0 140,32 140,32 70,64 0,32" fill="#1e1b4b" stroke="#ec4899" stroke-width="2"/>
+    <text x="70" y="30" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#fdf2f8" text-anchor="middle">SYNTHESIS</text>
+    <text x="70" y="44" font-family="ui-monospace, monospace" font-size="9" fill="#f472b6" text-anchor="middle">Merge &amp; Compare</text>
+  </g>
+
+  <!-- Flowing Animation Pulses (Passing through Stage 1 -> 2 -> 3 -> Synthesis) -->
+  <circle class="token-1" r="5" fill="#a855f7" filter="url(#glow2)"/>
+  <circle class="token-2" r="5" fill="#38bdf8" filter="url(#glow2)"/>
+  <circle class="token-3" r="5" fill="#34d399" filter="url(#glow2)"/>
+
+  <!-- Footer Tag -->
+  <text x="40" y="324" font-family="ui-monospace, monospace" font-size="11" fill="#475569">
+    .hexmind/runs/&lt;run_id&gt;/chain-*.md (isolated worktrees per branch)
+  </text>
+</svg>

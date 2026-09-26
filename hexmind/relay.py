@@ -31,6 +31,8 @@ class Stage:
     name: str
     instructions: str
     agent: str | None = None  # pinned model, used by --assign pinned
+    domain: str = "general"
+    gate: bool = False
 
 
 @dataclass
@@ -61,7 +63,8 @@ def load_chain(path: Path) -> Chain:
     stages = []
     for s in data.get("stages", []):
         instr = read_agent_file(s["from"]) if s.get("from") else s.get("instructions", "")
-        stages.append(Stage(s.get("name", f"stage {len(stages) + 1}"), instr, s.get("agent")))
+        stages.append(Stage(s.get("name", f"stage {len(stages) + 1}"), instr, s.get("agent"),
+                            s.get("domain", "general"), s.get("gate") is True))
     if not stages:
         raise ValueError(f"{path} has no [[stages]]")
     return Chain(data.get("name", path.stem), data.get("description", ""), stages)
@@ -102,7 +105,8 @@ def build_tasks(chain: Chain, grid: list[list[str]], goal: str, cwds: list[str],
             tasks.append(Task(id=tid, title=f"{LABELS[k]}·{st.name}", agent=agent,
                               instructions=f"Relay goal: {goal}\n\nStage {i + 1}/{len(chain.stages)} "
                                            f"of chain '{chain.name}' ({st.name}):\n{st.instructions}",
-                              depends_on=[prev] if prev else [], cwd=cwds[k], notes=notes[k]))
+                              depends_on=[prev] if prev else [], cwd=cwds[k], notes=notes[k],
+                              domain=st.domain, gate=st.gate))
             prev = tid
     return tasks
 
@@ -186,6 +190,9 @@ HELP = """**Commands**
 - `/relay NAME|GOAL [-n 3] [--assign rotate|best|pinned] [--workspace shared|worktree] [--end merge|compare|list] [--goal TEXT]`
   run a chain; `x3` works as `-n 3`. Unknown NAME = a goal the lead designs stages for.
 - `/chains` list chain files
+- `/audit on|off` runner-up model reviews every task (bounded revise loop; `gate = true` tasks block on failure)
+- `/ranks` each model's audit track record by domain
+- `/nick MODEL NAME` give a model a nickname · `/nick MODEL` clear it · `/nick` list
 - `/help` this list"""
 
 
@@ -196,6 +203,28 @@ async def command(orch, text: str) -> str:
         loaded = {n: load_chain(p) for n, p in list_chains().items()}
         reply = "\n".join(f"- **{n}** ({len(c.stages)} stages): {c.description}"
                           for n, c in loaded.items()) or "No chain files. Add some to ~/.config/hexmind/chains/"
+    elif cmd == "/audit":
+        if args and args[0] in ("on", "off"):
+            orch.audit = args[0] == "on"
+        reply = f"Peer audit is **{'on' if orch.audit else 'off'}**."
+    elif cmd == "/nick":
+        from .config import save_nicknames
+        if len(args) >= 2 and args[0] in orch.members:
+            orch.nicknames[args[0]] = " ".join(args[1:])
+            save_nicknames(orch.nicknames)
+        elif len(args) == 1 and args[0] in orch.members:
+            orch.nicknames.pop(args[0], None)
+            save_nicknames(orch.nicknames)
+        elif args:
+            orch.emit("message", {"from": "hexmind", "text": f"Unknown model `{args[0]}`. Team: {', '.join(orch.members)}"})
+            return "unknown model"
+        reply = "**Nicknames**\n" + "\n".join(f"- {m} → **{orch.name(m)}**" if m in orch.nicknames
+                                                else f"- {m} _(no nickname)_" for m in orch.members)
+    elif cmd == "/ranks":
+        table = orch.stats.table(orch.members) if orch.stats else ""
+        for m in orch.nicknames:
+            table = table.replace(f"| {m} |", f"| {orch.name(m)} ({m}) |")
+        reply = table if table.startswith("|") else "No audit results yet. Turn on `/audit on` and give the team work."
     elif cmd == "/relay":
         args = [f"-n{a[1:]}" if a.lower().startswith("x") and a[1:].isdigit() else a for a in args]
         try:
@@ -248,7 +277,7 @@ async def run_relay(orch, ns) -> str:
     tasks = build_tasks(chain, grid, goal, cwds, notes)
 
     table = "| chain | " + " | ".join(s.name for s in chain.stages) + " |\n|" + "---|" * (len(chain.stages) + 1) + "\n"
-    table += "\n".join(f"| {LABELS[k]} | " + " | ".join(row) + " |" for k, row in enumerate(grid))
+    table += "\n".join(f"| {LABELS[k]} | " + " | ".join(orch.name(a) for a in row) + " |" for k, row in enumerate(grid))
     say(f"**Relay `{chain.name}`**: {n} chain(s) × {len(chain.stages)} stages · assign={ns.assign} · "
         f"workspace={workspace}\n\n{table}\n\nNotes: `{Path(notes[0]).parent}`")
 

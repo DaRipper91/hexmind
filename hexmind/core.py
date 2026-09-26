@@ -32,6 +32,10 @@ class Task:
     output: str = ""
     cwd: str | None = None    # folder this task works in (None = the room's folder)
     notes: str | None = None  # relay chain notes file; each finished stage is appended to it
+    domain: str = "general"   # kind of work, for audit rankings (see auditor.DOMAINS)
+    gate: bool = False        # high-impact: an unresolved audit failure blocks dependents
+    audit: str = ""           # "" | pass | fixed | disputed
+    auditor: str = ""
 
 
 LEAD_PROMPT = """You are the lead of a team of AI coding agents working in one shared room.
@@ -44,12 +48,15 @@ The user said:
 {history}Decide how the team should handle this. Answer ONLY with a JSON object:
 {{"reply": "short message to the user about what the team will do (or the full answer if no work is needed)",
   "tasks": [{{"id": "t1", "title": "short title", "agent": "<team member>",
-             "instructions": "complete, self-contained instructions", "depends_on": []}}]}}
+             "instructions": "complete, self-contained instructions", "depends_on": [],
+             "domain": "<one of: {domains}>", "gate": false}}]}}
 
 Rules:
 - Assign each task to the member best suited to it. Use only members listed above.
+- The user may call members by nickname; in the JSON always use the member name (claude, agy, ...).
 - Split work into phases with depends_on. Independent tasks run at the same time.
 - Tasks that edit the same files must not run in parallel; chain them with depends_on.
+- Set "gate": true only for high-impact tasks whose mistakes would break later work (core logic, migrations, security).
 - For a simple question or chat, answer directly in "reply" and return "tasks": [].
 """
 
@@ -100,7 +107,8 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
         agent = t.get("agent") if t.get("agent") in members else lead
         tasks.append(Task(id=str(t.get("id") or f"t{i + 1}"), title=t.get("title", "task"),
                           agent=agent, instructions=t.get("instructions", t.get("title", "")),
-                          depends_on=[str(d) for d in _as_list(t.get("depends_on"))]))
+                          depends_on=[str(d) for d in _as_list(t.get("depends_on"))],
+                          domain=str(t.get("domain") or "general"), gate=t.get("gate") is True))
     ids = {t.id for t in tasks}
     if len(ids) != len(tasks):
         raise ValueError("duplicate task ids in plan")
@@ -120,15 +128,30 @@ Emit = Callable[[str, dict], None]  # (event kind, payload) -> UI
 
 
 class Orchestrator:
-    def __init__(self, backend, members: list[str], lead: str = "claude", emit: Emit | None = None):
+    def __init__(self, backend, members: list[str], lead: str = "claude", emit: Emit | None = None,
+                 audit: bool = False, stats=None):
         self.backend = backend
         self.members = members
         self.lead = lead
         self.emit = emit or (lambda kind, data: None)
         self.history: list[tuple[str, str]] = []  # (user msg, final answer)
+        self.audit = audit  # runner-up model reviews every task
+        self.stats = stats  # auditor.Stats: pass/fail record per model per domain
+        from .config import load_nicknames
+        self.nicknames: dict[str, str] = load_nicknames()  # model -> user's display name
+
+    def name(self, m: str) -> str:
+        """What the user sees: the nickname if one is set, else the model name."""
+        return self.nicknames.get(m, m)
 
     def _roster(self) -> str:
-        return "\n".join(f"- {m}: {ROSTER.get(m, 'general purpose')}" for m in self.members)
+        lines = [f"- {m}" + (f' (the user calls it "{self.nicknames[m]}")' if m in self.nicknames else "")
+                 + f": {ROSTER.get(m, 'general purpose')}" for m in self.members]
+        if self.stats:
+            table = self.stats.table(self.members)
+            if table.startswith("|"):  # skip the "no stats yet" placeholder
+                lines.append("\nTrack record (tasks that passed peer audit on first try / audited):\n" + table)
+        return "\n".join(lines)
 
     def _history(self) -> str:
         if not self.history:
@@ -144,8 +167,9 @@ class Orchestrator:
             self.history.append((request, reply))
             return reply
         self.emit("status", {"agent": self.lead, "state": "planning"})
+        from .auditor import DOMAINS
         raw = await self.backend.run(self.lead, LEAD_PROMPT.format(
-            roster=self._roster(), request=request, history=self._history()))
+            roster=self._roster(), request=request, history=self._history(), domains=", ".join(DOMAINS)))
         self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
             reply, tasks = parse_plan(raw, self.members, self.lead)
@@ -212,4 +236,7 @@ class Orchestrator:
         if t.notes:
             prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"
                        " — read it first. Hexmind appends your final reply to it; don't edit it yourself.")
+        if self.audit and self.stats is not None:
+            from .auditor import audited_run
+            return await audited_run(self.backend, t, prompt, self.members, self.stats, self.emit)
         return await self.backend.run(t.agent, prompt, cwd=t.cwd)

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
@@ -12,8 +13,15 @@ from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
 
 from .core import Orchestrator, Task
 
-STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike"}
+STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
+                "auditing": "magenta", "revising": "orange1"}
 AGENT_COLOR = {"claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "you": "bold white"}
+
+
+def audit_cell(t: Task, name=lambda m: m) -> str:
+    """'pass·agy' / 'fixed·codex' / 'disputed·claude'; blank until audited. `name` maps model -> nickname."""
+    audit, auditor = getattr(t, "audit", ""), getattr(t, "auditor", "")
+    return f"{audit}·{name(auditor)}" if audit and auditor else audit or ""
 
 
 class HexmindApp(App):
@@ -28,11 +36,11 @@ class HexmindApp(App):
     """
     BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat")]
 
-    def __init__(self, backend, members: list[str], lead: str, backend_name: str):
+    def __init__(self, backend, members: list[str], lead: str, backend_name: str, audit: bool = False, stats=None):
         super().__init__()
         self.members, self.lead = members, lead
-        self.sub_title = f"{backend_name} backend · lead: {lead}"
-        self.orch = Orchestrator(backend, members, lead, emit=self.on_team_event)
+        self.sub_title = f"{backend_name} backend · lead: {lead} · audit: {'on' if audit else 'off'}"
+        self.orch = Orchestrator(backend, members, lead, emit=self.on_team_event, audit=audit, stats=stats)
         self.tasks: dict[str, Task] = {}  # row key -> task, across all requests
         self.lead_state = "idle"
         self.turn = asyncio.Lock()  # one request at a time; later ones queue
@@ -52,7 +60,7 @@ class HexmindApp(App):
 
     def on_mount(self) -> None:
         table = self.query_one("#tasks", DataTable)
-        for col in ("task", "agent", "status", "title"):
+        for col in ("task", "agent", "status", "audit", "title"):
             table.add_column(col, key=col)
         self.refresh_team()
         self.say("Hexmind", f"Team ready: {', '.join(self.members)}. Type a request; the lead splits it up.")
@@ -61,7 +69,12 @@ class HexmindApp(App):
     # ---------- chat ----------
     def say(self, who: str, text: str) -> None:
         chat = self.query_one("#chat", RichLog)
-        chat.write(Text(f"{who}", style=AGENT_COLOR.get(who, "bold magenta")))
+        if text.startswith("ESCALATION"):
+            chat.write(Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"))
+            chat.write("")
+            return
+        label = self.orch.name(who)
+        chat.write(Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")))
         chat.write(Markdown(text) if who != "you" else Text(text))
         chat.write("")
 
@@ -97,15 +110,16 @@ class HexmindApp(App):
             for t in data["tasks"]:
                 key = f"{self.round}.{t.id}"
                 self.tasks[key] = t
-                table.add_row(key, t.agent, t.status, t.title, key=key)
-            lines = [f"- **{t.id}** → {t.agent}: {t.title}" + (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "")
+                table.add_row(key, self.orch.name(t.agent), t.status, audit_cell(t, self.orch.name), t.title, key=key)
+            lines = [f"- **{t.id}** → {self.orch.name(t.agent)}: {t.title}" + (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "")
                      for t in data["tasks"]]
             self.say("Hexmind", "**Plan**\n" + "\n".join(lines))
         elif kind == "task":
             t = data["task"]
             key = f"{self.round}.{t.id}"
             table = self.query_one("#tasks", DataTable)
-            table.update_cell(key, "status", Text(t.status, style=STATUS_STYLE[t.status]))
+            table.update_cell(key, "status", Text(t.status, style=STATUS_STYLE.get(t.status, "")))
+            table.update_cell(key, "audit", Text(audit_cell(t, self.orch.name), style="red" if getattr(t, "audit", "") == "disputed" else ""))
             if t.status in ("done", "failed"):
                 first = t.output.strip().splitlines()[0][:200] if t.output.strip() else ""
                 self.say(t.agent, f"**{t.id} {t.status}** — {t.title}\n\n{first}")
@@ -116,12 +130,14 @@ class HexmindApp(App):
     def refresh_team(self) -> None:
         lines = []
         for m in self.members:
-            busy = [k for k, t in self.tasks.items() if t.agent == m and t.status == "running"]
-            state = f"working: {', '.join(busy)}" if busy else "idle"
+            busy = [k for k, t in self.tasks.items() if t.agent == m and t.status in ("running", "revising")]
+            auditing = [k for k, t in self.tasks.items() if getattr(t, "auditor", "") == m and t.status == "auditing"]
+            parts = ([f"working: {', '.join(busy)}"] if busy else []) + ([f"auditing {', '.join(auditing)}"] if auditing else [])
+            state = " · ".join(parts) or "idle"
             if m == self.lead and self.lead_state != "idle":
                 state = self.lead_state + (f" · {state}" if busy else "")
             dot = "●" if state != "idle" else "○"
-            lines.append(f"[{AGENT_COLOR.get(m, 'white')}]{dot} {m}[/]{' (lead)' if m == self.lead else ''}  [dim]{state}[/]")
+            lines.append(f"[{AGENT_COLOR.get(m, 'white')}]{dot} {self.orch.name(m)}[/]{f' [dim]({m})[/]' if m in self.orch.nicknames else ''}{' (lead)' if m == self.lead else ''}  [dim]{state}[/]")
         self.query_one("#team", Static).update("\n".join(lines))
 
     # ---------- task detail ----------
@@ -134,7 +150,8 @@ class HexmindApp(App):
         detail = self.query_one("#detail", RichLog)
         detail.clear()
         if t:
-            detail.write(Text(f"{key} · {t.agent} · {t.status}", style="bold"))
+            audit = audit_cell(t, self.orch.name)
+            detail.write(Text(f"{key} · {self.orch.name(t.agent)} · {t.status}" + (f" · audit {audit}" if audit else ""), style="bold"))
             detail.write(Text(t.instructions, style="dim"))
             detail.write("")
             detail.write(Markdown(t.output) if t.output else Text("(no output yet)", style="dim"))
