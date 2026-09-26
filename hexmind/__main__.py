@@ -17,12 +17,19 @@ def main() -> None:
     p.add_argument("--lead", default="claude", help="agent that plans and summarizes (default: claude)")
     p.add_argument("--without", action="append", default=[], metavar="AGENT",
                    help="leave an agent out, e.g. --without codex (repeatable)")
+    p.add_argument("--with", dest="with_", action="append", default=[], metavar="AGENT",
+                   help="add an opt-in member, e.g. --with qwen (local model; slow on small machines)")
     p.add_argument("--cwd", default=os.getcwd(), help="folder the team works in (default: current)")
     p.add_argument("--audit", action="store_true", help="runner-up model reviews every task (toggle in room: /audit on|off)")
     p.add_argument("--once", metavar="REQUEST", help="run one request without the TUI and print the result")
     args = p.parse_args()
 
-    members = [m for m in available(list(ROSTER)) if m not in args.without]
+    from .core import OPT_IN
+    members = [m for m in available(list(ROSTER)) if m not in args.without
+               and (m not in OPT_IN or m in args.with_)]
+    from .core import TEXT_ONLY
+    if args.lead in TEXT_ONLY:
+        sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; pick claude, agy or codex")
     if args.lead not in members:
         sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members) or 'none'})")
     # hcom: each model is a persistent headless hcom agent (started on first use)

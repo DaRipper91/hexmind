@@ -38,17 +38,17 @@ a track record that decides who gets trusted with what.
 ## Contents
 
 - [🚀 Quickstart](#-quickstart)
-- [🖥️ The room](#-the-room)
+- [💬 The room](#-the-room)
 - [🔀 How a request flows](#-how-a-request-flows)
 - [🔁 Relay chains](#-relay-chains)
 - [🔍 Peer audit](#-peer-audit)
 - [📊 Rankings](#-rankings)
-- [🏷️ Nicknames](#-nicknames)
-- [⌨️ Commands](#-commands)
+- [🔖 Nicknames](#-nicknames)
+- [🧰 Commands](#-commands)
 - [📜 Chain files](#-chain-files)
 - [🔌 Backends](#-backends)
-- [🗺️ Roadmap](#-roadmap)
-- [🛠️ Development](#-development)
+- [🧭 Roadmap](#-roadmap)
+- [🔧 Development](#-development)
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -59,8 +59,11 @@ a track record that decides who gets trusted with what.
 | member | CLI | runs as |
 |---|---|---|
 | `claude` | [Claude Code](https://claude.com/claude-code) | `claude -p … --permission-mode acceptEdits` |
-| `agy` | Antigravity CLI (Google Gemini) | `agy -p … --mode accept-edits --disable-slash-commands` |
-| `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `codex exec --sandbox workspace-write …` |
+| `agy` | Antigravity CLI (Google Gemini) | `agy --input-format stream-json … --mode accept-edits` |
+| `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `codex exec --sandbox workspace-write … -` |
+| `opencode` | [OpenCode](https://opencode.ai) | `opencode run --auto` |
+| `copilot` | [GitHub Copilot CLI](https://github.com/github/copilot-cli) | `copilot -s --allow-tool=write` (file edits yes, shell no) |
+| `qwen` *(opt-in: `--with qwen`)* | local `qwen3:4b` via [Ollama](https://ollama.com) | text only: no files, no tools; never leads or audits; skipped by relay rotation |
 
 Hexmind only includes members whose CLI is on your `PATH`.
 
@@ -87,7 +90,7 @@ hexmind --once "add a --json flag to the export command"   # headless, prints to
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
-## 🖥️ The room
+## 💬 The room
 
 ```
 ┌─ Hexmind ─ direct backend · lead: claude · audit: on ────────────────────────────────────┐
@@ -275,7 +278,7 @@ Stats persist in `~/.local/share/hexmind/stats.json`.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
-## 🏷️ Nicknames
+## 🔖 Nicknames
 
 Give your models names. Nicknames are display-only: the chat, team pane and task board show
 them, but stats and config still use `claude`, `agy` and `codex`.
@@ -297,7 +300,7 @@ The lead knows the nicknames, so you can just say *"have Rex review it"*.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
-## ⌨️ Commands
+## 🧰 Commands
 
 ### In the room
 
@@ -318,7 +321,7 @@ Keys: `enter` send · `↑/↓` browse tasks · `ctrl+l` clear chat · `ctrl+q` 
 
 | flag | default | |
 |---|---|---|
-| `--backend direct\|hcom` | `direct` | how agents are run (hcom is experimental) |
+| `--backend direct\|hcom` | `direct` | how agents are run |
 | `--lead AGENT` | `claude` | who plans and summarizes |
 | `--without AGENT` | none | leave a member out (repeatable) |
 | `--cwd DIR` | current dir | folder the team works in |
@@ -370,25 +373,28 @@ Every backend has the same interface: `await backend.run(agent, prompt, cwd) -> 
 
 | backend | status | how it works |
 |---|---|---|
-| **direct** | ✅ default | Hexmind launches each CLI in non-interactive mode itself. Nothing else to install, and each call has a 30-minute timeout. |
-| **hcom** | 🧪 experimental | `--backend hcom`: each model is a persistent, headless [hcom](https://pypi.org/project/hcom/) agent, started the first time it gets work. Every request runs on its own thread, so replies never mix. Requires `hcom` installed. Not live-tested yet. |
+| **direct** | ✅ default | Hexmind launches each CLI in non-interactive mode itself and sends the prompt on stdin, so prompts of any size work (`claude -p`, `agy` stream-json, `codex exec -`). Nothing else to install; each call has a 30-minute timeout, and a timed-out process is killed and reaped. |
+| **hcom** | ✅ live-tested with Claude | `--backend hcom`: each model is a persistent, headless [hcom](https://pypi.org/project/hcom/) agent, started the first time it gets work and reused after that (a warm request took under 4 s). Every request runs on its own thread, so replies never mix. Hexmind waits until an agent is ready, and never inherits the hcom identity of whatever launched it. Requires `hcom`. A folder a CLI has never opened stops at that CLI's trust prompt: Hexmind stops the agent and tells you to open the folder once (`cd <folder> && claude`) and accept. |
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
-## 🗺️ Roadmap
+## 🧭 Roadmap
 
 - [x] **Core team:** lead planning, parallel task graph, direct backend, Textual TUI
 - [x] **Relay chains:** saved, imported or lead-designed chains, N in parallel, rotating models, worktrees
 - [x] **Peer audit:** runner-up auditor, bounded revise loop, gated tasks, escalation
 - [x] **Evidence-based rankings:** per-domain track record that drives auditor choice and lead assignments
-- [x] **hcom backend** *(experimental)*: persistent headless hcom agents, one thread per request
+- [x] **hcom backend**: persistent headless hcom agents, one thread per request (live-tested with Claude)
+- [x] **Nicknames**: `/nick` display names that the lead also understands
+- [x] **Hardening pass** from an independent review: stdin prompts, apostrophes in `/relay`, malformed plans and broken chain files reported instead of crashing
 - [ ] **hcom split-terminal mode:** watch each model work in its own pane
 - [ ] **Jules** as a team member for long-running cloud tasks that come back as PRs
-- [ ] **GUI** (PySide6)
+- [ ] **`hexmind.qt.HexmindWidget`**: an embeddable Qt room, hosted by the rebuilt Aether (Hexmind never imports Aether)
+- [ ] **GUI** (PySide6), standalone
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
-## 🛠️ Development
+## 🔧 Development
 
 ```bash
 pip install -e . pytest
@@ -398,7 +404,8 @@ python3 -m pytest tests
 The tests use a fake backend, so no model CLIs or network are needed. They cover plan
 parsing and the task graph (`test_core.py`), relay loading, rotation and worktrees
 (`test_relay.py`), the auditor and rankings (`test_auditor.py`,
-`test_audit_integration.py`), and the TUI running headless (`test_tui.py`).
+`test_audit_integration.py`), both backends with mocked subprocesses (`test_backends.py`,
+`test_hcom_backend.py`), nicknames (`test_nicknames.py`), and the TUI running headless (`test_tui.py`).
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -409,7 +416,7 @@ hexmind/
 ├── core.py       roster, plan parsing, orchestrator (task graph)
 ├── relay.py      relay chains and /commands
 ├── auditor.py    peer audit, verdicts, Stats rankings
-├── backends.py   direct + hcom (experimental) backends
+├── backends.py   direct + hcom backends
 ├── config.py     nicknames (~/.config/hexmind/config.toml)
 ├── tui.py        Textual room
 └── chains/       bundled chain files

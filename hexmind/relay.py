@@ -294,7 +294,9 @@ async def run_relay(orch, ns) -> str:
         picks = extract_json(raw).get("agents")
         picks = picks if isinstance(picks, list) else []
         best = [a if a in orch.members else orch.lead for a in picks] + [orch.lead] * len(chain.stages)
-    grid = assign(chain, n, orch.members, ns.assign, best)
+    from .core import TEXT_ONLY
+    workers = [m for m in orch.members if m not in TEXT_ONLY] or orch.members
+    grid = assign(chain, n, workers if ns.assign == "rotate" else orch.members, ns.assign, best)
 
     # several chains editing one folder would collide; default them into their own worktrees
     workspace = ns.workspace or ("worktree" if n > 1 and (Path(root) / ".git").exists() else "shared")
