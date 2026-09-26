@@ -23,6 +23,7 @@ ROSTER: dict[str, str] = {
     "qwen": ("local qwen3:4b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
              "it cannot read or edit files or run commands. Give it only small self-contained text jobs "
              "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions"),
+    "jules": "Google Jules: asynchronous coding agent for GitHub repos; dispatches cloud sessions that produce PRs, tests, and refactors",
 }
 
 # Members that only see the prompt (no tools). Never lead, never auditor, not rotated into relays.

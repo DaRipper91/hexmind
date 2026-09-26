@@ -26,6 +26,7 @@ DIRECT_CMDS: dict[str, list[str]] = {
     "opencode": ["opencode", "run", "--auto"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
+    "jules": ["jules", "new"],
 }
 
 
@@ -108,8 +109,8 @@ class DirectBackend:
             return out.decode(errors="replace")
 
 
-HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
-HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot"}
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
+HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex", "opencode": "opencode", "copilot": "copilot", "jules": "jules"}
 
 
 class HcomBackend:
