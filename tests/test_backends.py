@@ -6,7 +6,8 @@ import types
 
 import pytest
 
-from hexmind.backends import DIRECT_CMDS, DirectBackend, HcomBackend, available
+from hexmind.backends import (DIRECT_CMDS, MAX_OUTPUT_BYTES, DirectBackend, HcomBackend,
+                              _read_capped, available)
 
 
 class FakePipe:
@@ -153,6 +154,12 @@ def test_jules_available_only_with_api_key(monkeypatch):
     assert available(["jules"]) == []
     monkeypatch.setenv("JULES_API_KEY", "test-key")
     assert available(["jules"]) == ["jules"]
+
+
+def test_subprocess_output_retention_is_capped():
+    output = asyncio.run(_read_capped(FakePipe(b"x" * (MAX_OUTPUT_BYTES + 4) + b"tail")))
+    assert len(output) == MAX_OUTPUT_BYTES
+    assert output.endswith(b"tail")
 
 
 def test_direct_and_hcom_route_jules_without_hcom(monkeypatch, tmp_path):

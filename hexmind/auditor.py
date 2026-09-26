@@ -37,6 +37,7 @@ AUDIT_SCHEMA: dict[str, Any] = {
         "issues": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["verdict", "issues"],
+    "additionalProperties": False,
 }
 
 AUDIT_PROMPT = """You are {auditor}, auditing the work done by {agent} on task {id}: {title}.
