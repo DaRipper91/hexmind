@@ -44,7 +44,7 @@ def run_main(monkeypatch, argv, tmp_path, **env):
 
 def test_once_reports_a_failed_agent_cleanly_and_exits_nonzero(monkeypatch, tmp_path, capsys):
     with pytest.raises(SystemExit) as err:
-        run_main(monkeypatch, ["--once", "hello"], tmp_path)
+        run_main(monkeypatch, ["--lead", "claude", "--once", "hello"], tmp_path)
 
     assert err.value.code == 1
     captured = capsys.readouterr()
@@ -57,7 +57,7 @@ def test_once_reports_a_failed_agent_cleanly_and_exits_nonzero(monkeypatch, tmp_
 def test_once_prints_why_a_task_failed(monkeypatch, tmp_path, capsys):
     """The TUI shows the first line of a failed task's output; headless printed only
     id/agent/status/title, so a script calling hexmind --once could see `failed` with no reason."""
-    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", WorkerFailsBackend)
     monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
 
@@ -74,7 +74,7 @@ def test_once_prints_why_a_task_failed(monkeypatch, tmp_path, capsys):
 def test_once_still_gives_the_traceback_when_asked(monkeypatch, tmp_path):
     monkeypatch.setenv("HEXMIND_TRACEBACK", "1")
     with pytest.raises(RuntimeError, match="waiting for approval"):
-        run_main(monkeypatch, ["--once", "hello"], tmp_path)
+        run_main(monkeypatch, ["--lead", "claude", "--once", "hello"], tmp_path)
 
 
 def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
@@ -82,7 +82,7 @@ def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
         async def run(self, *a, **k):
             raise KeyboardInterrupt
 
-    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", Interrupting)
     monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
     with pytest.raises(SystemExit) as err:
@@ -109,7 +109,7 @@ def test_hcom_notice_names_every_excluded_model_when_all_are_present(monkeypatch
     from hexmind.backends import HCOM_EXCLUDED
 
     monkeypatch.setattr(cli, "available", lambda members: ["claude", "opencode", *sorted(HCOM_EXCLUDED)])
-    monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "Orchestrator", lambda *a, **k: type("O", (), {"handle": _noop})())
 
     cli.main()
@@ -122,7 +122,7 @@ def test_hcom_notice_names_every_excluded_model_when_all_are_present(monkeypatch
 
 def test_no_hcom_notice_for_the_direct_backend(monkeypatch, tmp_path, capsys):
     with pytest.raises(SystemExit):
-        run_main(monkeypatch, ["--once", "hi"], tmp_path)
+        run_main(monkeypatch, ["--lead", "claude", "--once", "hi"], tmp_path)
     assert "cannot drive" not in capsys.readouterr().err
 
 
@@ -162,3 +162,84 @@ def test_default_lead_is_opencode_ultra():
 
     server = HexmindServer(cwd=".")
     assert server.lead == "opencode-ultra"
+
+
+# ---------- leader selection: no default, and headless surfaces must say so ----------
+
+def test_the_tui_path_does_not_require_a_lead_at_all(monkeypatch, tmp_path):
+    """No default lead, so the TUI starts with lead=None and the startup picker sets it. If a
+    default were reintroduced this would still pass, so also assert the value the app receives."""
+    import hexmind.__main__ as cli
+    import hexmind.tui as tui_mod
+
+    seen = {}
+
+    class FakeApp:
+        def __init__(self, backend, members, lead, *a, **k):
+            seen["lead"] = lead
+            seen["members"] = members
+            self.orch = type("O", (), {"approve_plans": False})()
+
+        def run(self):
+            seen["ran"] = True
+
+    monkeypatch.setattr(tui_mod, "HexmindApp", FakeApp)
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path)])
+    monkeypatch.setattr("hexmind.backends.available", lambda m: ["claude", "agy"])
+
+    cli.main()
+
+    assert seen.get("ran") is True, "the TUI must start without a lead being supplied"
+    assert seen["lead"] is None, "the app must receive no default lead; the picker chooses one"
+    assert "claude" in seen["members"]
+
+
+def test_once_requires_an_explicit_lead(monkeypatch, tmp_path):
+    import hexmind.__main__ as cli
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr("hexmind.backends.available", lambda m: ["claude", "agy"])
+    with pytest.raises(SystemExit) as err:
+        cli.main()
+    assert "--lead is required" in str(err.value)
+    assert "claude" in str(err.value), "the error must list what is installed so the fix is obvious"
+
+
+def test_serve_requires_an_explicit_lead(monkeypatch, tmp_path):
+    import hexmind.__main__ as cli
+
+    called = []
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--serve"])
+    monkeypatch.setattr("hexmind.backends.available", lambda m: ["claude"])
+    monkeypatch.setattr("hexmind.server", type("S", (), {"run_server": staticmethod(lambda **k: called.append(k))}),
+                        raising=False)
+    monkeypatch.setattr("hexmind.server", type("S", (), {"run_server": staticmethod(lambda **k: called.append(k))}))
+    with pytest.raises(SystemExit) as err:
+        cli.main()
+    assert "--lead is required for --serve" in str(err.value)
+    assert not called
+
+
+def test_no_members_at_all_is_a_clear_error(monkeypatch, tmp_path):
+    """Previously the message was 'lead is not available (installed members: none)', which pointed
+    at the wrong thing entirely."""
+    import hexmind.__main__ as cli
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(cli, "available", lambda m: [])
+    with pytest.raises(SystemExit) as err:
+        cli.main()
+    assert "No team members available" in str(err.value)
+    assert "PATH" in str(err.value)
+
+
+def test_text_only_lead_error_lists_only_models_that_can_lead(monkeypatch, tmp_path):
+    import hexmind.__main__ as cli
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "qwen",
+                                      "--with", "qwen", "--once", "hi"])
+    monkeypatch.setattr("hexmind.backends.available", lambda m: ["claude", "qwen"])
+    with pytest.raises(SystemExit) as err:
+        cli.main()
+    assert "text-only" in str(err.value)
+    assert "claude" in str(err.value) and "qwen" not in str(err.value).split("pick one of:")[1]

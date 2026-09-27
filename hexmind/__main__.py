@@ -14,7 +14,9 @@ def main() -> None:
     p = argparse.ArgumentParser(prog="hexmind", description="Multi-model agent team in one chat room.")
     p.add_argument("--backend", choices=["direct", "hcom"], default="direct",
                    help="direct: hexmind runs agent CLIs itself; hcom: models are persistent hcom agents")
-    p.add_argument("--lead", default="opencode-ultra", help="agent that plans and summarizes (default: opencode-ultra)")
+    p.add_argument("--lead", default=None, metavar="AGENT",
+                   help="agent that plans and summarizes. The TUI asks for this at startup; it is "
+                        "required for --once and --serve, where there is nobody to ask")
     p.add_argument("--without", action="append", default=[], metavar="AGENT",
                    help="leave an agent out, e.g. --without codex (repeatable)")
     p.add_argument("--with", dest="with_", action="append", default=[], metavar="AGENT",
@@ -36,10 +38,24 @@ def main() -> None:
     members = [m for m in available(list(ROSTER)) if m not in args.without
                and (m not in OPT_IN or m in args.with_)]
     from .core import TEXT_ONLY
-    if args.lead in TEXT_ONLY:
-        sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; pick opencode-ultra, claude, agy or codex")
-    if args.lead not in members:
-        sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members) or 'none'})")
+    if not members:
+        sys.exit("No team members available. Install at least one agent CLI (claude, agy, codex, "
+                 "opencode, copilot, kimi) and make sure it is on your PATH.")
+
+    # No default lead. A hardcoded one is wrong twice over: it crashes when that model is not
+    # installed (a commit set it to opencode-ultra and made hexmind refuse to start for anyone
+    # without the opencode CLI), and it silently picks the room's spokesperson for the user. The
+    # TUI asks; headless surfaces have nobody to ask, so they must say so.
+    if args.lead is None:
+        if args.once or args.serve:
+            sys.exit(f"--lead is required for --{'once' if args.once else 'serve'}. "
+                     f"Installed members: {', '.join(members)}")
+        args.lead = None  # the TUI's startup picker sets it before the first request
+    elif args.lead in TEXT_ONLY:
+        sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; "
+                 f"pick one of: {', '.join(m for m in members if m not in TEXT_ONLY)}")
+    elif args.lead not in members:
+        sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members)})")
 
     if args.backend == "hcom":
         # hcom drives one agent per tool and cannot choose which model that tool uses, so the seven

@@ -528,6 +528,8 @@ class HexmindApp(App):
 
     # ---------- chat ----------
     def say(self, who: str, text: str) -> None:
+        if not self.is_mounted:
+            return  # an emit can fire before the widgets exist (a startup leader choice)
         if text.startswith("ESCALATION"):
             lines = [Panel(Markdown(text), title=f"{self.orch.name(who)} · needs you", border_style="bold red"), ""]
         else:
@@ -567,6 +569,8 @@ class HexmindApp(App):
         elif kind == "status":
             self.lead_state = data["state"]
         elif kind == "team":
+            if not self.is_mounted:
+                return  # a startup leader choice emits before the widgets exist; nothing to redraw
             # a model was slept, woken, or promoted: drop stale board rows for anyone no longer
             # in the room, then refresh the panes that name the roster (sub_title, team, board)
             gone = {m for m in self.orch.known if m not in self.orch.members}
@@ -599,6 +603,8 @@ class HexmindApp(App):
         self.refresh_team()
 
     def refresh_team(self) -> None:
+        if not self.is_mounted:
+            return
         active = sum(t.status in ("pending", "running", "auditing", "revising") for t in self.tasks.values())
         self.room.query_one("#tab-tasks", Button).label = f"Tasks ({active})" if active else "Tasks"
         lines, busy_count = [], 0
