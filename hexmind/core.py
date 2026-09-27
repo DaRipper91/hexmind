@@ -395,6 +395,7 @@ class Orchestrator:
                 deps = [by_id[d] for d in t.depends_on]
                 if any(d.status in ("failed", "skipped") for d in deps):
                     t.status = "skipped"
+                    self.record_note(t)
                     self.emit("task", {"task": t})
                 elif all(d.status == "done" for d in deps):
                     t.status = "running"

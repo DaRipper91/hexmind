@@ -558,9 +558,10 @@ async def run_relay(orch, ns) -> str:
     # prompt is a soft control: an agent that follows a path out of the shared notes file writes to
     # the main checkout and the chain still reports success. So the main folder's dirty state is
     # compared across the run, and anything that appeared is reported as a leak.
-    before = dirty_paths(root)
+    # Only check when workspace="worktree"; shared mode legitimately writes to the main folder.
+    before = dirty_paths(root) if workspace == "worktree" else set()
     await orch.run_tasks(goal, tasks)
-    leaked = sorted(dirty_paths(root) - before)
+    leaked = sorted((dirty_paths(root) if workspace == "worktree" else set()) - before)
     if leaked:
         listing = "\n".join(f"- `{p}`" for p in leaked)
         say(f"**ESCALATION: a relay stage wrote outside its own worktree.**\n\n"
