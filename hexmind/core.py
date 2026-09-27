@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Callable
@@ -117,7 +118,7 @@ Overall user request: {request}
 Your task ({id}: {title}):
 {instructions}
 {deps}
-Do the task, then reply with a concise report of what you did and the result."""
+{where}Do the task, then reply with a concise report of what you did and the result."""
 
 
 def extract_json(text: str) -> dict:
@@ -435,8 +436,17 @@ class Orchestrator:
 
     async def _run_one(self, request: str, t: Task, deps: list[Task]) -> str:
         dep_text = "".join(f"\nResult of {d.id} ({d.title}, by {d.agent}):\n{clip(d.output)}\n" for d in deps)
+        # State the working directory explicitly. With --workspace worktree each chain gets its own
+        # folder, but the chain's notes file lives in the main folder, so paths that appear in the
+        # prompt or in the notes can point outside this task's own directory. Without this line an
+        # agent can read a path from the notes and write to the main checkout instead of its
+        # worktree, which is exactly what happened once already and defeats the isolation.
+        where = (f"\nWork ONLY inside this directory — it is your own isolated copy:\n"
+                 f"  {os.path.abspath(t.cwd)}\n"
+                 f"Do not edit files in any other checkout of this repository.\n"
+                 if t.cwd else "")
         prompt = TASK_PROMPT.format(agent=t.agent, lead=self.lead, request=request, id=t.id,
-                                    title=t.title, instructions=t.instructions,
+                                    title=t.title, instructions=t.instructions, where=where,
                                     deps=("\nInputs from earlier phases:" + dep_text) if deps else "")
         if t.notes:
             prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"

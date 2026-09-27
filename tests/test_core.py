@@ -129,3 +129,47 @@ def test_a_failed_stage_is_recorded_in_the_relay_notes_the_next_stage_reads(tmp_
     assert "claude did a" not in text  # a failed stage reported no work
     assert "error: boom" in text, text
     assert "failed" in text, text
+
+
+# ---------- worktree isolation: the prompt must say which folder is yours ----------
+
+class PromptRecorder:
+    """Captures the prompt of every call so a test can assert what the agent was told."""
+
+    def __init__(self):
+        self.prompts = []
+        self.cwd = "/main"
+
+    async def run(self, agent, prompt, cwd=None, schema=None):
+        self.prompts.append(prompt)
+        return "ok"
+
+
+def test_a_worktree_task_is_told_exactly_which_directory_to_work_in():
+    """A relay chain's notes file lives in the MAIN folder while each chain works in its own
+    worktree, so any path the agent reads in the notes can point at a different checkout. An agent
+    once edited the main checkout instead of its worktree because nothing in its prompt said
+    otherwise, which defeated --workspace worktree entirely."""
+    backend = PromptRecorder()
+    orch = Orchestrator(backend, ["claude"], "claude")
+    task = Task(id="A1", title="fix", agent="claude", instructions="do it",
+                cwd="/repo/.hexmind/worktrees/run-A")
+
+    asyncio.run(orch._run_one("req", task, []))
+
+    prompt = backend.prompts[-1]
+    assert "/repo/.hexmind/worktrees/run-A" in prompt
+    assert "Work ONLY inside this directory" in prompt
+    assert "Do not edit files in any other checkout" in prompt
+
+
+def test_a_task_in_the_room_folder_is_not_told_about_a_directory():
+    """t.cwd is None for an ordinary request, and naming the room folder there would be noise
+    that trains agents to ignore the instruction."""
+    backend = PromptRecorder()
+    orch = Orchestrator(backend, ["claude"], "claude")
+    task = Task(id="t1", title="x", agent="claude", instructions="do it")
+
+    asyncio.run(orch._run_one("req", task, []))
+
+    assert "Work ONLY inside this directory" not in backend.prompts[-1]
