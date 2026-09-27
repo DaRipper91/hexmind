@@ -1,0 +1,123 @@
+# The opencode free-model build pipeline: an adversarial audit, a TDD build, a
+# requirement-coverage check, and a second adversarial pass by someone who did not
+# write the code.
+#
+#   /relay opencode-team
+#
+# Stages are pinned with agent =, so run with --assign pinned to honour them:
+#
+#   /relay opencode-team --assign pinned
+#
+# Each chain gets its own git worktree and branch when -n > 1, so parallel chains
+# cannot collide. Every stage is domain-tagged, which feeds /ranks and drives which
+# model is chosen as auditor on future work.
+#
+# The builder never reviews itself: tdd-build is opencode-pickle, and both reviews
+# are opencode-ultra / opencode-longcat. The revise loop in hexmind/auditor.py will
+# also pull in a runner-up auditor per task, so a stage is not trusted on the
+# chain author's say-so alone.
+
+name = "opencode-team"
+description = "Nemotron audit -> Pickle TDD build -> LongCat requirement check -> Nemotron adversarial critique"
+
+[[stages]]
+name = "pre-audit"
+agent = "opencode-ultra"
+domain = "architecture"
+instructions = """
+Audit the work request BEFORE anything is written. You are the skeptical senior
+engineer; assume the plan is wrong until the files say otherwise.
+
+1. Read the request and the code it touches. Verify the stated approach actually
+   fits this codebase's existing patterns — do not redesign what was not asked for.
+2. List concrete failure modes: error paths, empty and zero cases, concurrency,
+   partial writes, and anything that would corrupt a worktree.
+3. Name the real constraints. On this machine (8 GB, Fedora Asahi ARM64) flag
+   anything that would not fit in memory or would spawn unbounded processes.
+4. State the edge cases the build must handle, as a short explicit checklist.
+
+Output a written execution contract: the files to change, the invariants to hold,
+the edge cases from step 4, and a concrete pass/fail command that proves the work
+is done. Be specific and brief. Do not write any code and do not edit files — the
+next stage implements your contract, and if you have already written the code there
+is nothing left for it to verify.
+"""
+
+[[stages]]
+name = "tdd-build"
+agent = "opencode-pickle"
+domain = "implementation"
+gate = true
+instructions = """
+Implement the execution contract from the notes file. Work test-first and do not
+stop at the first green run.
+
+1. Read the notes file first — it holds the pre-audit contract and every earlier
+   stage's full report. This is your spec; do not re-derive it.
+2. For each behaviour in the contract, write the failing test, run it, watch it
+   fail for the right reason, then implement, then watch it pass.
+3. Run the whole suite, not just your new tests. A change that breaks something
+   else is not done.
+4. Re-check yourself against the contract's edge-case checklist item by item.
+
+Rules: match the surrounding code's naming, layout and idioms rather than importing
+a new style. Keep the diff minimal and matching the request; do not opportunistically
+refactor code you were not asked to touch. Do not add a dependency unless the
+feature genuinely cannot be built without it, and say so in your report if you do.
+Never leave a placeholder, a skipped test, or a stub. If you cannot finish, say
+exactly what is unfinished and why — do not claim success.
+
+Report the exact commands you ran and their real output, not a summary of what you
+believe the output was.
+"""
+
+[[stages]]
+name = "compliance-check"
+agent = "opencode-longcat"
+domain = "review"
+gate = true
+instructions = """
+Verify the build actually delivers the original request. You are checking coverage,
+not style — a previous stage already reviewed style.
+
+1. Establish what changed. In your worktree, `git status --short` and
+   `git diff HEAD` show uncommitted work; if the work was committed, use
+   `git log --oneline` and `git diff HEAD~1` instead. Use whichever reflects the
+   real change — do not assume a range that happens to be empty.
+2. Re-read the original request at the top of the notes file, and the pre-audit
+   contract below it.
+3. For every requirement and every edge case in the contract, find the evidence
+   that it was implemented: a file path and a line number, or a test that proves it.
+4. Report each item as satisfied, partially satisfied, or missing, with the
+   evidence. An item you cannot find evidence for is missing — do not assume
+   unstated work happened because the code looks plausible.
+
+Cite file:///path#Lxx-Lyy for every claim. Quote the requirement, then the
+evidence. Call out anything implemented that was never asked for, and anything
+asked for that is missing. Be blunt: your job here is to find gaps, not to be
+encouraging.
+"""
+
+[[stages]]
+name = "post-critique"
+agent = "opencode-ultra"
+domain = "review"
+instructions = """
+Final adversarial review. Assume there is a defect and go find it.
+
+1. Read the diff for real. Check for: unhandled exceptions, silent failure paths,
+   swallowed errors, wrong types, off-by-one and boundary errors, race conditions,
+   resource leaks, and anything that writes partial state on failure.
+2. Check the tests actually test something — a test that cannot fail is worse than
+   no test, because it reads as coverage.
+3. Confirm the code does what the request asked, not merely something adjacent to it.
+4. Check the security-relevant paths specifically: untrusted input reaching a
+   command, a path, or a query without validation; secrets in code or output;
+   anything logged that should not be.
+
+Approve only if you found nothing that would need fixing before a user relies on
+it. If you did find something, list it with file, line, and the concrete failure it
+causes. Rank issues by real-world impact and put anything that would corrupt data,
+lose work, or leak a secret at the top. Do not pad the list with style preferences
+and do not invent problems to seem thorough.
+"""

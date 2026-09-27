@@ -221,3 +221,61 @@ def test_bundled_toml_is_valid_and_documents_its_fields():
     header = BUNDLED.read_text().split("[models.")[0]
     for field in ("best_at", "avoid_for", "domains", "weight", "think", "tier"):
         assert field in header, f"{field} is undocumented in the bundled file"
+
+
+# ---------- bundled chain files must only pin agents that exist ----------
+
+def test_every_agent_pinned_in_a_bundled_chain_is_a_real_member():
+    """A chain that pins a model hexmind does not know silently degrades to rotation:
+    relay.assign() only honours `st.agent` when `st.agent in members`. That failure is invisible,
+    so it is checked here instead."""
+    from hexmind.relay import BrokenChain, list_chains, load_chain
+
+    checked, broken = 0, []
+    for name, path in list_chains().items():
+        try:
+            chain = load_chain(path)
+        except BrokenChain as e:
+            broken.append(f"{name} ({e})")  # a different, already-reported failure; not our concern here
+            continue
+        for stage in chain.stages:
+            if stage.agent:
+                assert stage.agent in REGISTRY, (
+                    f"chain '{name}' stage '{stage.name}' pins '{stage.agent}', "
+                    f"which is not a registered model — it would silently rotate instead"
+                )
+                checked += 1
+    assert checked, "no bundled chain pins an agent, so this guard is not actually testing anything"
+    # a machine without the referenced agent files legitimately has broken chains; /chains reports them
+    assert all(b for b in broken)
+
+
+def test_opencode_team_chain_shape_is_the_adversarial_pipeline():
+    from hexmind.relay import list_chains, load_chain
+
+    chain = load_chain(list_chains()["opencode-team"])
+    assert [s.name for s in chain.stages] == ["pre-audit", "tdd-build", "compliance-check", "post-critique"]
+    assert chain.stages[0].agent == "opencode-ultra"
+    assert chain.stages[1].agent == "opencode-pickle"
+    assert chain.stages[2].agent == "opencode-longcat"
+    assert chain.stages[3].agent == "opencode-ultra"
+    # the builder must never be the reviewer
+    assert chain.stages[1].agent not in {s.agent for s in (chain.stages[0], chain.stages[2], chain.stages[3])}
+    # build and coverage gates: a failed implementation must not be rubber-stamped
+    assert [s.gate for s in chain.stages] == [False, True, True, False]
+    assert all(s.domain in DOMAINS for s in chain.stages)
+    assert all(len(s.instructions.strip()) > 200 for s in chain.stages), "stage instructions must be self-contained"
+
+
+def test_opencode_team_pinned_assignment_is_honoured():
+    """The whole point of the chain: with --assign pinned, rotate must NOT be used."""
+    from hexmind.relay import Chain, Stage, assign, list_chains, load_chain
+
+    chain = load_chain(list_chains()["opencode-team"])
+    members = ["claude", "agy", "codex", *ALL_OPENCODE]
+
+    pinned = assign(chain, 1, members, "pinned")
+    rotated = assign(chain, 1, members, "rotate")
+
+    assert pinned[0] == [s.agent for s in chain.stages]
+    assert pinned[0] != rotated[0], "rotation would have produced a different, unpinned assignment"
