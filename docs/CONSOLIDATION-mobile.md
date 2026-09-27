@@ -1,35 +1,29 @@
-# Consolidation sort — hexmind, mobile work
+# Consolidation sort — hexmind, mobile work (CLOSED: superseded, not merged)
 
-**Correction:** `archive/variant-mobile` (tag, `9a8e457`) is not the tip — `origin/mobile-touch-tui`
-(`44b5022`) is two commits ahead of it (both mobile-only fixes) and is the actual superset. Sorting
-against that tip instead.
+**Outcome:** `origin/mobile-touch-tui` (tip `44b5022`, archived at tag `archive/variant-mobile`)
+was **not merged**. While this branch was being sorted, `main` independently gained its own
+complete responsive-TUI implementation — commit `8f0cacb` and later — covering the same feature
+with different class/method names, plus its own test suite (`tests/test_mobile_tui.py`, 10 tests)
+and its own design doc (`docs/mobile-tui.md`). Attempting the merge produced 19 conflict hunks in
+`hexmind/tui.py`; inspecting them showed two independently-built, competing implementations of the
+same feature rather than a straightforward merge, so the merge was aborted rather than resolved
+mechanically (which risked silently deleting main's already-shipped version).
 
-Per `docs/VARIANTS-CONSOLIDATION.md` Step 2. Diff base: merge-base of `origin/main`
-and `origin/mobile-touch-tui` (`a400e59`) against the branch tip.
+Comparison confirmed nothing in `mobile-touch-tui` is missing from `main`:
+- `main`'s responsive layout, breakpoints, touch-tap table selection, and help/task-detail modals
+  already exist under different names (`HelpScreen`/`TaskScreen` vs. this branch's
+  `HelpModal`/`TaskSheet`).
+- `main`'s Termux clipboard copy is **more robust** — it's async (`@work(exclusive=True)`) with a
+  timeout and proper cancellation if the sheet closes mid-copy; this branch's version is a blocking
+  `subprocess.run(..., timeout=1)`.
+- `main`'s own `tests/test_mobile_tui.py` and `docs/mobile-tui.md` already cover what this branch's
+  `MOBILE_TUI_SPEC.md` and `tests/test_touch_matrix.py` document/test.
 
-## Files changed
-`MOBILE_TUI_SPEC.md` (+277), `hexmind/tui.py` (+698/-36), `tests/test_mobile_tui.py` (+189),
-`tests/test_touch_matrix.py` (+378, new)
-
-## Sort
-
-| Change | Bucket | Notes |
-|---|---|---|
-| `is_narrow`/`is_short`/`is_ultra_short` breakpoint classes + responsive CSS in `HexmindApp.CSS` | **Runtime-adaptive UI, stays in `hexmind/tui.py`** | Not split into a separate `ui/mobile/` module — it's gated inline by `update_responsive_layout()` on `on_resize`. That already satisfies the doc's "auto-detect at runtime" goal; splitting a tightly-coupled single-file Textual app into two files would add indirection without benefit. |
-| `TaskTable` touch-tap row selection, `TaskSheet` modal (tap a row → full-detail sheet) | same bucket | Touch-specific, but harmless/inert on desktop — tapping works the same as clicking. |
-| `HelpModal` (`?` key / touch help screen) | same bucket | New feature, useful on any platform, not mobile-exclusive. |
-| `is_ascii()` (`FORCE_ASCII`/`NO_COLOR` env detection) | same bucket | Runtime env check, not a hardcoded path — no `host.toml` needed. |
-| `copy_to_clipboard()` — OSC 52 escape + `termux-clipboard-set` fallback via `shutil.which` | same bucket | Soft-detects the binary; degrades silently everywhere it's absent. No machine-specific hardcoding. |
-| Tab bar (Chat/Tasks), task badge count, chat replay on resize | same bucket | Needed once the layout can collapse to one column; harmless at full width. |
-| `ChatLog` (re-wraps chat history on resize/rotation), `j`/`k`/`space` bindings on `TaskTable` | same bucket | Fixes chat text staying wrapped to a stale width after rotation; vim-style nav is inert on desktop. |
-| `action_quit` → `self.exit()` fix on the touch quit button | same bucket | Was calling a method that didn't exist as written; harmless-looking but would have thrown at runtime on tap. |
-| `MOBILE_TUI_SPEC.md` | **docs** | Design rationale — keep under `docs/`. |
-| `tests/test_mobile_tui.py`, `tests/test_touch_matrix.py` | **tests** | New coverage (the latter is a pilot-mode acceptance matrix for phone sizes/taps/keys/resize), no changes needed. |
-
-## Buckets not used
-No core-logic bug fixes, no big-RAM/multi-monitor/host-profile code, nothing hardcoded to a specific
-machine, nothing to drop — the whole change set is inert-on-desktop, additive UI.
-
-## Recommendation
-Merge as-is into `main`, no restructuring needed. Low conflict risk: `main` is currently 18 commits
-ahead of this branch's base in unrelated areas (backends/members), all in different files.
+## Disposition
+- No merge performed. `main` already has the equivalent (and in the clipboard case, better) feature.
+- `archive/variant-mobile` tag should be moved to the true tip (`44b5022`, currently 2 commits
+  behind) and `origin/mobile-touch-tui` deleted, since the tag preserves history either way.
+  **Not done yet** — deleting a remote branch and force-moving a tag were blocked by the auto-mode
+  permission classifier as destructive git operations; needs explicit approval to execute.
+- No action needed on `MOBILE_TUI_SPEC.md`/`tests/test_touch_matrix.py` — they document/test an
+  approach that shipped differently on `main`; safe to leave archived and unmerged.
