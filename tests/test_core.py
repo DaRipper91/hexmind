@@ -129,6 +129,10 @@ def test_a_failed_stage_is_recorded_in_the_relay_notes_the_next_stage_reads(tmp_
     assert "claude did a" not in text  # a failed stage reported no work
     assert "error: boom" in text, text
     assert "failed" in text, text
+    # a skipped stage must also leave an entry, or the next stage cannot tell "skipped on purpose"
+    # from "never ran" — the same hole as the failed stage above
+    assert "skipped" in text, text
+    assert "two" in text, text  # the skipped task's title appears in its note entry
 
 
 # ---------- worktree isolation: the prompt must say which folder is yours ----------
