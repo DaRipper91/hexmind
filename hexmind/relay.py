@@ -228,8 +228,23 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--assign", choices=["rotate", "best", "pinned"], default="rotate")
     p.add_argument("--workspace", choices=["shared", "worktree"])
     p.add_argument("--end", choices=["merge", "compare", "list"], default="merge")
-    p.add_argument("--goal", help="extra goal/context when target is a chain name")
+    p.add_argument("--goal", nargs="+", help="extra goal/context when target is a chain name")
     return p
+
+
+def _parse_relay(args: list[str]):
+    """Parse /relay args, letting --goal take a whole sentence.
+
+    `--goal add CSV export` is what a person actually types, but a plain `--goal` with
+    nargs=None swallows one token and then argparse cannot match the rest against the already
+    satisfied `target`. So the goal is collected as nargs="+" and rejoined, which accepts both
+    the bare and the quoted form.
+    """
+    p = _parser()
+    ns = p.parse_args(args)
+    if isinstance(ns.goal, list):
+        ns.goal = " ".join(ns.goal)
+    return ns
 
 
 HELP = """**Commands**
@@ -439,7 +454,7 @@ async def command(orch, text: str) -> str:
     elif cmd == "/relay":
         args = [f"-n{a[1:]}" if a.lower().startswith("x") and a[1:].isdigit() else a for a in args]
         try:
-            ns = _parser().parse_args(args)
+            ns = _parse_relay(args)
         except (argparse.ArgumentError, SystemExit) as e:
             reply = f"Bad /relay arguments: {e}\n\n{HELP}"
         else:

@@ -142,3 +142,42 @@ def test_unusable_lead_design_replies_with_error(tmp_path):
     for design in ("sorry, no JSON here", json.dumps({"stages": "nope"})):
         orch = Orchestrator(OddLead(str(tmp_path), design), ["claude"], "claude")
         assert run(orch, "/relay something --workspace shared").startswith("Relay failed:")
+
+
+# ---------- /relay argument parsing ----------
+
+def test_goal_accepts_a_whole_sentence_without_quoting():
+    """A person types `/relay feature --goal add CSV export and tests`. With a single-value
+    --goal, argparse swallows one token and then cannot match the rest against the already
+    satisfied `target`, so the command fails with 'unrecognized arguments'."""
+    from hexmind.relay import _parse_relay
+
+    ns = _parse_relay(["feature", "--goal", "add", "CSV", "export", "and", "tests"])
+
+    assert ns.target == ["feature"]
+    assert ns.goal == "add CSV export and tests"
+
+
+def test_goal_still_accepts_the_quoted_single_token_form():
+    from hexmind.relay import _parse_relay
+
+    ns = _parse_relay(["feature", "--goal", "add CSV export", "--assign", "pinned"])
+
+    assert ns.goal == "add CSV export"
+    assert ns.assign == "pinned"
+
+
+def test_goal_may_precede_or_follow_the_other_flags():
+    from hexmind.relay import _parse_relay
+
+    a = _parse_relay(["f", "--goal", "do the thing", "-n", "2", "--end", "compare"])
+    b = _parse_relay(["f", "-n", "2", "--goal", "do the thing", "--end", "compare"])
+
+    assert (a.goal, a.chains, a.end) == ("do the thing", 2, "compare")
+    assert (b.goal, b.chains, b.end) == ("do the thing", 2, "compare")
+
+
+def test_no_goal_is_still_none():
+    from hexmind.relay import _parse_relay
+
+    assert _parse_relay(["opencode-team", "--assign", "pinned"]).goal is None
