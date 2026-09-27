@@ -24,6 +24,9 @@ def main() -> None:
                    help="the lead's plan waits for /approve or /discard (toggle in room: /drafts on|off)")
     p.add_argument("--audit", action="store_true", help="runner-up model reviews every task (toggle in room: /audit on|off)")
     p.add_argument("--once", metavar="REQUEST", help="run one request without the TUI and print the result")
+    p.add_argument("--serve", action="store_true", help="start headless WebSocket & REST API server")
+    p.add_argument("--host", default="0.0.0.0", help="server host (default: 0.0.0.0)")
+    p.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
     args = p.parse_args()
 
     from .core import OPT_IN
@@ -34,6 +37,22 @@ def main() -> None:
         sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; pick claude, agy or codex")
     if args.lead not in members:
         sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members) or 'none'})")
+
+    if args.serve:
+        from .server import run_server
+        run_server(
+            cwd=args.cwd,
+            host=args.host,
+            port=args.port,
+            backend=args.backend,
+            lead=args.lead,
+            without=args.without,
+            with_=args.with_,
+            audit=args.audit,
+            approve_plans=args.approve_plans,
+        )
+        return
+
     # hcom: each model is a persistent headless hcom agent (started on first use)
     backend = (HcomBackend if args.backend == "hcom" else DirectBackend)(os.path.abspath(args.cwd))
     from .auditor import Stats
