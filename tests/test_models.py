@@ -353,10 +353,14 @@ def test_every_bundled_chain_loads_and_needs_nothing_external():
 
 
 def test_the_example_chains_are_no_longer_bundled():
-    """doc-chain and rip-it-apart import agent files that live on one person's machine."""
+    """doc-chain and rip-it-apart import agent files that live on one person's machine.
+    Asserted by property, not by exact set, so adding a new self-contained chain is not a
+    test failure — see test_every_bundled_chain_loads_and_needs_nothing_external for that."""
     from hexmind.relay import list_chains
 
     bundled = set(list_chains())
-    assert bundled == {"feature", "opencode-team"}
+    assert "doc-chain" not in bundled
+    assert "rip-it-apart" not in bundled
+    assert {"feature", "opencode-team"} <= bundled, "the self-contained originals must ship"
     examples = Path(__file__).parent.parent / "docs/examples/chains"
     assert {p.stem for p in examples.glob("*.toml")} == {"doc-chain", "rip-it-apart"}

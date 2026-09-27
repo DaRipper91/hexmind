@@ -1,0 +1,76 @@
+# Fix a described problem test-first, then have a different model attack the result.
+#
+#   /relay fix-review --assign pinned --goal "what to fix"
+#
+# Neither stage is gated: the whole point is that the reviewer always runs, even when the
+# builder's own audit was unhappy. The gate belongs on a *chain*, not on the reviewer of a
+# single fix — gating here would skip the audit you asked for.
+#
+# Run with a raised timeout, because a TDD stage can legitimately exceed the 30 minute default:
+#
+#   hexmind --audit --timeout 5400
+#
+# Read the hexmind-dev skill first (.claude/skills/hexmind-dev/SKILL.md). It records the
+# invariants and the traps that are not obvious from the code.
+
+name = "fix-review"
+description = "Implement a described fix test-first, then adversarially review it"
+
+[[stages]]
+name = "fix"
+agent = "opencode-pickle"
+domain = "debugging"
+instructions = """
+Fix the described problem. Work test-first and do not stop at the first green run.
+
+1. Read `.claude/skills/hexmind-dev/SKILL.md` before touching anything. It records invariants
+   that are not obvious from the code and traps that have already bitten this project.
+2. Reproduce first. Write a test that fails for the stated reason, and confirm it fails before
+   you change any source. If you cannot make it fail, say so — the problem may be already fixed
+   or may have been misdescribed.
+3. Fix the cause, not the symptom. If a bug is a missing branch, a dropped record or an
+   unreported failure, fix the general case rather than the one instance you were shown.
+4. Run the FULL suite: `python3 -m pytest tests -q`. Not just the file you touched. This project
+   has been broken by a change that passed its own file and failed the mobile layout tests, so a
+   green run on one file proves nothing. A previous chain also shipped a contract whose
+   verification command was scoped to a single file, which hid exactly that.
+5. Honour the invariants in the skill. In particular: a failed task must still be recorded, the
+   busy set must stay derived rather than tracked, and a model that is mid-task must not be
+   offered a sleep control.
+
+Rules: match the surrounding style, keep the diff minimal and scoped to what was asked, and add
+no dependency unless it is genuinely required. Do not refactor code you were not asked to touch.
+Never leave a skipped test, a stub, or a placeholder. If you cannot finish, say exactly what is
+unfinished and why — do not claim success.
+
+Report the real output of the commands you ran, not a summary of what you believe it said.
+"""
+
+[[stages]]
+name = "audit"
+agent = "opencode-ultra"
+domain = "review"
+instructions = """
+Attack the fix. You are the skeptical senior engineer and you did not write this code, so you
+have no stake in it being right. Assume there is a defect and go find it.
+
+1. Read the diff for real, not its description. Establish what changed with
+   `git status --short` and `git diff HEAD` in this worktree — use whichever reflects the actual
+   change, and do not assume a range that happens to be empty.
+2. For each claimed fix, verify the test genuinely fails without the fix. A test that passes
+   both before and after is worse than no test, because it reads as coverage. This is the most
+   common way a fix like this goes wrong.
+3. Check the fix is general. Look for the same class of bug left unfixed elsewhere — the same
+   missing branch, the same dropped record, the same error path swallowed one function over.
+4. Check the invariants in `.claude/skills/hexmind-dev/SKILL.md` still hold, especially that
+   the roster is generated rather than hand-edited and that nothing reintroduces a second source
+   of truth for task state.
+5. Run the full suite yourself and confirm it is green. Report the real output.
+6. Check the error paths: what does the user see when this fails? Is the failure recorded where
+   the next person will look for it, or is it swallowed?
+
+Approve only if you found nothing that would need fixing before a user relies on it. If you did
+find something, give the file, the line, and the concrete failure it causes, ranked by real
+impact — data loss and silent wrongness first. Do not pad the list with style preferences and do
+not invent problems to look thorough.
+"""

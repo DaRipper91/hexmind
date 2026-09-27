@@ -24,6 +24,9 @@ def main() -> None:
                    help="the lead's plan waits for /approve or /discard (toggle in room: /drafts on|off)")
     p.add_argument("--audit", action="store_true", help="runner-up model reviews every task (toggle in room: /audit on|off)")
     p.add_argument("--once", metavar="REQUEST", help="run one request without the TUI and print the result")
+    p.add_argument("--timeout", type=int, default=1800, metavar="SECONDS",
+                   help="per-call agent timeout (default: 1800). A relay stage doing a full TDD cycle "
+                        "can legitimately exceed 30 minutes, so raise this for long chains")
     p.add_argument("--serve", action="store_true", help="start headless WebSocket & REST API server")
     p.add_argument("--host", default="0.0.0.0", help="server host (default: 0.0.0.0)")
     p.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
@@ -65,7 +68,8 @@ def main() -> None:
         return
 
     # hcom: each model is a persistent headless hcom agent (started on first use)
-    backend = (HcomBackend if args.backend == "hcom" else DirectBackend)(os.path.abspath(args.cwd))
+    backend = (HcomBackend if args.backend == "hcom" else DirectBackend)(os.path.abspath(args.cwd),
+                                                                       timeout=args.timeout)
     from .auditor import Stats
     stats = Stats(os.path.expanduser("~/.local/share/hexmind/stats.json"))
 
