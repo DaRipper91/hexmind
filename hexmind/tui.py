@@ -13,9 +13,11 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.visual import VisualType
+from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
-from .core import REGISTRY, Orchestrator, Task
+from .core import BUSY_STATUSES, REGISTRY, TEXT_ONLY, Orchestrator, Task, TeamBusy, TeamError
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
@@ -30,6 +32,7 @@ HELP = """[b]Keys[/b] (press [b]Esc[/b] to leave the input)
   [b]v[/b]        switch Chat / Tasks
   [b]i[/b] / Enter  type a message
   [b]j[/b] / [b]k[/b]    scroll chat / move task cursor
+  [b]t[/b]        the team roster: sleep, wake, lead
   [b]c[/b]        clear chat
   [b]q[/b]        quit
   [b]?[/b]        this help
@@ -108,6 +111,228 @@ class TaskScreen(ModalScreen):
                 proc.kill()
 
 
+def labelled(content: VisualType, tooltip: str, classes: str = "") -> Static:
+    """A Static that answers a mouse hover: Widget.tooltip is a property, not a constructor argument."""
+    widget = Static(content, classes=classes)
+    widget.tooltip = tooltip
+    return widget
+
+
+TEAM_NOTE = ("A model that is working cannot be put to sleep until its task finishes. "
+             "Sleeping parks its session: its history and journal stay readable.")
+
+
+class ModelCardScreen(ModalScreen):
+    """Registry.describe() for one model: the reference card the roster's Card control opens."""
+
+    CSS = """
+    ModelCardScreen { align: center middle; }
+    #card { width: 68; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; border: solid $primary; background: $surface; }
+    #card Button { margin-top: 1; }
+    """
+    BINDINGS = [("escape,q,question_mark", "dismiss", "Close")]
+
+    def __init__(self, model: str) -> None:
+        super().__init__()
+        self.model = model
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="card"):
+            yield Static(REGISTRY.describe(self.model))
+            yield Button("Close", id="close", compact=True, tooltip="Back to the team roster")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss()
+
+
+class TeamScreen(ModalScreen):
+    """The /team roster: every model hexmind knows, what it is doing, and the three things you can
+    change about it. Same state as /sleep, /wake and /lead — one place to see and change the room,
+    rather than three (WS-10). A control is disabled with the reason in its tooltip instead of
+    being offered as a button guaranteed to fail: INVARIANT S-1."""
+
+    CSS = """
+    TeamScreen { align: center middle; }
+    /* one scroll box, like HelpScreen, so a long roster scrolls rather than pushing Close off a
+       short screen. `.who` and `.state` are declared here, and the narrow overrides in
+       HexmindApp.CSS: a screen's own stylesheet never matches an ancestor's classes. */
+    #roster { width: 96; max-width: 100%; height: auto; max-height: 100%; border: solid $primary; background: $surface; }
+    #roster > Vertical { height: 1; layout: horizontal; }
+    #roster .who { width: auto; }
+    #roster .state { width: 1fr; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    #roster .domains { width: 1fr; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-style: dim; }
+    #roster Button { width: auto; min-width: 0; height: 1; margin-left: 1; }
+    #team-note { padding: 0 1; text-style: dim; }
+    """
+    BINDINGS = [("escape,q", "dismiss", "Close"),
+                # j/k and the arrows walk the rows; ? is the Card control on the row under the cursor
+                Binding("j,down", "cursor(1)", "Next model", show=False),
+                Binding("k,up", "cursor(-1)", "Previous model", show=False),
+                Binding("question_mark", "card", "Model card", show=False)]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[str] = []  # the models on show, in display order
+
+    @property
+    def orch(self) -> Orchestrator:
+        return self.app.orch
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="roster"):
+            yield from self.roster_widgets()
+
+    def on_mount(self) -> None:
+        if self.rows:
+            self.focus_control(self.rows[0])
+
+    # ---------- rows ----------
+    def names(self) -> list[str]:
+        """Every model hexmind knows, awake or not, preferred first — the same order /team lists."""
+        return REGISTRY.by_weight([m for m in self.orch.known if m in REGISTRY])
+
+    def state(self, name: str) -> str:
+        """lead / awake / asleep / busy with the task ids holding it, as the /team command lists them."""
+        orch = self.orch
+        if name not in orch.members:
+            return "asleep"
+        held = [t.id for t in orch.all_tasks if t.agent == name and t.status in BUSY_STATUSES]
+        state = "lead" if name == orch.lead else "busy" if held else "awake"
+        return f"{state} · {', '.join(held)}" if held else state
+
+    def roster_widgets(self) -> list[Widget]:
+        self.rows = self.names()
+        if not self.rows:  # nothing registered at all: say so rather than open an empty box
+            return [Static("No models registered — check hexmind/models.toml.", id="team-empty")]
+        return [*(self.row(name) for name in self.rows),
+                Static(TEAM_NOTE, id="team-note"),
+                Button("Close", id="close", compact=True, tooltip="Close the team roster")]
+
+    def row(self, name: str) -> Vertical:
+        model = REGISTRY.get(name)
+        label = Text(self.orch.name(name), style=AGENT_COLOR.get(name, "white"))
+        if name in self.orch.nicknames:  # the nickname is what the user calls it, so keep the model name too
+            label.append(f" ({name})", style="dim")
+        state = self.state(name)
+        return Vertical(
+            labelled(label, f"{name}: {model.description}", classes="who"),
+            labelled(Text(state, style="dim" if state in ("awake", "asleep") else ""),
+                     f"{name} is {state}", classes="state"),
+            Static(", ".join(model.domains), classes="domains"),
+            *self.controls(name),
+            id=f"row-{name}",
+        )
+
+    def controls(self, name: str) -> list[Button]:
+        """Sleep or Wake, Lead, and the reference card. Sleep is disabled with can_sleep's reason
+        in the tooltip, so a busy model (INVARIANT S-1) and the lead are never offered a refusal."""
+        if name in self.orch.members:
+            allowed, reason = self.orch.can_sleep(name)
+            toggle = Button("Sleep", id=f"sleep-{name}", compact=True, disabled=not allowed,
+                            tooltip=f"Sleep {name} — parks its session, its history stays readable" if allowed
+                            else f"Cannot sleep {name} — {reason}")
+        else:
+            toggle = Button("Wake", id=f"wake-{name}", compact=True,
+                            tooltip=f"Wake {name} — brings it back into the room; its CLI is re-checked")
+        return [toggle, self.lead_control(name), self.card_control(name)]
+
+    def lead_control(self, name: str) -> Button:
+        if name == self.orch.lead:
+            return Button("Lead", id=f"lead-{name}", compact=True, disabled=True,
+                          tooltip=f"{name} is already the lead")
+        if name in TEXT_ONLY:  # set_lead refuses: no file or tool access, so nothing to lead with
+            return Button("Lead", id=f"lead-{name}", compact=True, disabled=True,
+                          tooltip=f"{name} is text-only: it cannot see files, so it can't lead")
+        return Button("Lead", id=f"lead-{name}", compact=True, tooltip=f"Make {name} the lead")
+
+    def card_control(self, name: str) -> Button:
+        return Button("Card", id=f"card-{name}", compact=True,
+                      tooltip=f"Reference card for {name} — best at, not for, domains, footprint")
+
+    async def rebuild(self) -> None:
+        """The room moves under the roster (a task starts or ends), so the rows have to follow it:
+        a Sleep that just became legal must be offered and one that just became illegal hidden."""
+        model, control = self.focused_model(), self.focused_control()
+        rows = self.query_one("#roster", VerticalScroll)
+        await rows.remove_children()
+        await rows.mount(*self.roster_widgets())
+        if model and control:
+            self.focus_control(model, control)
+
+    # ---------- keyboard ----------
+    def focused_model(self) -> str | None:
+        widget = self.focused
+        while widget is not None and widget is not self:
+            if widget.id and widget.id.startswith("row-"):
+                return widget.id[len("row-"):]
+            widget = widget.parent
+        return None
+
+    def focused_control(self) -> str | None:
+        """Which control the cursor is on, as a verb: the same Sleep-or-Wake column stays put as the
+        cursor walks, even though a woken model has swapped the button for its opposite."""
+        verb, _, _ = (getattr(self.focused, "id", "") or "").partition("-")
+        return verb if verb in ("sleep", "wake", "lead", "card") else None
+
+    def row_controls(self, model: str) -> list[Button]:
+        return list(self.query(f"#row-{model} Button"))
+
+    def focus_control(self, model: str, control: str | None = None) -> None:
+        """Land on the same control of `model` where it survives, else its first enabled one."""
+        enabled = [b for b in self.row_controls(model) if not b.disabled]
+        target = next((b for b in enabled if b.id == f"{control}-{model}"), None) or (enabled[0] if enabled else None)
+        if target:
+            target.focus()
+
+    def action_cursor(self, step: int) -> None:
+        if not self.rows:
+            return
+        here, control = self.focused_model() or self.rows[0], self.focused_control()
+        index = max(0, min(len(self.rows) - 1, self.rows.index(here) + step))  # stop at the ends, don't wrap
+        self.focus_control(self.rows[index], control)
+
+    def action_card(self) -> None:
+        if model := self.focused_model():
+            self.open_card(model)
+
+    def open_card(self, model: str) -> None:
+        self.app.push_screen(ModelCardScreen(model))
+
+    # ---------- actions ----------
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        verb, _, model = (event.button.id or "").partition("-")  # ids are verb-model, and models have hyphens
+        if verb == "close":
+            self.dismiss()
+        elif verb == "card":
+            self.open_card(model)
+        else:
+            self.change(verb, model)
+
+    def change(self, verb: str, model: str) -> None:
+        """Every change goes through the orchestrator, which re-checks can_sleep and can still
+        refuse: the row may have been sleepable a moment before a task was handed to that model."""
+        orch = self.orch
+        try:
+            if verb == "sleep":
+                self.report(orch.sleep(model))
+            elif verb == "wake":
+                self.report(orch.wake(model), refused=not orch.is_awake(model))
+            else:
+                self.report(orch.set_lead(model))
+        except TeamBusy as e:
+            self.report(f"**Not now.** {e}", refused=True)
+        except TeamError as e:
+            self.report(f"**{e}**", refused=True)
+        self.call_later(self.rebuild)  # a refused change leaves the row as it was
+
+    def report(self, text: str, refused: bool = False) -> None:
+        """Recorded in the chat like the /sleep, /wake and /lead commands record it; a refusal is
+        also raised as a toast, because the chat is behind the roster while it is open."""
+        self.app.say("Hexmind", text)
+        if refused:
+            self.notify(text, severity="warning", timeout=8)
+
+
 class TaskTable(DataTable):
     def _on_click(self, event) -> None:
         # DataTable only selects a row that is already highlighted, so on a phone every task would take two taps.
@@ -138,6 +363,12 @@ class HexmindApp(App):
     .tiny Header, .tiny Footer { display: none; }
     .tiny #input { height: 1; border: none; padding: 0 1; }
     .narrow #detail { display: none; }
+    /* a /team row cannot hold a name, a state and three controls on one line at 40 cols, so on a
+       phone it becomes two: the name, then the controls. The domains are the first thing to go. */
+    .narrow #roster > Vertical { height: 2; layout: vertical; }
+    .narrow #roster .domains { display: none; }
+    .narrow #roster .who { width: 1fr; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .narrow #roster Button { margin-left: 0; }
     """
     BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat"),
                 # single-key alternatives for soft keyboards; Input consumes printable keys, so these only fire when it is blurred
@@ -145,6 +376,7 @@ class HexmindApp(App):
                 Binding("q", "quit", "Quit", show=False), Binding("c", "clear", "Clear chat", show=False),
                 Binding("v", "toggle_view", "Chat/Tasks", show=False), Binding("i,enter", "focus_input", "Type", show=False),
                 Binding("j", "move(1)", "Down", show=False), Binding("k", "move(-1)", "Up", show=False),
+                Binding("t", "team", "Team", show=False),
                 Binding("question_mark", "help", "Help", show=False)]
 
     def __init__(self, backend, members: list[str], lead: str, backend_name: str, audit: bool = False, stats=None):
@@ -167,6 +399,7 @@ class HexmindApp(App):
             yield Button("Chat", id="tab-chat", compact=True, classes="active")
             yield Button("Tasks", id="tab-tasks", compact=True)
             yield Static(classes="spacer")
+            yield Button("Team", id="do-team", compact=True, tooltip="Show the team roster")
             yield Button("Clear", id="do-clear", compact=True)
             yield Button("Quit", id="do-quit", compact=True)
             yield Button("?", id="do-help", compact=True)
@@ -188,13 +421,19 @@ class HexmindApp(App):
         self.query_one("#input").focus()
 
     # ---------- responsive layout ----------
+    @property
+    def room(self) -> Widget:
+        """Where the panes live. `App.query_one` only sees the top of the screen stack, so a team
+        event arriving while /team is open would otherwise miss every pane it has to refresh."""
+        return self.screen_stack[0]
+
     def on_resize(self, event) -> None:
         self.apply_size(event.size.width, event.size.height)
 
     def apply_size(self, width: int, height: int) -> None:
         short, narrow = height < SHORT, width < NARROW
         changed = short != self.has_class("short")
-        if narrow != self.has_class("narrow") or not self.query_one("#tasks", DataTable).columns or narrow and width != self.table_width:
+        if narrow != self.has_class("narrow") or not self.room.query_one("#tasks", DataTable).columns or narrow and width != self.table_width:
             self.set_class(narrow, "narrow")
             self.table_width = width
             self.build_table()
@@ -204,7 +443,7 @@ class HexmindApp(App):
         self.set_class(height < TINY, "tiny")
         # RichLog renders new lines at >= min_width (default 78), which scrolls sideways on a phone; the chat can be
         # hidden (width 0) while it's written to, so size it from the terminal rather than letting it shrink to fit
-        chat = self.query_one("#chat", RichLog)
+        chat = self.room.query_one("#chat", RichLog)
         min_width = (width if narrow else 2 * width // 3) - 2  # chat pane minus scrollbar; 78 (RichLog's default) at 120 cols
         if min_width != chat.min_width:
             chat.min_width = min_width
@@ -234,7 +473,7 @@ class HexmindApp(App):
 
     def build_table(self) -> None:
         """(Re)create the columns for the current width and refill rows, keeping the cursor."""
-        table = self.query_one("#tasks", DataTable)
+        table = self.room.query_one("#tasks", DataTable)
         row = table.cursor_row
         table.clear(columns=True)
         for col, width in self.columns().items():
@@ -254,7 +493,8 @@ class HexmindApp(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         action = {"tab-chat": lambda: self.set_view("chat"), "tab-tasks": lambda: self.set_view("tasks"),
-                  "do-clear": self.action_clear, "do-quit": self.exit, "do-help": self.action_help}.get(event.button.id)
+                  "do-team": self.action_team, "do-clear": self.action_clear, "do-quit": self.exit,
+                  "do-help": self.action_help}.get(event.button.id)
         if action:
             action()
 
@@ -277,6 +517,11 @@ class HexmindApp(App):
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
 
+    def action_team(self) -> None:
+        """One roster at a time: a second `t` on an open roster would stack a copy of the same state."""
+        if not any(isinstance(s, TeamScreen) for s in self.screen_stack):
+            self.push_screen(TeamScreen())
+
     # ---------- chat ----------
     def say(self, who: str, text: str) -> None:
         if text.startswith("ESCALATION"):
@@ -285,7 +530,7 @@ class HexmindApp(App):
             label = self.orch.name(who)
             lines = [Text(label if label == who else f"{label} ({who})", style=AGENT_COLOR.get(who, "bold magenta")),
                      Markdown(text) if who != "you" else Text(text), ""]
-        chat = self.query_one("#chat", RichLog)
+        chat = self.room.query_one("#chat", RichLog)
         for renderable in lines:
             self.history.append(renderable)
             chat.write(renderable)
@@ -327,7 +572,7 @@ class HexmindApp(App):
             self.apply_size(self.size.width, self.size.height)  # recomputes sub_title for the new lead
             self.build_table()
         elif kind == "plan":
-            table = self.query_one("#tasks", DataTable)
+            table = self.room.query_one("#tasks", DataTable)
             for t in data["tasks"]:
                 key = f"{self.round}.{t.id}"
                 self.tasks[key] = t
@@ -338,7 +583,7 @@ class HexmindApp(App):
         elif kind == "task":
             t = data["task"]
             key = f"{self.round}.{t.id}"
-            table = self.query_one("#tasks", DataTable)
+            table = self.room.query_one("#tasks", DataTable)
             for col, value in self.cells(key, t).items():
                 if col in ("status", "audit"):
                     table.update_cell(key, col, value)
@@ -351,7 +596,7 @@ class HexmindApp(App):
 
     def refresh_team(self) -> None:
         active = sum(t.status in ("pending", "running", "auditing", "revising") for t in self.tasks.values())
-        self.query_one("#tab-tasks", Button).label = f"Tasks ({active})" if active else "Tasks"
+        self.room.query_one("#tab-tasks", Button).label = f"Tasks ({active})" if active else "Tasks"
         lines, busy_count = [], 0
         for m in self.members:
             busy = [k for k, t in self.tasks.items() if t.agent == m and t.status in ("running", "revising")]
@@ -366,7 +611,10 @@ class HexmindApp(App):
         if self.has_class("short"):  # soft keyboard open: one-line summary leaves rows for the task list
             idle = len(self.members) - busy_count
             lines = [f"[yellow]{BUSY}[/] {busy_count} busy · [dim]{IDLE} {idle} idle · lead: {self.orch.name(self.lead)}[/]"]
-        self.query_one("#team", Static).update("\n".join(lines))
+        self.room.query_one("#team", Static).update("\n".join(lines))
+        for screen in self.screen_stack:  # a roster left open tracks the room it is changing
+            if isinstance(screen, TeamScreen):
+                screen.call_later(screen.rebuild)
 
     # ---------- task detail ----------
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:

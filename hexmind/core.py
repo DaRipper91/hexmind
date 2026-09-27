@@ -344,8 +344,7 @@ class Orchestrator:
 
     async def execute(self, request: str, tasks: list[Task]) -> str:
         """Run an (approved) plan, then have the lead summarize."""
-        self.all_tasks.extend(tasks)
-        self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
+        self.record(tasks)
         self.emit("plan", {"tasks": tasks})
         await self.run_tasks(request, tasks)
 
@@ -357,10 +356,19 @@ class Orchestrator:
         self.history.append((request, final))
         return final
 
+    def record(self, tasks: list[Task]) -> None:
+        """Add tasks to the session log, once each. A plan is recorded before it runs and run_tasks
+        records what it is given, so without the identity check every task would be listed twice —
+        and /team, which counts tasks to decide who is busy, would name each id twice over."""
+        for t in tasks:
+            if not any(known is t for known in self.all_tasks):
+                self.all_tasks.append(t)
+        self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
+
     async def run_tasks(self, request: str, tasks: list[Task]) -> None:
         by_id = {t.id: t for t in tasks}
         running: dict[asyncio.Task, Task] = {}
-        self.all_tasks.extend(tasks)
+        self.record(tasks)
 
         def _sync_busy() -> None:
             """Recompute which models hold a live task. INVARIANT S-1 reads this, so it is
