@@ -1,0 +1,81 @@
+# Independent review of a range of commits, by two models with different failure modes.
+#
+#   hexmind --audit --timeout 5400
+#   /relay audit --assign pinned --goal "audit 6c3a5d8..HEAD against <what it should achieve>"
+#
+# Read-only by design: the reviewers report findings and change nothing, so the verdict list is
+# clean enough to act on deliberately. Dispatch fix-review afterwards for anything real.
+#
+# Both stages are ungated, so both always report. Gating a reviewer would skip the review you
+# asked for, and on a read-only stage a failure verdict is information, not a reason to stop.
+#
+# The two are not redundant. Nemotron 3 Ultra is told to find what is wrong; LongCat 2.5 is told
+# to find what is missing. An audit with only the first half misses omissions, and an audit with
+# only the second misses errors in what was built. The builder is never a reviewer here.
+
+name = "audit"
+description = "Adversarial code review plus requirement-coverage check over a commit range"
+
+[[stages]]
+name = "review"
+agent = "opencode-ultra"
+domain = "review"
+instructions = """
+Adversarial code review. You did not write any of this, so you have no stake in it being right.
+Assume there is a defect and go find it. Change nothing — report only.
+
+1. Read `.claude/skills/hexmind-dev/SKILL.md` first. It records the invariants this project holds
+   and the traps it has already hit.
+2. Establish the change under review. In this worktree use `git status --short` and
+   `git diff HEAD`, and read the commits themselves with `git log -p` for the range named in the
+   goal. Do not trust the goal's description of the change over what the diff actually says.
+3. For every claimed fix, check the test that proves it. Read the test and ask what it would take
+   to make it fail. A test that passes with and without the fix is worse than no test, because it
+   reads as coverage. This is the most common way work like this goes wrong.
+4. Check the fixes are general. Look for the same class of bug left unfixed one function over — the
+   same missing branch, the same dropped record, the same swallowed error, the same place where a
+   second caller of a changed function was not updated.
+5. Check the invariants in the skill still hold. In particular: the roster must still be generated
+   from the registry rather than hand-written, and nothing may have reintroduced a second source
+   of truth for task state.
+6. Run the full suite yourself — `python3 -m pytest tests -q`, not one file — and report the real
+   output. A green run on a single file proves nothing here; this project has been broken by a
+   change that passed its own test file.
+7. Hunt the error paths specifically. What does a user see when this fails? Is the failure recorded
+   where the next person will look, or swallowed? Does anything fail silently and leave the UI
+   claiming work is in flight?
+
+Report findings as a numbered list, each with file, line, the concrete failure it causes, and how
+severe it is — data loss, silent wrongness and security first. Do not pad with style preferences
+and do not invent problems to look thorough. If you find nothing serious, say so plainly rather
+than manufacturing findings; "this is sound, with these two minor notes" is a valid result.
+"""
+
+[[stages]]
+name = "coverage"
+agent = "opencode-longcat"
+domain = "research"
+instructions = """
+Requirement-coverage check. You are checking whether the work delivers what was asked, not whether
+it is well written — a reviewer already covered quality. Change nothing; report only.
+
+1. Read the goal carefully and enumerate every requirement in it, numbered. Include the implicit
+   ones: stated invariants, edge cases someone named, and anything the diff's own commit messages
+   claim to have done.
+2. Establish what actually changed: `git log -p` for the range named in the goal, plus
+   `git status --short` and `git diff HEAD` for uncommitted work in this worktree. Use whichever
+   reflects reality.
+3. For each requirement, find the evidence: a file path and a line number, or a test that proves
+   it. Then state satisfied, partially satisfied, or missing, with that evidence.
+4. Apply the rule that makes this stage worth running: an item you cannot find evidence for is
+   MISSING. Do not assume work happened because the code looks plausible or because a commit
+   message says so. Absence of evidence is the finding.
+5. Also report the reverse: anything implemented that was never asked for, and anything a commit
+   message claims that the diff does not show. Over-delivery and overstated claims are findings.
+6. Flag anything left knowingly incomplete — a TODO, a skipped test, a broad except, a hardcoded
+   value standing in for a real implementation.
+
+Cite file:///path#Lxx-Lyy for every claim. Quote the requirement, then the evidence. Be blunt:
+finding gaps is the entire purpose of this stage, and a comfortable report that finds nothing
+among a change this size is a failed audit, not a good result.
+"""
