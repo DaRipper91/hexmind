@@ -294,3 +294,41 @@ def test_a_stage_that_writes_to_the_main_folder_is_reported_as_a_breach(tmp_path
     joined = "\n".join(said)
     assert "wrote outside its own worktree" in joined
     assert "hexmind/x.py" in joined
+
+
+
+
+def test_shared_workspace_legitimate_edits_do_not_trigger_isolation_check(tmp_path, monkeypatch):
+    """In --workspace shared, every chain's cwd IS the main folder, so legitimate edits by stages
+    would falsely trigger the isolation check. The check must be gated on workspace == 'worktree'."""
+    import subprocess as sp
+    root = tmp_path / "repo"
+    (root / "hexmind").mkdir(parents=True)
+    (root / "hexmind" / "x.py").write_text("x = 1\n")
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"]):
+        sp.run(["git", "-C", str(root), *cmd], capture_output=True, check=True)
+
+    said = []
+    backend = RelayFake(str(root))
+    orch = Orchestrator(backend, ["claude"], "claude",
+                        emit=lambda k, d: said.append(d.get("text", "")) if k == "message" else None)
+    orch.backend.cwd = str(root)
+    monkeypatch.setattr("hexmind.relay.load_chain", lambda p: Chain("c", "d", [Stage("s", "do it", "claude")]))
+
+    async def legit_edit(*a, **k):
+        # a stage that legitimately edits the main folder (shared workspace)
+        (root / "hexmind" / "x.py").write_text("x = 2\n")
+        return ""
+
+    monkeypatch.setattr(orch, "run_tasks", legit_edit)
+
+    ns = argparse.Namespace(target=["c"], chains=1, assign="pinned", workspace="shared",
+                            end="list", goal=None)
+    asyncio.run(run_relay(orch, ns))
+
+    joined = "\n".join(said)
+    # The isolation check should NOT run in shared mode, so no breach message
+    assert "wrote outside its own worktree" not in joined
+    assert "isolation breach" not in joined
+    # The run should complete normally
+    assert "Relay finished" in joined
