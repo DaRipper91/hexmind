@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import subprocess
@@ -6,7 +7,7 @@ from pathlib import Path
 from hexmind.core import Orchestrator
 import pytest
 
-from hexmind.relay import Chain, Stage, assign, read_agent_file
+from hexmind.relay import Chain, Stage, assign, read_agent_file, run_relay
 
 
 class RelayFake:
@@ -222,3 +223,74 @@ def test_no_goal_is_still_none():
     from hexmind.relay import _parse_relay
 
     assert _parse_relay(["opencode-team", "--assign", "pinned"]).goal is None
+
+
+# ---------- worktree isolation: told where to work, and checked afterwards ----------
+
+def test_dirty_paths_reports_worktree_changes_but_not_ignored_run_files(tmp_path):
+    """The isolation check is only usable if `.hexmind/` is invisible: the notes files and the
+    per-chain worktrees live there and would otherwise read as leaks on every single run."""
+    import subprocess as sp
+    root = tmp_path / "repo"
+    (root / "hexmind").mkdir(parents=True)
+    (root / "hexmind" / "x.py").write_text("x = 1\n")
+    (root / ".hexmind").mkdir()
+    (root / ".hexmind" / ".gitignore").write_text("*\n")
+    (root / ".hexmind" / "runs").mkdir()
+    (root / ".hexmind" / "runs" / "chain-A.md").write_text("stage report\n")
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"]):
+        sp.run(["git", "-C", str(root), *cmd], capture_output=True, check=True)
+
+    from hexmind.relay import dirty_paths
+
+    assert dirty_paths(str(root)) == set(), "a clean repo with run files must report nothing"
+
+    (root / "hexmind" / "x.py").write_text("x = 2\n")
+    assert dirty_paths(str(root)) == {"hexmind/x.py"}, "a real edit must be reported"
+
+
+def test_dirty_paths_is_empty_outside_a_git_repo(tmp_path):
+    """`--cwd` can be any folder, and a non-git folder has no isolation to check. Returning empty
+    rather than raising keeps the check from breaking a shared-workspace relay."""
+    from hexmind.relay import dirty_paths
+
+    assert dirty_paths(str(tmp_path)) == set()
+
+
+def test_a_stage_that_writes_to_the_main_folder_is_reported_as_a_breach(tmp_path, monkeypatch):
+    """The prompt tells a stage which directory is its own, but a prompt is a soft control. This is
+    the hard one: the chain must notice and say so, instead of reporting a clean run over changes
+    that landed in the wrong place. It happened once, silently."""
+    import subprocess as sp
+    root = tmp_path / "repo"
+    (root / "hexmind").mkdir(parents=True)
+    (root / "hexmind" / "x.py").write_text("x = 1\n")
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"]):
+        sp.run(["git", "-C", str(root), *cmd], capture_output=True, check=True)
+    chain = tmp_path / "c.toml"
+    chain.write_text('name = "c"\ndescription = "d"\n[[stages]]\nname = "s"\n'
+                     'instructions = "do it"\nagent = "claude"\n')
+
+    said = []
+    backend = RelayFake(str(root))
+    orch = Orchestrator(backend, ["claude"], "claude",
+                        emit=lambda k, d: said.append(d.get("text", "")) if k == "message" else None)
+    orch.backend.cwd = str(root)
+    monkeypatch.setattr("hexmind.relay.load_chain", lambda p: Chain("c", "d", [Stage("s", "do it", "claude")]))
+    monkeypatch.setattr("hexmind.relay.make_workspaces",
+                        lambda r, run, n, mode: ([str(root / "fake-wt")], [str(root / "n.md")]))
+
+    async def leak(*a, **k):
+        # a stage that ignores its worktree and edits the main checkout
+        (root / "hexmind" / "x.py").write_text("x = 99\n")
+        return ""
+
+    monkeypatch.setattr(orch, "run_tasks", leak)
+
+    ns = argparse.Namespace(target=["c"], chains=1, assign="pinned", workspace="worktree",
+                            end="list", goal=None)
+    asyncio.run(run_relay(orch, ns))
+
+    joined = "\n".join(said)
+    assert "wrote outside its own worktree" in joined
+    assert "hexmind/x.py" in joined

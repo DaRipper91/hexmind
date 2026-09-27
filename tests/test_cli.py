@@ -38,7 +38,7 @@ def run_main(monkeypatch, argv, tmp_path, **env):
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), *argv])
     monkeypatch.setattr(cli, "DirectBackend", BoomBackend)
-    monkeypatch.setattr("hexmind.backends.available", lambda members: ["claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
     return cli.main()
 
 
@@ -59,7 +59,7 @@ def test_once_prints_why_a_task_failed(monkeypatch, tmp_path, capsys):
     id/agent/status/title, so a script calling hexmind --once could see `failed` with no reason."""
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", WorkerFailsBackend)
-    monkeypatch.setattr("hexmind.backends.available", lambda members: ["claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
 
     cli.main()
 
@@ -84,7 +84,7 @@ def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", Interrupting)
-    monkeypatch.setattr("hexmind.backends.available", lambda members: ["claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
     with pytest.raises(SystemExit) as err:
         cli.main()
     assert err.value.code == 130
@@ -93,7 +93,7 @@ def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
 def test_hcom_notice_lists_the_opencode_models_it_cannot_drive(monkeypatch, tmp_path, capsys):
     # __main__ binds `available` into its own namespace at import, so patch it there.
     monkeypatch.setattr(cli, "available", lambda members: ["claude", "opencode", "opencode-longcat", "opencode-muse"])
-    monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--lead", "claude", "--cwd", str(tmp_path), "--once", "hi"])
     monkeypatch.setattr(cli, "Orchestrator", lambda *a, **k: type("O", (), {"handle": _noop})())
 
     cli.main()  # the fake orchestrator succeeds; we only care about the notice printed first
@@ -150,3 +150,15 @@ def test_bundled_model_registry_ships_with_the_package():
     patterns = data["tool"]["setuptools"]["package-data"]["hexmind"]
     assert any("models.toml" in p for p in patterns), f"models.toml not packaged: {patterns}"
     assert (Path(hexmind.__file__).parent / "models.toml").is_file()
+
+
+def test_default_lead_is_opencode_ultra():
+    """Default leader must be opencode-ultra (Nemotron 3 Ultra) per OPENCODE-TEAM-PLAN."""
+    from hexmind.core import Orchestrator
+    from hexmind.server import HexmindServer
+
+    orch = Orchestrator(None, ["opencode-ultra"])
+    assert orch.lead == "opencode-ultra"
+
+    server = HexmindServer(cwd=".")
+    assert server.lead == "opencode-ultra"

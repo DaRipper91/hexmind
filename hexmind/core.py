@@ -193,7 +193,7 @@ class TeamError(Exception):
 
 
 class Orchestrator:
-    def __init__(self, backend, members: list[str], lead: str = "claude", emit: Emit | None = None,
+    def __init__(self, backend, members: list[str], lead: str = "opencode-ultra", emit: Emit | None = None,
                  audit: bool = False, stats=None, known: list[str] | None = None):
         self.backend = backend
         # `members` is the AWAKE roster and is mutated in place so every consumer (this
@@ -434,19 +434,34 @@ class Orchestrator:
                     self.emit("task", {"task": t})
             _sync_busy()
 
+    def _workspace_block(self, t: Task) -> str:
+        """Spell out the file layout for a task that runs in its own folder.
+
+        Without this the isolation is not real. A relay chain's notes file lives in the main
+        folder, so every path a stage reads points at a different checkout, and an agent that
+        follows one writes to main instead of its worktree. That happened silently once: the chain
+        reported success and the changes were in the main checkout, not the isolated one.
+        """
+        if not t.cwd:
+            return ""
+        here, root = os.path.abspath(t.cwd), os.path.abspath(self.backend.cwd)
+        if here == root:
+            return ""  # an ordinary request in the room folder needs no map
+        lines = ["", f"Your working directory is {here} — an isolated copy of this repository.",
+                 "Create, edit and delete files there only."]
+        if t.notes:
+            lines.append(f"One exception: this is a relay stage, and the shared notes file "
+                         f"{t.notes} is in the main checkout at {root}. Read it first; Hexmind "
+                         f"appends your report to it, so do not edit it yourself.")
+        lines.append(f"Do not modify anything under {root}, or in any other checkout or worktree "
+                     "of this repository.")
+        return "\n".join(lines) + "\n"
+
     async def _run_one(self, request: str, t: Task, deps: list[Task]) -> str:
         dep_text = "".join(f"\nResult of {d.id} ({d.title}, by {d.agent}):\n{clip(d.output)}\n" for d in deps)
-        # State the working directory explicitly. With --workspace worktree each chain gets its own
-        # folder, but the chain's notes file lives in the main folder, so paths that appear in the
-        # prompt or in the notes can point outside this task's own directory. Without this line an
-        # agent can read a path from the notes and write to the main checkout instead of its
-        # worktree, which is exactly what happened once already and defeats the isolation.
-        where = (f"\nWork ONLY inside this directory — it is your own isolated copy:\n"
-                 f"  {os.path.abspath(t.cwd)}\n"
-                 f"Do not edit files in any other checkout of this repository.\n"
-                 if t.cwd else "")
         prompt = TASK_PROMPT.format(agent=t.agent, lead=self.lead, request=request, id=t.id,
-                                    title=t.title, instructions=t.instructions, where=where,
+                                    title=t.title, instructions=t.instructions,
+                                    where=self._workspace_block(t),
                                     deps=("\nInputs from earlier phases:" + dep_text) if deps else "")
         if t.notes:
             prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"

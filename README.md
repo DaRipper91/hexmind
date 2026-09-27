@@ -84,7 +84,7 @@ hexmind                    # open the room here
 
 ```bash
 hexmind --without codex          # leave a member out (e.g. out of quota)
-hexmind --lead agy               # agy plans and summarizes instead of claude
+hexmind --lead agy               # agy plans and summarizes instead of opencode-ultra
 hexmind --audit                  # start with peer audit on
 hexmind --cwd ~/Projects/foo     # work in another folder
 hexmind --once "add a --json flag to the export command"   # headless, prints to stdout
@@ -95,10 +95,10 @@ hexmind --once "add a --json flag to the export command"   # headless, prints to
 ## 💬 The room
 
 ```
-┌─ Hexmind ─ direct backend · lead: claude · audit: on ────────────────────────────────────┐
-│ you                                       │ ● claude (lead)  working: 1.t1               │
-│ add CSV export and tests for it           │ ● agy            auditing 1.t1               │
-│                                           │ ○ codex          idle                        │
+┌─ Hexmind ─ direct backend · lead: opencode-ultra · audit: on ─────────────────────────────┐
+│ you                                       │ ● opencode-ultra (lead)  working: 1.t1        │
+│ add CSV export and tests for it           │ ● agy                    auditing 1.t1        │
+│                                           │ ○ codex                  idle                 │
 │ claude                                    ├──────────────────────────────────────────────┤
 │ On it: spec + build, then tests.          │ task  agent   status    audit     title      │
 │                                           │ 1.t1  claude  auditing            build CSV  │
@@ -329,7 +329,7 @@ Keys: `enter` send · `↑/↓` browse tasks · `ctrl+l` clear chat · `ctrl+q` 
 | flag | default | |
 |---|---|---|
 | `--backend direct\|hcom` | `direct` | how agents are run |
-| `--lead AGENT` | `claude` | who plans and summarizes |
+| `--lead AGENT` | `opencode-ultra` | who plans and summarizes |
 | `--without AGENT` | none | leave a member out (repeatable) |
 | `--cwd DIR` | current dir | folder the team works in |
 | `--audit` | off | start with peer audit on |

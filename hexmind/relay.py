@@ -222,6 +222,29 @@ Final stage report of each chain:
 Be concise; point to files rather than repeating them."""
 
 
+def dirty_paths(root: str) -> set[str]:
+    """Tracked-or-untracked paths that differ from HEAD in `root`, as git reports them.
+
+    `.hexmind/` carries its own `.gitignore` of `*`, so the notes files and the per-chain worktrees
+    are invisible here — which is exactly what makes this usable as an isolation check: anything
+    that shows up was written outside the chain's own folder.
+    """
+    try:
+        out = subprocess.run(["git", "-C", root, "status", "--porcelain"],
+                             capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:  # not a git repo: no isolation to check
+        return set()
+    paths = set()
+    for line in out.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        # "XY path", and "XY old -> new" for a rename; the new path is the one that matters
+        paths.add(line[3:].strip().split(" -> ")[-1])
+    return paths
+
+
 # ---------- /commands ----------
 
 def _parser() -> argparse.ArgumentParser:
@@ -531,10 +554,26 @@ async def run_relay(orch, ns) -> str:
         f"workspace={workspace}\n\n{table}\n\nNotes: `{Path(notes[0]).parent}`")
 
     orch.emit("plan", {"tasks": tasks})
+    # Isolation is checked, not trusted. The task prompt names each stage's own directory, but a
+    # prompt is a soft control: an agent that follows a path out of the shared notes file writes to
+    # the main checkout and the chain still reports success. So the main folder's dirty state is
+    # compared across the run, and anything that appeared is reported as a leak.
+    before = dirty_paths(root)
     await orch.run_tasks(goal, tasks)
+    leaked = sorted(dirty_paths(root) - before)
+    if leaked:
+        listing = "\n".join(f"- `{p}`" for p in leaked)
+        say(f"**ESCALATION: a relay stage wrote outside its own worktree.**\n\n"
+            f"`--workspace {workspace}` was supposed to keep this run's changes inside its "
+            f"worktree, but these paths changed in the main folder `{root}`:\n{listing}\n\n"
+            f"The stage prompt now names each stage's directory, and this check reports it either "
+            f"way — but an agent that ignored both still put its work somewhere the chain did not "
+            f"intend. Inspect before committing anything.")
     per_chain = [tasks[k * len(chain.stages):(k + 1) * len(chain.stages)] for k in range(n)]
     status = "\n".join(f"- chain {LABELS[k]}: " + ", ".join(f"{t.id} {t.status}" for t in ts)
                        for k, ts in enumerate(per_chain))
+    if leaked:  # in the status block too, so the final summary cannot present the run as clean
+        status += f"\n- **isolation breach:** {len(leaked)} path(s) written outside the worktree"
     if ns.end == "list":
         final = f"**Relay finished.**\n{status}\n\nFull reports: `{Path(notes[0]).parent}`"
         say(final)

@@ -159,8 +159,25 @@ def test_a_worktree_task_is_told_exactly_which_directory_to_work_in():
 
     prompt = backend.prompts[-1]
     assert "/repo/.hexmind/worktrees/run-A" in prompt
-    assert "Work ONLY inside this directory" in prompt
-    assert "Do not edit files in any other checkout" in prompt
+    assert "isolated copy" in prompt
+    assert "Do not modify anything under" in prompt
+
+
+def test_a_relay_stage_is_told_its_notes_file_lives_in_the_main_checkout():
+    """The trap: the stage's own folder is a worktree, but the notes file it must read is in the
+    main folder, so every path it reads points somewhere else. Say so explicitly."""
+    backend = PromptRecorder()
+    orch = Orchestrator(backend, ["claude"], "claude")
+    backend.cwd = "/repo"
+    task = Task(id="A1", title="fix", agent="claude", instructions="do it",
+                cwd="/repo/.hexmind/worktrees/run-A", notes="/repo/.hexmind/runs/run/chain-A.md")
+
+    asyncio.run(orch._run_one("req", task, []))
+
+    prompt = backend.prompts[-1]
+    assert "main checkout at /repo" in prompt
+    assert "/repo/.hexmind/runs/run/chain-A.md" in prompt
+    assert "/repo/.hexmind/worktrees/run-A" in prompt
 
 
 def test_a_task_in_the_room_folder_is_not_told_about_a_directory():
@@ -172,4 +189,4 @@ def test_a_task_in_the_room_folder_is_not_told_about_a_directory():
 
     asyncio.run(orch._run_one("req", task, []))
 
-    assert "Work ONLY inside this directory" not in backend.prompts[-1]
+    assert "isolated copy" not in backend.prompts[-1]

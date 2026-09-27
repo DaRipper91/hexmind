@@ -14,7 +14,7 @@ def main() -> None:
     p = argparse.ArgumentParser(prog="hexmind", description="Multi-model agent team in one chat room.")
     p.add_argument("--backend", choices=["direct", "hcom"], default="direct",
                    help="direct: hexmind runs agent CLIs itself; hcom: models are persistent hcom agents")
-    p.add_argument("--lead", default="claude", help="agent that plans and summarizes (default: claude)")
+    p.add_argument("--lead", default="opencode-ultra", help="agent that plans and summarizes (default: opencode-ultra)")
     p.add_argument("--without", action="append", default=[], metavar="AGENT",
                    help="leave an agent out, e.g. --without codex (repeatable)")
     p.add_argument("--with", dest="with_", action="append", default=[], metavar="AGENT",
@@ -37,7 +37,7 @@ def main() -> None:
                and (m not in OPT_IN or m in args.with_)]
     from .core import TEXT_ONLY
     if args.lead in TEXT_ONLY:
-        sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; pick claude, agy or codex")
+        sys.exit(f"'{args.lead}' is text-only (no file or tool access) and can't lead; pick opencode-ultra, claude, agy or codex")
     if args.lead not in members:
         sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members) or 'none'})")
 
