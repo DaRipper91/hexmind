@@ -228,22 +228,28 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--assign", choices=["rotate", "best", "pinned"], default="rotate")
     p.add_argument("--workspace", choices=["shared", "worktree"])
     p.add_argument("--end", choices=["merge", "compare", "list"], default="merge")
-    p.add_argument("--goal", nargs="+", help="extra goal/context when target is a chain name")
     return p
 
 
 def _parse_relay(args: list[str]):
-    """Parse /relay args, letting --goal take a whole sentence.
+    """Parse /relay args, with --goal consuming the rest of the line verbatim.
 
-    `--goal add CSV export` is what a person actually types, but a plain `--goal` with
-    nargs=None swallows one token and then argparse cannot match the rest against the already
-    satisfied `target`. So the goal is collected as nargs="+" and rejoined, which accepts both
-    the bare and the quoted form.
+    A goal is a sentence, so it can contain anything — including a word that looks like a flag
+    ("print the first line on --once"). Both narrower fixes break on that: nargs="+" swallows
+    the real flags that follow, and leaving it single-valued means an unquoted sentence arrives
+    as "unrecognized arguments". So everything after --goal is the goal, joined, and the options
+    must come before it. That is also how people type it.
     """
-    p = _parser()
-    ns = p.parse_args(args)
-    if isinstance(ns.goal, list):
-        ns.goal = " ".join(ns.goal)
+    if "--goal" not in args:
+        ns = _parser().parse_args(args)
+        ns.goal = None
+        return ns
+    split = args.index("--goal")
+    head, tail = args[:split], args[split + 1:]
+    if not tail:
+        raise ValueError("--goal needs some text after it")
+    ns = _parser().parse_args(head)
+    ns.goal = " ".join(tail)
     return ns
 
 

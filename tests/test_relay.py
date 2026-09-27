@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 
 from hexmind.core import Orchestrator
+import pytest
+
 from hexmind.relay import Chain, Stage, assign, read_agent_file
 
 
@@ -158,23 +160,41 @@ def test_goal_accepts_a_whole_sentence_without_quoting():
     assert ns.goal == "add CSV export and tests"
 
 
-def test_goal_still_accepts_the_quoted_single_token_form():
+def test_the_quoted_single_token_form_still_works():
     from hexmind.relay import _parse_relay
 
-    ns = _parse_relay(["feature", "--goal", "add CSV export", "--assign", "pinned"])
+    ns = _parse_relay(["feature", "--assign", "pinned", "--goal", "add CSV export"])
 
     assert ns.goal == "add CSV export"
     assert ns.assign == "pinned"
 
 
-def test_goal_may_precede_or_follow_the_other_flags():
+def test_options_must_come_before_the_goal_which_takes_the_rest_of_the_line():
     from hexmind.relay import _parse_relay
 
-    a = _parse_relay(["f", "--goal", "do the thing", "-n", "2", "--end", "compare"])
-    b = _parse_relay(["f", "-n", "2", "--goal", "do the thing", "--end", "compare"])
+    ns = _parse_relay(["f", "-n", "2", "--end", "compare", "--goal", "do", "the", "thing"])
 
-    assert (a.goal, a.chains, a.end) == ("do the thing", 2, "compare")
-    assert (b.goal, b.chains, b.end) == ("do the thing", 2, "compare")
+    assert (ns.goal, ns.chains, ns.end) == ("do the thing", 2, "compare")
+
+
+def test_a_goal_containing_a_flag_like_word_is_not_parsed_as_a_flag():
+    """A goal is a sentence and may name a flag. nargs="+" swallowed the real options, and a
+    single-value --goal called it 'unrecognized arguments'; taking the rest of the line is the
+    only reading that survives."""
+    from hexmind.relay import _parse_relay
+
+    ns = _parse_relay(["fix-review", "--assign", "pinned",
+                       "--goal", "print the first line on --once, and use -k carefully"])
+
+    assert ns.assign == "pinned"
+    assert ns.goal == "print the first line on --once, and use -k carefully"
+
+
+def test_an_empty_goal_is_rejected_rather_than_silently_dropped():
+    from hexmind.relay import _parse_relay
+
+    with pytest.raises(ValueError, match="--goal needs"):
+        _parse_relay(["f", "--assign", "pinned", "--goal"])
 
 
 def test_no_goal_is_still_none():
