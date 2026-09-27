@@ -15,18 +15,14 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
-from .core import Orchestrator, Task
+from .core import REGISTRY, Orchestrator, Task
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
-AGENT_COLOR = {
-    "claude": "orange1", "agy": "cyan", "codex": "green", "jules": "magenta", "qwen": "yellow",
-    "qwen-large": "gold1",
-    "opencode": "bright_blue", "opencode-ultra": "blue", "opencode-muse": "sky_blue1",
-    "opencode-mimo": "turquoise2", "opencode-pickle": "yellow3", "opencode-ling": "green3",
-    "opencode-bunny": "orchid", "opencode-longcat": "chartreuse3",
-    "copilot": "white", "kimi": "red", "you": "bold white"
-}
+# Generated from the registry, so a newly registered model always has a colour instead of
+# silently falling through to white. "you" is the user, not a model.
+AGENT_COLOR: dict[str, str] = {**REGISTRY.colors(), "you": "bold white"}
+
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
 HELP = """[b]Keys[/b] (press [b]Esc[/b] to leave the input)

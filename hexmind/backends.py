@@ -16,25 +16,19 @@ import tempfile
 import urllib.request
 import uuid
 
+from .core import REGISTRY
+
 # Per-agent argv for a one-shot, non-interactive turn. Prompts go over stdin.
 # Edits are auto-accepted so agents can actually do work in the room's folder.
+# The bespoke CLIs below differ in protocol, so their argv is necessarily hand-written. The opencode
+# family is uniform — same tool, different -m — so it is generated from the registry instead
+# (see the DIRECT_CMDS.update below), which is what makes adding a model a models.toml edit.
 DIRECT_CMDS: dict[str, list[str]] = {
     "claude": ["claude", "-p", "--permission-mode", "bypassPermissions"],
     "agy": ["agy", "--input-format", "stream-json", "--output-format", "stream-json",
             "--mode", "accept-edits", "--dangerously-skip-permissions", "--disable-slash-commands"],
     "codex": ["codex", "exec", "--sandbox", "workspace-write", "-a", "never", "--skip-git-repo-check",
               "--output-last-message", "{outfile}", "-"],
-    # Free OpenCode Zen models. All 8 confirmed present in `opencode models` on 2026-09-27.
-    # Prompts go over stdin, so there is no argv length ceiling. --format json (WS-4) will replace
-    # the bare stdout read here with a session-aware event stream.
-    "opencode": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3.5-lightning-free"],
-    "opencode-ultra": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3-ultra-free"],
-    "opencode-muse": ["opencode", "run", "--auto", "-m", "opencode/muse-spark-1.3-contributor-free"],
-    "opencode-mimo": ["opencode", "run", "--auto", "-m", "opencode/mimo-v2.6-flash-free"],
-    "opencode-pickle": ["opencode", "run", "--auto", "-m", "opencode/big-pickle"],
-    "opencode-ling": ["opencode", "run", "--auto", "-m", "opencode/ling-3.0-flash-fin-free"],
-    "opencode-bunny": ["opencode", "run", "--auto", "-m", "opencode/space-bunny-free"],
-    "opencode-longcat": ["opencode", "run", "--auto", "-m", "opencode/longcat-2.5-preview-free"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
     # kimi's -p takes the prompt as an argv token, not stdin -- its only stdin-driven mode is the
@@ -43,9 +37,17 @@ DIRECT_CMDS: dict[str, list[str]] = {
     "kimi": ["kimi", "-p", "{prompt}", "--output-format", "stream-json"],
 }
 
+# Free OpenCode Zen models. Prompts go over stdin, so there is no argv length ceiling.
+# --format json (plan WS-4) will replace the bare stdout read with a session-aware event stream.
+DIRECT_CMDS.update({
+    name: ["opencode", "run", "--auto", "-m", m.model]
+    for name, m in REGISTRY.models.items() if m.cli == "opencode" and m.model
+})
+
 
 # Local models served by Ollama. Text in, text out: no tools, no files.
-LOCAL_MODELS: dict[str, str] = {"qwen": "qwen2.5-coder:7b", "qwen-large": "qwen2.5-coder:latest"}
+# Generated from the registry so a model cannot be declared local in one file and CLI-only in another.
+LOCAL_MODELS: dict[str, str] = {n: m.model for n, m in REGISTRY.models.items() if m.verify == "ollama"}
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MAX_OUTPUT_BYTES = 1_000_000
 TERMINATE_GRACE_SECONDS = 1
@@ -214,10 +216,24 @@ class DirectBackend:
             return out.decode(errors="replace")
 
 
+# hcom drives one agent per *tool*, and cannot select which model that tool uses. So of the eight
+# free opencode models only the default one is reachable here; the other seven are direct-only.
+# HexmindBackend/HcomBackend.supports() is the single source of truth for this -- members(),
+# _agent()'s error message and the --backend hcom startup notice all read it, so the exclusion
+# can never drift from the behaviour.
 HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode",
               "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
 HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex",
                 "opencode": "opencode", "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
+# Free opencode models that exist only as distinct -m values behind the one `opencode` tool.
+# Derived, so a newly registered opencode model is excluded by default rather than accidentally
+# appearing in hcom (which would fail at task time with a confusing error).
+HCOM_EXCLUDED = {n for n, m in REGISTRY.models.items() if m.cli == "opencode" and n != "opencode"}
+
+
+def hcom_unsupported(members: list[str]) -> list[str]:
+    """Installed members this backend cannot drive, with the reason, for an honest startup notice."""
+    return [m for m in members if m in HCOM_EXCLUDED]
 
 
 class HcomBackend:
@@ -260,18 +276,30 @@ class HcomBackend:
             raise RuntimeError("hcom list --json did not return an array")
         return [a for a in agents if isinstance(a, dict)]
 
+    @staticmethod
+    def supports(member: str) -> bool:
+        """Whether hcom can drive this member. The one source of truth for the opencode exclusion."""
+        return member in HCOM_TOOLS
+
     async def members(self) -> list[str]:
-        """Model aliases represented by currently available hcom agents."""
+        """Model aliases represented by currently available hcom agents.
+
+        Excludes HCOM_EXCLUDED: hcom picks a tool, not a model, so the seven non-default
+        opencode models can never be distinguished from each other here.
+        """
         found = {HCOM_MEMBERS[a.get("tool", "").lower()] for a in await self._agents()
                  if a.get("tool", "").lower() in HCOM_MEMBERS}
-        members = [m for m in HCOM_TOOLS if m in found]
+        members = [m for m in HCOM_TOOLS if m in found and m not in HCOM_EXCLUDED]
         if os.environ.get("JULES_API_KEY"):
             members.append("jules")
         return members
 
     async def _agent(self, member: str, cwd: str) -> tuple[str, str]:
-        if member not in HCOM_TOOLS:
-            raise ValueError(f"unsupported hcom member: {member}")
+        if not self.supports(member):
+            excluded = ", ".join(sorted(HCOM_EXCLUDED))
+            raise ValueError(f"hcom cannot drive '{member}': hcom selects a tool, not a model, so the "
+                             f"non-default opencode models are direct-backend only ({excluded}). "
+                             f"Run with --backend direct to use them.")
         cwd = os.path.abspath(cwd)
         lock = self._locks.setdefault((member, cwd), asyncio.Lock())
         async with lock:

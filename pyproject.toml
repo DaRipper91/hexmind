@@ -16,4 +16,4 @@ build-backend = "setuptools.build_meta"
 packages = ["hexmind"]
 
 [tool.setuptools.package-data]
-hexmind = ["chains/*.toml"]
+hexmind = ["chains/*.toml", "models.toml"]

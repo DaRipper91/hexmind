@@ -1,0 +1,231 @@
+# Hexmind model registry. The single source of truth for who is on the team and what each model is
+# for. The lead's roster prompt is GENERATED from these fields (see models.py: Model.description),
+# so a model cannot be described one way in the room and another way in /models.
+#
+# Override any subset for your own machine at ~/.config/hexmind/models.toml (same table names).
+# That file wins, exactly as ~/.config/hexmind/chains/ wins over the bundled chains.
+#
+# Fields
+#   label        display name + vendor, shown to the lead and the user
+#   best_at      what to give this model. This is the routing signal.
+#   avoid_for    what NOT to give it. Prevents the misuse the report warns about.
+#   domains      auditor.DOMAINS values this model is strong in; drives ranking and assignment
+#   verify       how availability is checked: path | ollama | env
+#   weight       preference, higher wins ties. opencode models are favoured (plan R5).
+#   think        per-model reasoning-trace flag (replaces the hardcoded think:false in backends.py)
+#   variant      provider-specific reasoning effort, where the CLI accepts one
+#   opt_in       only joins with --with NAME
+#   text_only    cannot see local files: never leads, never audits, skipped by relay rotation
+#   tier         cloud | local
+#   model        for cloud: provider/model id. for local: the exact Ollama tag from /api/tags.
+
+[models.claude]
+label = "Claude Code"
+best_at = "careful multi-file code changes, refactoring, code review, debugging, planning, writing docs"
+domains = ["architecture", "implementation", "refactor", "review", "debugging", "docs", "tests"]
+cli = "claude"
+verify = "path"
+tier = "cloud"
+weight = 60
+color = "orange1"
+footprint = "cloud · careful and thorough"
+
+[models.agy]
+label = "Google Gemini"
+best_at = "very large context reading, deep reasoning, polyglot code generation, web research, UI/frontend work"
+domains = ["research", "ui", "implementation", "architecture"]
+cli = "agy"
+verify = "path"
+tier = "cloud"
+weight = 60
+color = "cyan"
+footprint = "cloud · large context"
+
+[models.codex]
+label = "OpenAI Codex"
+best_at = "fast focused implementation, writing tests, shell scripting and automation"
+domains = ["implementation", "tests", "shell"]
+cli = "codex"
+verify = "path"
+tier = "cloud"
+weight = 60
+color = "green"
+footprint = "cloud · fast and focused"
+
+# ── free OpenCode Zen models: all eight verified present in `opencode models` on 2026-09-27 ──
+
+[models.opencode]
+label = "NVIDIA Nemotron 3.5 Lightning (Free)"
+best_at = "sub-second atomic work — unit tests, lint fixes, Conventional Commits, CI triage"
+avoid_for = "multi-module design; keep each prompt to one function or one failing test"
+domains = ["tests", "refactor", "shell", "docs"]
+cli = "opencode"
+model = "opencode/nemotron-3.5-lightning-free"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "bright_blue"
+footprint = "cloud · sub-second"
+variant = "minimal"
+
+[models.opencode-ultra]
+label = "NVIDIA Nemotron 3 Ultra (Free)"
+best_at = "heavy chain-of-thought on system architecture, security threat modeling, concurrency tuning and ADRs; the strongest planner and auditor in the room"
+avoid_for = "one-liners and markdown formatting"
+domains = ["architecture", "review", "debugging"]
+cli = "opencode"
+model = "opencode/nemotron-3-ultra-free"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "blue"
+footprint = "cloud · heavy CoT"
+variant = "high"
+
+[models.opencode-muse]
+label = "Meta Muse Spark 1.3 (Free)"
+best_at = "agent-skill authoring, system-prompt and rule engineering, MCP and AGENTS.md schema work"
+avoid_for = "application logic and repo-wide scanning — that is opencode-longcat"
+domains = ["docs", "general"]
+cli = "opencode"
+model = "opencode/muse-spark-1.3-contributor-free"
+verify = "path"
+tier = "cloud"
+weight = 90
+color = "sky_blue1"
+footprint = "cloud · precision syntax"
+
+[models.opencode-mimo]
+label = "Xiaomi MiMo-V2.6-Flash (Free)"
+best_at = "frontend UI/UX, DOM and accessibility-tree parsing, DevTools and Playwright loops — the team's ui specialist"
+avoid_for = "deep algorithms and concurrency; keep turns short and atomic"
+domains = ["ui", "research"]
+cli = "opencode"
+model = "opencode/mimo-v2.6-flash-free"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "turquoise2"
+footprint = "cloud · high throughput, vision-DOM"
+
+[models.opencode-pickle]
+label = "Big Pickle (Free)"
+best_at = "relentless autonomous TDD implementation — drives failing tests to green and keeps going where other models stall"
+avoid_for = "diplomacy and open-ended questions; give it a plan and a pass/fail command"
+domains = ["implementation", "tests", "refactor"]
+cli = "opencode"
+model = "opencode/big-pickle"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "yellow3"
+footprint = "cloud · autonomous loop"
+
+[models.opencode-ling]
+label = "Ling 3.0 Flash Fin (Free)"
+best_at = "quantitative and structured data — VPAT/Section 508, financial and tabular reasoning, SQL and indexing"
+avoid_for = "prose and multi-file refactors; demand explicit schemas"
+domains = ["research", "docs"]
+cli = "opencode"
+model = "opencode/ling-3.0-flash-fin-free"
+verify = "path"
+tier = "cloud"
+weight = 80
+color = "green3"
+footprint = "cloud · low latency"
+
+[models.opencode-bunny]
+label = "Space Bunny (Free)"
+best_at = "lateral thinking, feature ideation, breaking architectural deadlocks, game and UI mechanics"
+avoid_for = "deterministic test or security verification; best for exploring options before committing to one"
+domains = ["research", "general", "ui"]
+cli = "opencode"
+model = "opencode/space-bunny-free"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "orchid"
+footprint = "cloud · high divergence"
+
+[models.opencode-longcat]
+label = "LongCat2.5 Preview (Free)"
+best_at = "massive-context ingestion — whole-repo and monorepo surveys, cross-document synthesis, postmortem aggregation"
+avoid_for = "small edits; best for reading everything before deciding"
+domains = ["research", "docs", "architecture"]
+cli = "opencode"
+model = "opencode/longcat-2.5-preview-free"
+verify = "path"
+tier = "cloud"
+weight = 100
+color = "chartreuse3"
+footprint = "cloud · massive context window"
+
+[models.copilot]
+label = "GitHub Copilot CLI"
+best_at = "GitHub-aware implementation, Actions and workflows, repo conventions. Edits files but cannot run shell commands"
+avoid_for = "anything needing command execution or test runs"
+domains = ["implementation", "shell", "general"]
+cli = "copilot"
+verify = "path"
+tier = "cloud"
+weight = 40
+color = "white"
+footprint = "cloud · edits only, no shell"
+
+[models.jules]
+label = "Google Jules"
+best_at = "long-running self-contained coding tasks that come back as a pull request against the GitHub copy of the repo"
+avoid_for = "local or uncommitted work — it never sees your working tree; give it only code that is already pushed"
+domains = ["implementation", "refactor", "docs"]
+cli = "jules"
+verify = "env"
+env = "JULES_API_KEY"
+opt_in = true
+text_only = true
+tier = "cloud"
+weight = 30
+color = "magenta"
+footprint = "cloud · minutes to hours, returns a PR"
+
+[models.qwen]
+label = "local qwen2.5-coder:7b via Ollama"
+best_at = "small self-contained text jobs — summarize, classify, triage, draft short text"
+avoid_for = "files and tools entirely: it is text-only, so paste in everything it needs"
+domains = ["docs", "general"]
+cli = "ollama"
+model = "qwen2.5-coder:7b"
+verify = "ollama"
+tier = "local"
+opt_in = true
+text_only = true
+weight = 20
+color = "yellow"
+footprint = "local · shares one Ollama slot with qwen-large"
+
+[models.qwen-large]
+label = "local qwen2.5-coder:latest via Ollama"
+best_at = "the same text-only work as qwen but on the larger build — slower, better when qwen would struggle"
+avoid_for = "files and tools entirely; evicting qwen to load this one is a real cost"
+domains = ["implementation", "research", "docs"]
+cli = "ollama"
+model = "qwen2.5-coder:latest"
+verify = "ollama"
+tier = "local"
+opt_in = true
+text_only = true
+weight = 20
+color = "gold1"
+footprint = "local · shares one Ollama slot with qwen"
+
+[models.kimi]
+label = "Moonshot AI Kimi Code"
+best_at = "1M-token context with deep extended thinking — general implementation and second opinions on large-context tasks"
+avoid_for = "very large prompts: it takes the prompt as an argv token, so it can hit the OS arg-length limit"
+domains = ["research", "implementation", "architecture"]
+cli = "kimi"
+verify = "path"
+tier = "cloud"
+weight = 50
+color = "red"
+footprint = "cloud · 1M context"
+variant = "max"

@@ -14,59 +14,21 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
+from .models import Registry
+
+# The team roster. GENERATED from hexmind/models.toml — see models.py. Every model has a structured
+# entry (best_at, avoid_for, domains, weight); the prose the lead reads is derived from it, so a
+# model cannot be described one way here and another way in /models.
+REGISTRY = Registry.load()
+
 # Who is on the team and what each is good at. The lead reads this to assign work.
-ROSTER: dict[str, str] = {
-    "claude": "careful multi-file code changes, refactoring, code review, debugging, planning, writing docs",
-    "agy": "Google Gemini: very large context reading, deep reasoning, polyglot code generation, web research, UI/frontend work",
-    "codex": "OpenAI Codex: fast focused implementation, writing tests, shell scripting and automation",
-    # Free OpenCode Zen models. All 8 verified available via `opencode models` on 2026-09-27.
-    # These strings are the lead's only routing signal, so each says what to give the model AND
-    # what not to — see docs/model-updates.md for the full comparison matrix.
-    "opencode": "NVIDIA Nemotron 3.5 Lightning (Free): sub-second — atomic unit tests, lint fixes, "
-                "Conventional Commits, CI triage. Keep each prompt to one function or one failing test; "
-                "not for multi-module design",
-    "opencode-ultra": "NVIDIA Nemotron 3 Ultra (Free): heavy chain-of-thought for system architecture, "
-                      "security threat modeling, concurrency tuning and ADRs. Strongest planner and "
-                      "auditor in the room; not for one-liners or markdown formatting",
-    "opencode-muse": "Meta Muse Spark 1.3 (Free): agent-skill authoring, system-prompt and rule "
-                     "engineering, MCP/AGENTS.md schema work. Not for application logic or repo-wide "
-                     "scanning — that is opencode-longcat",
-    "opencode-mimo": "Xiaomi MiMo-V2.6-Flash (Free): frontend UI/UX, DOM and accessibility-tree parsing, "
-                     "DevTools and Playwright loops — the team's `ui` domain specialist. Keep turns short "
-                     "and atomic; not for deep algorithms or concurrency",
-    "opencode-pickle": "Big Pickle (Free): relentless autonomous TDD implementation — drives failing tests "
-                       "to green and keeps going where other models stall. Give it a plan and a pass/fail "
-                       "command; not for diplomacy or open-ended questions",
-    "opencode-ling": "Ling 3.0 Flash Fin (Free): quantitative and structured data — VPAT/Section 508, "
-                     "financial and tabular reasoning, SQL and indexing. Demand explicit schemas; not for "
-                     "prose or multi-file refactors",
-    "opencode-bunny": "Space Bunny (Free): lateral thinking, feature ideation, breaking architectural "
-                      "deadlocks, game and UI mechanics. Best for exploring options before committing to "
-                      "one; not for deterministic test or security verification",
-    "opencode-longcat": "LongCat2.5 Preview (Free): massive-context ingestion — whole-repo and monorepo "
-                        "surveys, cross-document synthesis, postmortem aggregation. Best for reading "
-                        "everything before deciding; not for small edits",
-    "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
-    "jules": ("Google Jules, an async cloud agent. It works on the GitHub copy of this repo, NOT local files or "
-              "uncommitted changes, takes minutes to hours, and finishes with a pull request. Give it only "
-              "self-contained, long-running coding tasks on code that is already pushed"),
-    "qwen": ("local qwen2.5-coder:7b via Ollama: free, private, never hits a quota, but small and slow. TEXT ONLY: "
-             "it cannot read or edit files or run commands. Give it only small self-contained text jobs "
-             "(summarize, classify, triage, draft short text) and paste everything it needs into the instructions. "
-             "Shares one Ollama slot with qwen-large — only one of the two is ever loaded at a time, so pick "
-             "whichever one fits the job rather than assigning both in the same room"),
-    "qwen-large": ("local qwen2.5-coder:latest via Ollama: same free/private/TEXT-ONLY deal as qwen, but the "
-                   "larger build — slower, better for anything qwen would struggle with. Shares one Ollama slot "
-                   "with qwen: picking this one unloads qwen if it was warm, and vice versa"),
-    "kimi": ("Moonshot AI's Kimi Code: 1M-token context with deep extended thinking (effort defaults to max), "
-             "general implementation and second opinions on large-context tasks"),
-}
+ROSTER: dict[str, str] = REGISTRY.roster()
 
 # Members that can't see local files (qwen: no tools; jules: works on the GitHub copy).
 # Never lead, never auditor, not rotated into relays.
-TEXT_ONLY = {"qwen", "qwen-large", "jules"}
+TEXT_ONLY = REGISTRY.text_only()
 # Members that only join with --with NAME. qwen starves an 8 GB machine; jules spends cloud quota and opens PRs.
-OPT_IN = {"qwen", "qwen-large", "jules"}
+OPT_IN = REGISTRY.opt_in()
 
 # A member failure that means "out of quota", not "bad work": hand the task to someone else.
 QUOTA_RE = re.compile(r"usage limit|quota|rate.?limit|\b429\b|exceeded your|credit balance|"

@@ -38,6 +38,17 @@ def main() -> None:
     if args.lead not in members:
         sys.exit(f"lead '{args.lead}' is not available (installed members: {', '.join(members) or 'none'})")
 
+    if args.backend == "hcom":
+        # hcom drives one agent per tool and cannot choose which model that tool uses, so the seven
+        # non-default opencode models are unreachable here. Say so instead of silently running a
+        # smaller team than the user expects.
+        from .backends import hcom_unsupported
+        dropped = hcom_unsupported(members)
+        if dropped:
+            print(f"note: --backend hcom cannot drive {len(dropped)} opencode model(s) "
+                  f"(hcom picks a tool, not a model): {', '.join(dropped)}\n"
+                  f"      use --backend direct for the full team.", file=sys.stderr)
+
     if args.serve:
         from .server import run_server
         run_server(
@@ -65,7 +76,20 @@ def main() -> None:
             elif kind == "task":
                 t = data["task"]
                 print(f"  {t.id} {t.agent:<7} {t.status:<8} {t.title}", flush=True)
-        asyncio.run(Orchestrator(backend, members, args.lead, emit, args.audit, stats).handle(args.once))
+        orch = Orchestrator(backend, members, args.lead, emit, args.audit, stats)
+        try:
+            asyncio.run(orch.handle(args.once))
+        except KeyboardInterrupt:
+            sys.exit(130)
+        except Exception as e:
+            # A blocked backend, an out-of-quota member or a malformed plan is an expected outcome of
+            # a one-shot run, not a crash. Report it the way the TUI does and exit non-zero, instead
+            # of dumping a traceback at someone calling hexmind from a script. Set HEXMIND_TRACEBACK=1
+            # to get the traceback anyway when debugging.
+            if os.environ.get("HEXMIND_TRACEBACK"):
+                raise
+            print(f"\nhexmind: {e}", file=sys.stderr)
+            sys.exit(1)
         return
 
     from .tui import HexmindApp

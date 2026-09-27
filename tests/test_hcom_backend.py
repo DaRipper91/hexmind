@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from hexmind.backends import HcomBackend
+from hexmind.backends import HCOM_EXCLUDED, HcomBackend, hcom_unsupported
+from hexmind.core import ROSTER
 
 
 class FakeStream:
@@ -158,3 +159,47 @@ def test_timed_out_events_raise_member_timeout(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="agy did not reply within 3s"):
         asyncio.run(HcomBackend(str(tmp_path), timeout=3).run("agy", "prompt"))
+
+
+# --- D1: hcom drives a tool, not a model, so the non-default opencode models are unreachable ---
+
+def test_only_the_default_opencode_model_is_reachable_over_hcom():
+    assert HcomBackend.supports("opencode") is True
+    for member in ("opencode-ultra", "opencode-muse", "opencode-mimo", "opencode-pickle",
+                   "opencode-ling", "opencode-bunny", "opencode-longcat"):
+        assert HcomBackend.supports(member) is False, member
+    # the set and the predicate must not drift apart
+    assert {m for m in ROSTER if m.startswith("opencode-")} == HCOM_EXCLUDED
+
+
+def test_excluded_opencode_members_are_never_offered_by_members(monkeypatch, tmp_path):
+    hcom = FakeHcom()
+    hcom.agents = [{"name": "hexmind-opencode", "tool": "opencode", "tag": HcomBackend(str(tmp_path)).tag,
+                    "directory": str(tmp_path), "status": "listening"}]
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", hcom.create_process)
+
+    members = asyncio.run(HcomBackend(str(tmp_path)).members())
+
+    assert "opencode" in members
+    assert not HCOM_EXCLUDED & set(members)
+
+
+def test_excluded_member_error_names_the_limit_and_the_alternative(monkeypatch, tmp_path):
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", FakeHcom().create_process)
+
+    with pytest.raises(ValueError) as err:
+        asyncio.run(HcomBackend(str(tmp_path))._agent("opencode-longcat", str(tmp_path)))
+
+    message = str(err.value)
+    assert "hcom cannot drive 'opencode-longcat'" in message
+    assert "hcom selects a tool, not a model" in message
+    assert "--backend direct" in message
+
+
+def test_startup_notice_lists_what_hcom_will_drop():
+    installed = ["claude", "agy", "codex", "opencode", "opencode-bunny", "opencode-longcat", "kimi"]
+
+    dropped = hcom_unsupported(installed)
+
+    assert dropped == ["opencode-bunny", "opencode-longcat"]
+    assert "opencode" not in dropped  # the default model is still reachable
