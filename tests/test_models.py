@@ -1,6 +1,7 @@
 """The model registry: loading, generated prose, and the invariants that stop roster drift."""
 import asyncio
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -279,3 +280,83 @@ def test_opencode_team_pinned_assignment_is_honoured():
 
     assert pinned[0] == [s.agent for s in chain.stages]
     assert pinned[0] != rotated[0], "rotation would have produced a different, unpinned assignment"
+
+
+# ---------- `from =` resolution and bundled chain hygiene ----------
+
+def test_from_accepts_a_bare_filename_and_searches_the_standard_agent_dirs(tmp_path, monkeypatch):
+    from hexmind import relay
+
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "my-reviewer.md").write_text("---\nname: r\n---\nReview the thing.\n")
+    monkeypatch.setattr(relay, "AGENT_DIRS", [agents])
+
+    assert relay.resolve_agent_file("my-reviewer.md") == agents / "my-reviewer.md"
+    assert relay.resolve_agent_file("my-reviewer") == agents / "my-reviewer.md", "extension may be omitted"
+    assert "Review the thing." in relay.read_agent_file(str(relay.resolve_agent_file("my-reviewer.md")))
+
+
+def test_from_prefers_an_explicit_path_over_the_search_dirs(tmp_path, monkeypatch):
+    from hexmind import relay
+
+    explicit = tmp_path / "somewhere" / "agent.md"
+    explicit.parent.mkdir()
+    explicit.write_text("explicit wins")
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "agent.md").write_text("searched")
+    monkeypatch.setattr(relay, "AGENT_DIRS", [agents])
+
+    resolved = relay.resolve_agent_file(str(explicit))
+
+    assert resolved == explicit, "an existing path must be used as written, not via the search dirs"
+    assert relay.read_agent_file(str(resolved)) == "explicit wins"
+
+
+def test_a_path_that_looks_like_a_path_is_never_silently_searched_for(tmp_path, monkeypatch):
+    """Writing a path and missing it is an error to report, not a hint to go looking elsewhere."""
+    from hexmind import relay
+
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "recon.md").write_text("should not be used")
+    monkeypatch.setattr(relay, "AGENT_DIRS", [agents])
+
+    assert relay.resolve_agent_file("~/nope/recon.md") is None
+
+
+def test_missing_from_reports_where_it_looked(tmp_path, monkeypatch):
+    from hexmind import relay
+    from hexmind.relay import BrokenChain, load_chain
+
+    monkeypatch.setattr(relay, "AGENT_DIRS", [tmp_path / "a", tmp_path / "b"])
+    chain = tmp_path / "c.toml"
+    chain.write_text('name = "c"\n[[stages]]\nname = "s"\nfrom = "ghost.md"\n')
+
+    with pytest.raises(BrokenChain) as err:
+        load_chain(chain)
+    assert "missing ghost.md" in str(err.value)
+    assert "looked for a file named this" in str(err.value)
+
+
+def test_every_bundled_chain_loads_and_needs_nothing_external():
+    """The reason the two user-specific chains moved to docs/examples/: a bundled chain that
+    points outside the package is broken on every machine but the author's."""
+    from hexmind.relay import list_chains, load_chain
+
+    for name, path in list_chains().items():
+        chain = load_chain(path)  # must not raise BrokenChain
+        assert chain.stages, f"{name} has no stages"
+        for stage in chain.stages:
+            assert stage.instructions.strip(), f"{name}/{stage.name} has empty instructions"
+
+
+def test_the_example_chains_are_no_longer_bundled():
+    """doc-chain and rip-it-apart import agent files that live on one person's machine."""
+    from hexmind.relay import list_chains
+
+    bundled = set(list_chains())
+    assert bundled == {"feature", "opencode-team"}
+    examples = Path(__file__).parent.parent / "docs/examples/chains"
+    assert {p.stem for p in examples.glob("*.toml")} == {"doc-chain", "rip-it-apart"}

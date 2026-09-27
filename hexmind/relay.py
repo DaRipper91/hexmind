@@ -25,6 +25,31 @@ from .core import Task, clip, extract_json
 CHAIN_DIRS = [Path.home() / ".config/hexmind/chains", Path(__file__).parent / "chains"]
 LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+# Where agent files live, searched in order when a stage names an agent instead of a path.
+# A stage may say `from = "rip-it-apart-recon-mapper.md"` and mean "the one I already wrote",
+# which is the common case: agents are per-user, not per-package.
+AGENT_DIRS = [Path.home() / ".claude/agents", Path.home() / ".agents/agents",
+              Path(".claude/agents"), Path(".agents/agents")]
+
+
+def resolve_agent_file(ref: str) -> Path | None:
+    """Find an agent file given a full path, or a bare filename to look up in AGENT_DIRS.
+
+    A reference that looks like a path (it contains a separator) is never searched for by name:
+    if you wrote a path and it is not there, that is an error to report, not a hint to go looking.
+    """
+    direct = Path(ref).expanduser()
+    if direct.is_file():
+        return direct
+    if "/" in ref or "\\" in ref:
+        return None
+    for directory in AGENT_DIRS:
+        for name in (ref, f"{ref}.md", f"{ref}.toml"):
+            candidate = directory / name
+            if candidate.is_file():
+                return candidate
+    return None
+
 
 @dataclass
 class Stage:
@@ -69,9 +94,14 @@ def load_chain(path: Path) -> Chain:
         raise BrokenChain(f"invalid TOML in {path}: {e}") from e
     stages = []
     for s in data.get("stages", []):
-        if s.get("from") and not Path(s["from"]).expanduser().is_file():
-            raise BrokenChain(f"missing {s['from']}")
-        instr = read_agent_file(s["from"]) if s.get("from") else s.get("instructions", "")
+        instr = s.get("instructions", "")
+        if s.get("from"):
+            found = resolve_agent_file(s["from"])
+            if found is None:
+                hint = "" if "/" in s["from"] else f" (also looked for a file named this in: " \
+                                                       f"{', '.join(str(d) for d in AGENT_DIRS)})"
+                raise BrokenChain(f"missing {s['from']}{hint}")
+            instr = read_agent_file(str(found))
         stages.append(Stage(s.get("name", f"stage {len(stages) + 1}"), instr, s.get("agent"),
                             s.get("domain", "general"), s.get("gate") is True))
     if not stages:

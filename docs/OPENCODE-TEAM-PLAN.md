@@ -150,12 +150,17 @@ session id is rejected before the subprocess is spawned.**
 | `--title` | Label sessions per model/room for legible `session list`. |
 | `OPENCODE_DISABLE_AUTOCOMPACT` | Long sessions are **auto-compacted** — old detail is silently summarized away. Bounds the cost of long-lived sessions, and is a gotcha when a model "forgets" something it was told. |
 
-### Side finding: the "dead" skill path is actually live for opencode
+### Side finding: the opencode members' real skill path
 
 `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` implies opencode loads skills from `~/.claude/skills`
-— which **does** exist. So the ~50 `file:///home/daripper/.agents/skills/…` links in
-`model-updates.md` are dead *as links* but the skills themselves are reachable by every
-opencode member. Worth noting in the doc rather than "fixing" by moving files.
+— which **does** exist. So the `file:///home/daripper/.agents/skills/…` links in
+`model-updates.md` are a secondary route; the skills opencode members actually use are the
+ones under `~/.claude/skills/`.
+
+Whether the `.agents` path itself resolves is **machine state, not a durable fact**: it was
+absent when first checked, present minutes later in a `find`, and gone again by the next
+command, while `~/.claude` mtime moved in between. Something on this machine manages that
+directory actively. Don't "fix" it by moving files.
 
 Also: **do not pass `--pure`** to opencode members — it disables external plugins, which
 would cut the team off from the very skills the report is built around.

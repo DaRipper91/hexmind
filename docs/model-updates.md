@@ -394,9 +394,13 @@ ingestion, and the model whose specialty `opencode-muse` is currently mislabelle
 
 ## 5. Documentation Defects
 
-- **All ~50 skill links are dead.** Every one resolves to
-  `file:///home/daripper/.agents/skills/<name>/SKILL.md`; that directory **does not exist**.
-  Skills actually live under `/home/daripper/.claude/skills/synced/<uuid>/<name>/SKILL.md`.
+- **The report's skill links point at `~/.agents/skills`, which is machine state, not a
+  durable fact.** They were absent when first checked, present minutes later
+  (`~/.agents/skills/rip-it-apart` and `~/.agents/agents/` showed up in a `find` and were gone
+  by the next command, while `~/.claude` mtime moved), so something on this machine manages
+  that directory actively. Treat the links as *possibly* live rather than dead — and note the
+  real skills the opencode members can reach are under `~/.claude/skills/`, which opencode
+  loads itself via `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS`.
 - **README contradicts the code on `qwen`.** `README.md:68` documents `qwen` as `qwen3:4b`;
   `backends.py:44` and `core.py:32` both say `qwen2.5-coder:7b`. Only the latter is installed,
   so **the README is stale, not the code** — and `qwen3:4b` was evidently never pulled.

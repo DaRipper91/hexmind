@@ -156,9 +156,14 @@ at once and Hexmind rotates the models through the stages.
 
 ### Example: three full repo audits by three models
 
-The bundled `rip-it-apart` chain imports six existing Claude Code subagents (recon →
-verify → bug-hunt → strengths → critic → fix-plan) as stage instructions, so any model can
-run any stage.
+The `rip-it-apart` chain — an [example chain](docs/examples/chains/README.md) you copy into
+`~/.config/hexmind/chains/`, because it imports agent files that live on your machine rather
+than in this package — runs six stages (recon → verify → bug-hunt → strengths → critic →
+fix-plan), so any model can run any stage.
+
+```sh
+cp docs/examples/chains/rip-it-apart.toml ~/.config/hexmind/chains/
+```
 
 ```
 /relay rip-it-apart x3
@@ -337,7 +342,9 @@ Keys: `enter` send · `↑/↓` browse tasks · `ctrl+l` clear chat · `ctrl+q` 
 ## 📜 Chain files
 
 Chains are TOML. Hexmind looks in `~/.config/hexmind/chains/` (yours win) and the bundled
-`hexmind/chains/` (`feature`, `rip-it-apart`).
+`hexmind/chains/` (`feature`, `opencode-team`). Only self-contained chains are bundled;
+chains that import your own agent files live in
+[`docs/examples/chains/`](docs/examples/chains/README.md) to copy.
 
 ```toml
 name = "feature"
@@ -348,20 +355,18 @@ name = "spec"
 instructions = "Read the code this touches. Write a short spec. Don't write code."
 domain = "architecture"      # optional: ranking domain for this stage
 agent = "claude"             # optional: used with --assign pinned
-
-[[stages]]
-name = "build"
-instructions = "Implement the spec from the notes file. Keep the diff minimal."
-domain = "implementation"
 gate = true                  # optional: unresolved audit failure blocks later stages
 
 [[stages]]
 name = "review"
-from = "~/.claude/agents/code-reviewer.md"   # import an existing agent's instructions
+from = "code-reviewer.md"    # import an existing agent's instructions
 ```
 
 **Bring your existing agents.** `from =` turns an agent you've already written into a stage
-any model can run:
+any model can run. Give a bare filename and Hexmind looks in `~/.claude/agents/`,
+`~/.agents/agents/`, `./.claude/agents/` and `./.agents/agents/` — agents are per-user, so a
+package can't know where yours are. Give a full path and it must exist as written; a missing
+path is reported rather than silently resolved to some same-named file elsewhere.
 
 - **Claude Code agents** (`.md`): the frontmatter is stripped and the body becomes the instructions.
 - **Codex agents** (`.toml`): Hexmind reads `developer_instructions`, falling back to
