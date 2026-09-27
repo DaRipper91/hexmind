@@ -289,6 +289,7 @@ to survive, as an explicit `--lead` requirement rather than a silent default.
 | 4 | — | `/scan` + discovered/curated split + `/profile` |
 | 5 | 2 | `ASSEMBLY_SCHEMA` with `chains` and `skills`; chain + skill directives |
 | 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `opencode-muse`, reviewed by `opencode-ultra` |
+| 7 | — | `/relay clean` (WS-12), so the chains this flow requests do not accumulate worktrees forever |
 
 Steps 2, 4 and 6 are independent of each other. Step 3 must not land before step 1.
 

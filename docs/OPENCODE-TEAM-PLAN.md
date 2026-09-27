@@ -638,8 +638,90 @@ a whole journal is a context bomb and a cost problem.
 
 `nomic-embed-text` is already installed and is a natural future answer to "find the one turn
 in t1's 400-line journal that's about auth" — worth noting, not worth building now.
+---
 
-| Phase | Workstream | Delivers | Depends on |
+## WS-12 · Reap relay worktrees (`/relay clean`)
+
+`make_workspaces` (`relay.py:125`) creates a git worktree **and** a branch per chain, named
+`hexmind/<run>-<X>`, and nothing ever removes either. Every `/relay` therefore leaves behind
+1.7 MB and a branch, permanently. Three relay runs had accumulated before this was noticed.
+
+### Why this is a safety feature, not housekeeping
+
+Cleaning up is exactly where a tool destroys work by accident, and this project has already come
+close. Committing an audit chain's fixes with `git add` naming only the source files left the
+tests behind in the worktree. The branch had **0 unmerged commits** — the standard check says
+safe — and deleting it would have destroyed the only copy of the regression tests for two shipped
+fixes. It was caught only by diffing the worktree's working tree against `main`, which nothing was
+doing.
+
+So the rule: **never trust a commit-graph check alone.** Uncommitted work is invisible to it by
+definition, and a relay worktree is exactly where uncommitted work lives.
+
+### Commands
+
+| command | effect |
+| :--- | :--- |
+| `/relay clean` | list every run with its verdict and what would be lost. Changes nothing |
+| `/relay clean --force` | remove the runs that are safe, refuse the rest, and say why |
+| `/relay clean --all` | also drop `<run>/chain-*.md` notes — they are the audit trail, so opt-in |
+
+Listing first is not friction. A destructive command whose failure mode is silent data loss
+should cost one extra keypress.
+
+### Verdicts
+
+For each run under `.hexmind/runs/`, four checks in order; the first failure decides:
+
+| verdict | condition | action |
+| :--- | :--- | :--- |
+| **active** | named in `.hexmind/active`, written by `run_relay` on start and cleared in a `finally` | skip |
+| **unmerged** | `git log main..<branch>` is non-empty | skip, and name the commits |
+| **dirty** | the worktree has modified or untracked files | skip, and **name the files** |
+| **safe** | none of the above | eligible |
+
+The dirty check is the one that matters, and it must list the offending paths. A bare "skipped:
+dirty" leaves the user unable to act, which is precisely how the tests nearly got lost. Print
+them, so the listing can be pasted straight into a diff.
+
+The active marker is a file rather than a process check because guessing from `ps` is fragile: a
+chain can sit between stages, and a killed run leaves no process but a live-looking worktree.
+
+### Use the safe git invocations, not the forceful ones
+
+```python
+git worktree remove <path>   # no --force: git itself refuses a dirty worktree
+git branch -d <branch>       # -d, never -D: git itself refuses an unmerged branch
+git worktree prune
+```
+
+The force variants are what turned a near-miss into a real loss when done by hand
+(`git worktree remove --force` bypasses the dirty check that would have saved the tests). The
+built-in guards already encode the two rules that matter; this command's job is to never override
+them and to explain refusals in the user's terms.
+
+`git branch -d` is also a genuine second opinion: it re-checks mergedness at delete time, so a run
+that gained a commit between the listing and the `--force` is still caught.
+
+### Where it lives
+
+`relay.py`, beside `make_workspaces` — the module that creates the mess, so the naming scheme and
+the cleanup cannot drift apart. Purely a filesystem and git operation: no model is consulted and
+nothing runs.
+
+### Tests
+
+- a clean, fully merged run is removed, and both the worktree and the branch go
+- a run with an unmerged commit is kept, and the commit is named
+- **a worktree with uncommitted changes is kept and the changed paths are named** — the
+  regression that matters
+- an untracked file counts as dirty
+- a run marked active is never touched, even when otherwise clean
+- a dirty worktree is left registered, so `git worktree list` still agrees
+- `--all` keeps the notes by default and drops them only when asked
+
+---
+
 ## Phasing
 
 | Phase | Workstream | Delivers | Depends on |
@@ -653,6 +735,7 @@ in t1's 400-line journal that's about auth" — worth noting, not worth building
 | **P6** | WS-8 | plan-audit chain, `/audit-plan`, phase-gate matrix (R8) | P1, P2 |
 | **P7** | WS-9 | leader's over-provisioning advisor (R9) | P3, P6 |
 | **P8** | WS-11 | per-model journals, digests into prompts, `/journal` (R11) | P1 |
+| **P9** | WS-12 | `/relay clean` — reap finished runs, refuse dirty ones (P1) | relay runs |
 
 P1 and P2 are independent and can run in parallel. Nothing before P0 should start — the
 registry is what makes the rest declarative instead of hardcoded.
