@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from hexmind.core import Orchestrator, parse_plan
+from hexmind.core import Orchestrator, Task, parse_plan
 
 
 def plan(tasks, reply="ok"):
@@ -105,3 +105,27 @@ def test_orchestrator_falls_back_to_prose_on_malformed_plan_data():
     orch = Orchestrator(FakeBackend('{"tasks": "not a list or dict"}'), ["claude"], "claude")
     reply = asyncio.run(orch.handle("hi"))
     assert '{"tasks": "not a list or dict"}' in reply
+
+
+def test_a_failed_stage_is_recorded_in_the_relay_notes_the_next_stage_reads(tmp_path):
+    """A relay stage's notes file is what the next stage is told to read first. Written only on
+    success, it reads as a clean run: a stage that never mentions its own failure leaves the next
+    one reasoning from a report that skipped over the hole."""
+    notes = tmp_path / "chain-A.md"
+    notes.write_text("# Chain A notes\n")
+    backend = FakeBackend(plan([
+        {"id": "a", "agent": "claude", "title": "one"},
+        {"id": "b", "agent": "agy", "title": "two", "depends_on": ["a"]},
+    ]), fail={"a"})
+    tasks = [Task(id="a", title="one", agent="claude", instructions="do it", notes=str(notes)),
+             Task(id="b", title="two", agent="agy", instructions="do it more", depends_on=["a"],
+                  notes=str(notes))]
+    orch = Orchestrator(backend, ["claude", "agy"], "claude")
+    asyncio.run(orch.run_tasks("do it", tasks))
+
+    assert (tasks[0].status, tasks[1].status) == ("failed", "skipped")
+    text = notes.read_text()
+    assert "# Chain A notes" in text  # the chain's own header survives; we only append
+    assert "claude did a" not in text  # a failed stage reported no work
+    assert "error: boom" in text, text
+    assert "failed" in text, text

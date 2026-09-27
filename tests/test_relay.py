@@ -59,6 +59,27 @@ def test_lead_designed_relay_shared_workspace_writes_notes(tmp_path):
     assert (tmp_path / ".hexmind/.gitignore").read_text() == "*\n"
 
 
+class MidChainFailure(RelayFake):
+    """Stage two dies, so stage three is skipped: the shape a `gate = true` stage produces."""
+
+    async def run(self, agent, prompt, cwd=None):
+        if "Your task (A2:" in prompt:
+            raise RuntimeError("agy: audit could not clear the migration, see tests/test_db.py")
+        return await super().run(agent, prompt, cwd)
+
+
+def test_the_merge_prompt_is_told_how_each_stage_ended(tmp_path):
+    """The synthesis sees only the last *done* stage's report, so it has no way to know a stage
+    was gated off. Given the board's own status lines it cannot call a failed stage a success."""
+    backend = MidChainFailure(str(tmp_path))
+    orch = Orchestrator(backend, ["claude", "agy"], "claude")
+    run(orch, "/relay fix the parser --workspace shared")
+
+    merge = next(p for _, p, _ in backend.prompts if "relay chain(s) of" in p)
+    assert "A1 done" in merge and "A2 failed" in merge and "A3 skipped" in merge
+    assert "audit could not clear the migration" not in merge  # statuses, not the whole error
+
+
 def test_multi_chain_in_git_repo_defaults_to_worktrees(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",

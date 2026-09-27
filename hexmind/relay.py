@@ -212,6 +212,9 @@ END_WRAPPER = """You are the lead of an AI agent team. {n} relay chain(s) of '{c
 Chain notes files (full stage-by-stage reports): {notes}
 Work folders: {cwds}
 
+How each stage ended (a failed or skipped stage produced no result, whatever any report claims):
+{statuses}
+
 Final stage report of each chain:
 {finals}
 
@@ -541,9 +544,11 @@ async def run_relay(orch, ns) -> str:
                                                          for t in reversed(ts) if t.status == "done"), "no stage finished")
                          for k, ts in enumerate(per_chain))
     orch.emit("status", {"agent": orch.lead, "state": f"{ns.end} results"})
+    # `finals` is only the last stage that finished, so a stage that was gated off is invisible in
+    # it. The statuses go in too, or the summary can call a failed stage a success.
     final = await orch.ask(orch.lead, END_WRAPPER.format(
         n=n, chain=chain.name, goal=goal, notes=", ".join(notes), cwds=", ".join(dict.fromkeys(cwds)),
-        finals=finals, instruction=END_PROMPTS[ns.end]))
+        statuses=status, finals=finals, instruction=END_PROMPTS[ns.end]))
     orch.emit("status", {"agent": orch.lead, "state": "idle"})
     final = f"{final.strip()}\n\n{status}"
     orch.emit("message", {"from": orch.lead, "text": final})

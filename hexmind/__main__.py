@@ -80,6 +80,12 @@ def main() -> None:
             elif kind == "task":
                 t = data["task"]
                 print(f"  {t.id} {t.agent:<7} {t.status:<8} {t.title}", flush=True)
+                if t.status == "failed":
+                    # the status line alone says nothing went well but not what; the TUI posts the
+                    # first line of the output on failure, so a headless caller learns the same thing
+                    first = t.output.strip().splitlines()[0][:200] if t.output.strip() else ""
+                    if first:
+                        print(f"      {first}", flush=True)
         orch = Orchestrator(backend, members, args.lead, emit, args.audit, stats)
         try:
             asyncio.run(orch.handle(args.once))

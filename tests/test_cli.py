@@ -1,4 +1,5 @@
 """The CLI entry point: argument handling, member resolution, and headless error reporting."""
+import json
 import sys
 
 import pytest
@@ -14,6 +15,22 @@ class BoomBackend:
 
     async def run(self, agent, prompt, cwd=None, schema=None):
         raise RuntimeError("claude agent hexmind-abc is waiting for approval. Open it once yourself.")
+
+
+class WorkerFailsBackend:
+    """The lead plans normally; the worker then dies with a multi-line diagnosis."""
+
+    def __init__(self, cwd, timeout=1800):
+        self.cwd = cwd
+
+    async def run(self, agent, prompt, cwd=None, schema=None):
+        if "Answer ONLY with a JSON object" in prompt:
+            return json.dumps({"reply": "on it", "tasks": [
+                {"id": "a", "agent": "claude", "title": "write the tests"}]})
+        if "Write the final answer" in prompt:
+            return "summary"
+        raise RuntimeError("claude: resuming session 4f2a in /tmp instead of the room hangs forever\n"
+                           "run it in the room's folder")
 
 
 def run_main(monkeypatch, argv, tmp_path, **env):
@@ -35,6 +52,23 @@ def test_once_reports_a_failed_agent_cleanly_and_exits_nonzero(monkeypatch, tmp_
     # the point of the fix: no traceback for an expected failure
     assert "Traceback" not in captured.err
     assert "RuntimeError" not in captured.err
+
+
+def test_once_prints_why_a_task_failed(monkeypatch, tmp_path, capsys):
+    """The TUI shows the first line of a failed task's output; headless printed only
+    id/agent/status/title, so a script calling hexmind --once could see `failed` with no reason."""
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--once", "hi"])
+    monkeypatch.setattr(cli, "DirectBackend", WorkerFailsBackend)
+    monkeypatch.setattr("hexmind.backends.available", lambda members: ["claude"])
+
+    cli.main()
+
+    out = capsys.readouterr().out
+    failed = [line for line in out.splitlines() if "failed" in line]
+    assert len(failed) == 1, out
+    assert failed[0].split() == ["a", "claude", "failed", "write", "the", "tests"]  # the status line
+    assert "resuming session 4f2a in /tmp instead of the room hangs forever" in out
+    assert "run it in the room's folder" not in out  # only the first line, as the TUI shows
 
 
 def test_once_still_gives_the_traceback_when_asked(monkeypatch, tmp_path):

@@ -78,6 +78,28 @@ def test_layout_matrix(size):
     asyncio.run(go())
 
 
+@pytest.mark.parametrize("size", [(40, 20), (60, 30), (79, 30)])
+def test_narrow_tab_bar_keeps_every_tap_target_whole(size):
+    """Six auto-width buttons and a spacer in one row. 40 is the documented minimum viewport, so
+    the bar has to fit its own labels there without padding them out; the help button at the far
+    end is the one that fell off. Assert the whole bar, not one button, at every narrow width."""
+    width, height = size
+
+    async def go():
+        app = _app()
+        async with app.run_test(size=size) as pilot:
+            await _run_plan(app, pilot)
+            tabs = app.query_one("#tabs")
+            assert tabs.region.right <= width
+            for button in tabs.query("Button"):
+                assert button.region.height == 1
+                assert button.region.width >= len(str(button.label)), f"{button.id} is truncated"
+                assert button.region.right <= width, f"{button.id} sticks out: {button.region}"
+            _assert_no_horizontal_overflow(app, width)
+
+    asyncio.run(go())
+
+
 def test_chat_wraps_inside_narrow_screen():
     async def go():
         app = _app()

@@ -365,6 +365,18 @@ class Orchestrator:
                 self.all_tasks.append(t)
         self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
 
+    def record_note(self, t: Task) -> None:
+        """Record a finished relay stage in its chain notes file — the file the next stage is told
+        to read first, so it has to carry the failures too. Written on success only, a notes file
+        reads as a clean run and the next stage reasons from a report that skipped the hole."""
+        if not t.notes:
+            return
+        try:
+            with open(t.notes, "a") as nf:
+                nf.write(f"\n## {t.title} ({t.agent}) — {t.status}\n\n{t.output.strip()}\n")
+        except OSError as e:  # an unwritable notes file must not fail the stage that just finished
+            self.emit("message", {"from": "hexmind", "text": f"Could not write the relay notes: {e}"})
+
     async def run_tasks(self, request: str, tasks: list[Task]) -> None:
         by_id = {t.id: t for t in tasks}
         running: dict[asyncio.Task, Task] = {}
@@ -397,11 +409,9 @@ class Orchestrator:
                     t = running.pop(f)
                     try:
                         t.output, t.status = clean_text(f.result()), "done"
-                        if t.notes:
-                            with open(t.notes, "a") as nf:
-                                nf.write(f"\n## {t.title} ({t.agent})\n\n{t.output.strip()}\n")
                     except Exception as e:  # one agent failing must not kill the room
                         t.output, t.status = f"error: {e}", "failed"
+                    self.record_note(t)  # after the try, so a failed stage's diagnosis is recorded too
                     _sync_busy()
                     self.emit("task", {"task": t})
                 launch_ready()
@@ -413,11 +423,13 @@ class Orchestrator:
             # A cancelled turn (the user quit, or the run was interrupted) leaves its tasks still
             # marked running. Recomputing the busy set from that stale status would wedge those
             # models as unsleepable for the rest of the session, and leave the board claiming work
-            # is in flight when nothing is. Mark them failed so the truth reaches the UI.
+            # is in flight when nothing is. Mark them failed so the truth reaches the UI, and write
+            # it to the relay notes too, so a cancelled chain has no silent hole in its record.
             for t in self.all_tasks:
                 if t.status in BUSY_STATUSES:
                     t.output = t.output or "cancelled before it finished"
                     t.status = "failed"
+                    self.record_note(t)
                     self.emit("task", {"task": t})
             _sync_busy()
 

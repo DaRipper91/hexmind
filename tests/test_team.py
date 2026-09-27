@@ -117,11 +117,14 @@ def test_the_busy_set_tracks_a_real_run_and_clears_when_the_task_ends():
     asyncio.run(go())
 
 
-def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever():
+def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever(tmp_path):
     """The finally branch matters: without it, quitting mid-task would leave the model
     permanently unsleepable for the rest of the session."""
     orch, _ = make()
     task = busy_task("opencode-pickle", "pending")
+    notes = tmp_path / "chain-A.md"
+    notes.write_text("# Chain A notes\n")
+    task.notes = str(notes)
 
     class Never:
         cwd = "/tmp"
@@ -143,6 +146,8 @@ def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever():
         assert orch.busy == set(), "a cancelled task must not leave its model unsleepable"
         assert task.status == "failed", "the board must not claim cancelled work is still running"
         assert "cancelled" in task.output
+        # the relay notes are read after the fact, so a cancelled stage must not leave a hole in them
+        assert "failed" in notes.read_text() and "cancelled" in notes.read_text()
 
     asyncio.run(go())
 

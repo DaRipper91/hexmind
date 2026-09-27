@@ -352,7 +352,11 @@ class HexmindApp(App):
     #tasks { height: 1fr; }
     #detail { height: 1fr; border-top: solid $primary; }
     #tabs { display: none; height: 1; }
-    #tabs Button { width: auto; min-width: 0; margin-right: 1; }
+    /* The bar is shown only in narrow mode, where 40 columns is the floor: six buttons at
+       (label + 2 padding) + a 1-cell margin each = 41, and `?` fell off the end. The buttons pad
+       themselves, so the margin buys nothing but the overflow — the spacer separates the two
+       groups on a wider phone. */
+    #tabs Button { width: auto; min-width: 0; margin-right: 0; }
     #tabs .spacer { width: 1fr; }
     #tabs .active { text-style: bold reverse; }
     .narrow #tabs { display: block; }
