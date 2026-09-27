@@ -24,6 +24,7 @@ AGENT_COLOR = {
     "qwen-large": "gold1",
     "opencode": "bright_blue", "opencode-ultra": "blue", "opencode-muse": "sky_blue1",
     "opencode-mimo": "turquoise2", "opencode-pickle": "yellow3", "opencode-ling": "green3",
+    "opencode-bunny": "orchid", "opencode-longcat": "chartreuse3",
     "copilot": "white", "kimi": "red", "you": "bold white"
 }
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")

@@ -24,13 +24,17 @@ DIRECT_CMDS: dict[str, list[str]] = {
             "--mode", "accept-edits", "--dangerously-skip-permissions", "--disable-slash-commands"],
     "codex": ["codex", "exec", "--sandbox", "workspace-write", "-a", "never", "--skip-git-repo-check",
               "--output-last-message", "{outfile}", "-"],
-    # Free OpenCode Zen models
+    # Free OpenCode Zen models. All 8 confirmed present in `opencode models` on 2026-09-27.
+    # Prompts go over stdin, so there is no argv length ceiling. --format json (WS-4) will replace
+    # the bare stdout read here with a session-aware event stream.
     "opencode": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3.5-lightning-free"],
     "opencode-ultra": ["opencode", "run", "--auto", "-m", "opencode/nemotron-3-ultra-free"],
     "opencode-muse": ["opencode", "run", "--auto", "-m", "opencode/muse-spark-1.3-contributor-free"],
     "opencode-mimo": ["opencode", "run", "--auto", "-m", "opencode/mimo-v2.6-flash-free"],
     "opencode-pickle": ["opencode", "run", "--auto", "-m", "opencode/big-pickle"],
     "opencode-ling": ["opencode", "run", "--auto", "-m", "opencode/ling-3.0-flash-fin-free"],
+    "opencode-bunny": ["opencode", "run", "--auto", "-m", "opencode/space-bunny-free"],
+    "opencode-longcat": ["opencode", "run", "--auto", "-m", "opencode/longcat-2.5-preview-free"],
     # file edits allowed without prompting (like claude acceptEdits); shell and other tools stay denied
     "copilot": ["copilot", "-s", "--allow-tool=write"],
     # kimi's -p takes the prompt as an argv token, not stdin -- its only stdin-driven mode is the

@@ -241,3 +241,222 @@ flowchart TD
 2. **Audit & Threat Model:** `Nemotron 3 Ultra` reviews the architecture for concurrency bottlenecks and security vulnerabilities.
 3. **Execution:** `Big Pickle` refactors the codebase following the audit recommendations using strict TDD.
 4. **Micro-Triage:** `Nemotron 3.5 Lightning` or local `qwen2.5-coder` cleans up linting, generates git commit diffs, and updates [`AGENTS.md`](file:///home/daripper/AGENTS.md).
+
+---
+---
+
+# PART II — HEXMIND CODE REVIEW
+
+> Everything above this line is the original report, unmodified.
+> Everything below is a code review of the report against the Hexmind source tree and the
+> actual local machine, added 2026-09-27 after commit `0897b1c`.
+>
+> **Baseline at time of review:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
+> **Reviewed tree:** `hexmind/{core,backends,tui,relay,auditor,server,jules,notify,config}.py`
+
+## 1. Verification Method
+
+Every claim below was checked against the source tree or a live query, not inferred:
+
+| Check | Method |
+| :--- | :--- |
+| Ollama inventory | `GET http://127.0.0.1:11434/api/tags` |
+| Roster / routing text | `hexmind/core.py` (`ROSTER`, `TEXT_ONLY`, `OPT_IN`, `QUOTA_RE`) |
+| Model IDs actually invoked | `hexmind/backends.py` (`DIRECT_CMDS`, `LOCAL_MODELS`) |
+| Fallback behaviour | `hexmind/core.py` (`Orchestrator.fallback`) |
+| Skill paths | `ls -d /home/daripper/.agents/skills` |
+
+## 2. The Local Model Inventory Is Not Real
+
+The report describes 6 local Ollama engines. **4 are not installed, and 2 are installed under
+names Ollama does not report.**
+
+| Report claims | Present on this machine | Status |
+| :--- | :--- | :--- |
+| `qwen3:4b` (2.5 GB) | — | ❌ not installed |
+| `phi3:mini` (2.2 GB) | `phi3-mini:latest` | ⚠️ name mismatch (`.` vs `-`) |
+| `moondream:latest` (1.7 GB) | — | ❌ not installed |
+| `deepseek-r1:1.5b` (1.1 GB) | `deepseek-r1-1.5b:latest` | ⚠️ name mismatch (`.` vs `-`) |
+| `qwen2.5-coder:1.5b` (986 MB) | — | ❌ not installed |
+| `samantha-mistral:latest` (4.1 GB) | — | ❌ not installed |
+
+**9 installed models appear nowhere in the report at all:**
+
+`continuum-architect:latest` · `deepseek-coder-v2:16b` · `deepseek-coder:6.7b` · `hermes3:8b` ·
+`llama3.2-3b:latest` · `marco-o1:7b` · `nomic-embed-text:latest` · `omnimap-architect:latest` ·
+`orca-mini:latest`
+
+Two of these matter more than the report's own picks:
+
+- **`deepseek-coder-v2:16b` and `deepseek-coder:6.7b`** are far stronger code models than the
+  `qwen2.5-coder:1.5b` (986 MB) the report nominates for "Precision Syntax, Unit Tests". The
+  report recommends a 1.5B model for a job a 16B model is already installed to do.
+- **`nomic-embed-text:latest`** is an embedding model. Hexmind's conversation history is a flat
+  list of the last 3 exchanges (`core.py:230`); an embedding model is the natural fix for
+  semantic recall, and it is sitting unused.
+
+`continuum-architect` and `omnimap-architect` appear to be Aether-related (the report scopes
+`phi3:mini` to "Aether Core Engine") but are undocumented.
+
+### 2.1 The name mismatch is a live bug, not a typo
+
+`backends.py:104` gates membership on an exact string-set lookup:
+
+```python
+return [m for m in members if (m in DIRECT_CMDS and shutil.which(DIRECT_CMDS[m][0]))
+        or LOCAL_MODELS.get(m) in pulled
+        or (m == "jules" and bool(os.environ.get("JULES_API_KEY")))]
+```
+
+`pulled` is the verbatim name set from `/api/tags`. Add a member using the report's spelling
+(`"deepseek": "deepseek-r1:1.5b"`) and **`available()` returns `False` with no error** — the
+member silently never joins the room, and the roster looks merely quiet rather than broken.
+Ollama normalises `deepseek-r1:1.5b` to `deepseek-r1-1.5b:latest`, so the report's spelling can
+never match.
+
+**Fix:** normalise before comparing, and warn loudly on a near-miss instead of dropping silently.
+
+## 3. Roster Descriptions Have Drifted From Real Model Strengths
+
+`_roster()` (`core.py:221`) is interpolated straight into `LEAD_PROMPT`, so these strings *are*
+the routing logic — the lead assigns work by reading them. Three are wrong or undersold:
+
+| Member | Report says it is for | `core.py` ROSTER says | Effect |
+| :--- | :--- | :--- | :--- |
+| `opencode-muse` | Meta-prompting, **skill authoring**, agent schemas, rule generation | "massive 1M context repo scanning and cross-file documentation analysis" | ❌ **Wrong.** That description belongs to LongCat2.5. Repo-scan work routes to the one model the report says is bad at it. |
+| `opencode-mimo` | **Frontend UI/UX, DOM parsing, DevTools, vision** | "low-latency small tasks — quick edits, short scripts" | ⚠️ Undersold. It is the only UI specialist in the report. |
+| `opencode-pickle` | **Relentless autonomous TDD, Ralph mode**, won't abandon a failing test | "deliberate reasoning model for multi-step problem solving" | ⚠️ Undersold. Reads as a generic reasoner rather than the aggressive builder. |
+
+**Consequence for the `ui` domain:** `auditor.DOMAINS` includes `ui`, and `Stats` scores per
+domain — but nothing in the roster advertises UI strength except `agy`. So every `ui`-domain
+task routes to `agy` by default while the model's actual UI specialist sits idle.
+
+**Root cause:** the roster is hand-maintained free text that has drifted from the report.
+Fixing the three strings treats the symptom; see §7 for the structural fix.
+
+## 4. Architecture Mismatches Between the Report and the Code
+
+### 4.1 Vision / multimodal intake is unsupported end to end
+
+The report makes visual intake the **entry point of the whole pipeline** (snap a wiring photo →
+`moondream` reads the pinouts → structured spec → cloud escalation).
+
+Hexmind cannot express this. `_ollama_generate` (`backends.py:108`) posts text-only:
+
+```python
+body = {"model": model, "prompt": prompt, "stream": False, "think": False}
+```
+
+Moondream requires an `images: [base64]` field. Supporting it means changing the contract that
+runs through every layer — `backend.run(agent, prompt, cwd) -> str`, the `Task` dataclass, the
+prompt templates, and the TUI (which has no way to attach an image). This is a real feature,
+not a config change.
+
+### 4.2 `"think": False` is hardcoded, defeating `deepseek-r1`
+
+`backends.py:109` hardcodes `think: False`. `deepseek-r1-1.5b` **is installed**, and the report
+sells it on exactly one thing: "raw chain-of-thought `<think>` logic traces" and "Deep CoT
+Debugging, Logic Verification."
+
+Hexmind would suppress the single capability that justifies the model. The flag needs to be
+per-agent (derived from the registry in §7), not a global constant.
+
+### 4.3 The offline-fallback table has no implementation
+
+The report's central thesis is graceful degradation: when the network drops or rate limits hit,
+fall through to local engines. Hexmind already owns the scaffolding — `QUOTA_RE` (`core.py:51`)
+detects quota/rate-limit failures and `Orchestrator.fallback()` (`core.py:348`) reassigns the
+task. But `fallback()` filters only on membership:
+
+```python
+spares = [m for m in self.members if m not in tried and m not in TEXT_ONLY]
+return self.stats.ranked(spares, t.domain)[0] if self.stats else spares[0]
+```
+
+There is **no notion of cloud vs. local tier.** If the entire cloud tier is down, tasks are
+reshuffled among equally-dead cloud models by Laplace score. The report's fallback table is a
+ready-made priority order that the code never consults.
+
+### 4.4 `notify.py` is implemented, tested, and called by nothing
+
+The report terminates *every* workflow at `kdeconnect-cli` → phone: Tier 3 output, the garage
+recipe, and Recipe 2's verification step all end in a ping.
+
+`hexmind/notify.py` implements exactly that and is fully covered by `tests/test_notify.py` —
+but **no module imports it.** Verified: the only references outside the file itself are the
+tests. The report makes it load-bearing; the code leaves it orphaned.
+
+### 4.5 Two of the eight cloud models are still not team members
+
+`backends.py:28-33` wires six: `opencode`, `-ultra`, `-muse`, `-mimo`, `-pickle`, `-ling`.
+**Missing: Space Bunny** (Tier 2's lateral-ideation node) and **LongCat2.5 Preview** (monorepo
+ingestion, and the model whose specialty `opencode-muse` is currently mislabelled as).
+
+## 5. Documentation Defects
+
+- **All ~50 skill links are dead.** Every one resolves to
+  `file:///home/daripper/.agents/skills/<name>/SKILL.md`; that directory **does not exist**.
+  Skills actually live under `/home/daripper/.claude/skills/synced/<uuid>/<name>/SKILL.md`.
+- **README contradicts the code on `qwen`.** `README.md:68` documents `qwen` as `qwen3:4b`;
+  `backends.py:44` and `core.py:32` both say `qwen2.5-coder:7b`. Only the latter is installed,
+  so **the README is stale, not the code** — and `qwen3:4b` was evidently never pulled.
+- **The old report's 3 pipeline recipes were deleted** in `0897b1c` and replaced by 2 hybrid
+  recipes. The 4-step autonomous pipeline (Ideate → Architect → Implement → Micro-fix) that
+  matched Hexmind's own architecture is gone. Worth restoring as a Hexmind-shaped recipe.
+
+## 6. Adjacent Code Findings (unrelated to models, found during review)
+
+Not model-related, but surfaced by the same review and worth tracking:
+
+| # | Finding | Location |
+| :--- | :--- | :--- |
+| 1 | `fastapi`, `pydantic`, `uvicorn` imported but **not declared** in `pyproject.toml` — `--serve` fails on a clean install | `pyproject.toml:6`, `server.py:14` |
+| 2 | Server binds `0.0.0.0` with `allow_origins=["*"]` **and** `allow_credentials=True`, no auth — anyone on the LAN can drive agents running with auto-accepted edits | `server.py:28`, `server.py:250` |
+| 3 | Server **404s every slash command** — `Orchestrator.handle()` returns immediately for `/`-prefixed input | `core.py:238`, `server.py:267` |
+| 4 | `Task.status` declared without `auditing`/`revising`; `AGENT_COLOR` hardcodes 13 names — a new ROSTER member silently gets no colour | `core.py:84`, `tui.py:22` |
+| 5 | No streaming: `backend.run` returns one string after up to 30 min of silence, though `agy`/`kimi` already parse stream-json and discard it | `backends.py:186` |
+| 6 | `Stats._save()` rewrites the whole JSON per audit, no locking | `auditor.py:83` |
+| 7 | No lint config committed (`.ruff_cache` exists, no `ruff.toml`); no `AGENT_REPORT.md` — both required by `AGENTS.md` | repo root |
+| 8 | Server has no request queue (409s); the TUI queues via `asyncio.Lock`. README's "it queues" is only half true | `server.py:269`, `tui.py:161` |
+
+## 7. Recommended Structural Fix
+
+Every drift in §3 and §4 traces back to one root cause: **`ROSTER` is hand-maintained free text
+with no schema.** The report is a rich structured matrix that the code cannot read.
+
+A single declarative registry would fix the naming bug, make routing deterministic, and give the
+hybrid architecture an actual implementation surface:
+
+```toml
+# ~/.config/hexmind/models.toml  (user-overridable, like chains/)
+[models.deepseek]
+ollama   = "deepseek-r1-1.5b"   # exact name from /api/tags
+tier     = "local"              # local | cloud
+domains  = ["debugging", "review"]
+think    = true                 # per-agent, replaces the hardcoded False
+fallback_for = ["opencode-ultra"]   # implements the report's fallback table
+```
+
+Benefits, mapped to the findings above:
+
+| Registry field | Fixes |
+| :--- | :--- |
+| `ollama` + name normalisation | §2.1 silent-drop bug |
+| `tier` | §4.3 tier-aware fallback |
+| `domains` | §3 roster drift; makes `ui` routing deterministic |
+| `think` | §4.2 hardcoded `False` |
+| `fallback_for` | §4.3 offline degradation, straight from the report's table |
+
+Then generate `ROSTER` prose from `domains` so the lead's prompt can never drift again, and add
+a `/models` command that prints the live team against this report's matrix.
+
+### Suggested order of work
+
+1. **Registry + name normalisation** — fixes a real silent bug, unblocks everything else.
+2. **Correct the three ROSTER strings** (`-muse`, `-mimo`, `-pickle`) — one-line each, immediate
+   routing win.
+3. **Wire `notify.py` into escalation + run-finished** — already written and tested.
+4. **Add Space Bunny and LongCat2.5 as members** — completes the report's cloud tier.
+5. **Per-agent `think` flag** — one-line change, unlocks `deepseek-r1`.
+6. **Fix the README `qwen` row and the dead skill paths.**
+7. **Then** the larger items: tier-aware `fallback()`, streaming output, multimodal intake.

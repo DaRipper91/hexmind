@@ -19,12 +19,33 @@ ROSTER: dict[str, str] = {
     "claude": "careful multi-file code changes, refactoring, code review, debugging, planning, writing docs",
     "agy": "Google Gemini: very large context reading, deep reasoning, polyglot code generation, web research, UI/frontend work",
     "codex": "OpenAI Codex: fast focused implementation, writing tests, shell scripting and automation",
-    "opencode": "NVIDIA Nemotron 3.5 Lightning (Free): fast implementation, refactoring, and general coding",
-    "opencode-ultra": "NVIDIA Nemotron 3 Ultra (Free): deep architectural audits and complex logic validation",
-    "opencode-muse": "Meta Muse Spark (Free): massive 1M context repo scanning and cross-file documentation analysis",
-    "opencode-mimo": "Xiaomi MiMo (Free): low-latency small tasks — quick edits, short scripts, fast second opinions",
-    "opencode-pickle": "Big Pickle (Free): deliberate reasoning model for multi-step problem solving and tool automation",
-    "opencode-ling": "Ling 3.0 Flash (Free): quantitative, financial logic, metric calculations, and structured data tasks",
+    # Free OpenCode Zen models. All 8 verified available via `opencode models` on 2026-09-27.
+    # These strings are the lead's only routing signal, so each says what to give the model AND
+    # what not to — see docs/model-updates.md for the full comparison matrix.
+    "opencode": "NVIDIA Nemotron 3.5 Lightning (Free): sub-second — atomic unit tests, lint fixes, "
+                "Conventional Commits, CI triage. Keep each prompt to one function or one failing test; "
+                "not for multi-module design",
+    "opencode-ultra": "NVIDIA Nemotron 3 Ultra (Free): heavy chain-of-thought for system architecture, "
+                      "security threat modeling, concurrency tuning and ADRs. Strongest planner and "
+                      "auditor in the room; not for one-liners or markdown formatting",
+    "opencode-muse": "Meta Muse Spark 1.3 (Free): agent-skill authoring, system-prompt and rule "
+                     "engineering, MCP/AGENTS.md schema work. Not for application logic or repo-wide "
+                     "scanning — that is opencode-longcat",
+    "opencode-mimo": "Xiaomi MiMo-V2.6-Flash (Free): frontend UI/UX, DOM and accessibility-tree parsing, "
+                     "DevTools and Playwright loops — the team's `ui` domain specialist. Keep turns short "
+                     "and atomic; not for deep algorithms or concurrency",
+    "opencode-pickle": "Big Pickle (Free): relentless autonomous TDD implementation — drives failing tests "
+                       "to green and keeps going where other models stall. Give it a plan and a pass/fail "
+                       "command; not for diplomacy or open-ended questions",
+    "opencode-ling": "Ling 3.0 Flash Fin (Free): quantitative and structured data — VPAT/Section 508, "
+                     "financial and tabular reasoning, SQL and indexing. Demand explicit schemas; not for "
+                     "prose or multi-file refactors",
+    "opencode-bunny": "Space Bunny (Free): lateral thinking, feature ideation, breaking architectural "
+                      "deadlocks, game and UI mechanics. Best for exploring options before committing to "
+                      "one; not for deterministic test or security verification",
+    "opencode-longcat": "LongCat2.5 Preview (Free): massive-context ingestion — whole-repo and monorepo "
+                        "surveys, cross-document synthesis, postmortem aggregation. Best for reading "
+                        "everything before deciding; not for small edits",
     "copilot": "GitHub Copilot CLI: GitHub-aware coding agent: implementation, GitHub workflows/Actions, repo conventions. Can edit files but not run shell commands",
     "jules": ("Google Jules, an async cloud agent. It works on the GitHub copy of this repo, NOT local files or "
               "uncommitted changes, takes minutes to hours, and finishes with a pull request. Give it only "
