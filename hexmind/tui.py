@@ -317,6 +317,15 @@ class HexmindApp(App):
             self.say(data["from"], data["text"] or "_(no reply)_")
         elif kind == "status":
             self.lead_state = data["state"]
+        elif kind == "team":
+            # a model was slept, woken, or promoted: drop stale board rows for anyone no longer
+            # in the room, then refresh the panes that name the roster (sub_title, team, board)
+            gone = {m for m in self.orch.known if m not in self.orch.members}
+            for key, t in list(self.tasks.items()):
+                if t.agent in gone:
+                    del self.tasks[key]
+            self.apply_size(self.size.width, self.size.height)  # recomputes sub_title for the new lead
+            self.build_table()
         elif kind == "plan":
             table = self.query_one("#tasks", DataTable)
             for t in data["tasks"]:

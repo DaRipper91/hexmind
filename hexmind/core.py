@@ -64,7 +64,8 @@ class Task:
     agent: str
     instructions: str
     depends_on: list[str] = field(default_factory=list)
-    status: str = "pending"  # pending | running | done | failed | skipped
+    # pending | running | auditing | revising (set by auditor.audited_run) | done | failed | skipped
+    status: str = "pending"
     output: str = ""
     cwd: str | None = None    # folder this task works in (None = the room's folder)
     notes: str | None = None  # relay chain notes file; each finished stage is appended to it
@@ -72,6 +73,12 @@ class Task:
     gate: bool = False        # high-impact: an unresolved audit failure blocks dependents
     audit: str = ""           # "" | pass | fixed | disputed
     auditor: str = ""
+
+
+# A task in one of these states means its model is mid-edit, so INVARIANT S-1 applies to it.
+# Single source of truth: auditor.audited_run sets `auditing` and `revising`, and the sleep check
+# reads this rather than re-listing the states.
+BUSY_STATUSES = frozenset({"running", "auditing", "revising"})
 
 
 LEAD_PROMPT = """You are the lead of a team of AI coding agents working in one shared room.
@@ -176,11 +183,24 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
 Emit = Callable[[str, dict], None]  # (event kind, payload) -> UI
 
 
+class TeamBusy(Exception):
+    """A sleep request for a model that is mid-task. See INVARIANT S-1."""
+
+
+class TeamError(Exception):
+    """An invalid team change: unknown model, or a lead that cannot lead."""
+
+
 class Orchestrator:
     def __init__(self, backend, members: list[str], lead: str = "claude", emit: Emit | None = None,
-                 audit: bool = False, stats=None):
+                 audit: bool = False, stats=None, known: list[str] | None = None):
         self.backend = backend
+        # `members` is the AWAKE roster and is mutated in place so every consumer (this
+        # orchestrator, the TUI and the server, which share the same list object) sees a change
+        # immediately. `known` is every model hexmind knows about, awake or not — a sleeping model
+        # must keep its registry entry, its stats and its journal, or sleeping would destroy history.
         self.members = members
+        self.known = list(known) if known is not None else list(REGISTRY.names())
         self.lead = lead
         self.emit = emit or (lambda kind, data: None)
         self.history: list[tuple[str, str]] = []  # (user msg, final answer)
@@ -190,6 +210,79 @@ class Orchestrator:
         self.nicknames: dict[str, str] = load_nicknames()  # model -> user's display name
         self.approve_plans = False  # True: the lead's plan waits for /approve or /discard
         self.pending: tuple[str, list[Task]] | None = None  # (request, tasks) awaiting approval
+        self.busy: set[str] = set()  # models holding a non-terminal task; enforces INVARIANT S-1
+        self.all_tasks: list[Task] = []  # every task this session, for the busy set and /team
+
+    # ---------- team: sleep, wake, lead (plan WS-2, WS-3, WS-10) ----------
+
+    def asleep(self) -> list[str]:
+        return [m for m in self.known if m not in self.members]
+
+    def is_awake(self, model: str) -> bool:
+        return model in self.members
+
+    def can_sleep(self, model: str) -> tuple[bool, str]:
+        """(allowed, reason). The UI disables its control from this rather than offering a
+        button that is guaranteed to fail."""
+        if model not in self.members:
+            return False, f"{self.name(model)} is already asleep"
+        if model == self.lead:
+            return False, f"{self.name(model)} is the lead — `/lead <model>` first"
+        if model in self.busy:
+            held = ", ".join(f"{t.id} {t.title}" for t in self.all_tasks
+                             if t.agent == model and t.status in BUSY_STATUSES)
+            return False, f"{self.name(model)} is working on {held} — it can sleep once that finishes"
+        return True, ""
+
+    def sleep(self, model: str) -> str:
+        """Put a model to sleep. INVARIANT S-1: refused outright while it holds a live task.
+
+        A model mid-edit is writing real files in the room or in a relay worktree. Interrupting it
+        to reclaim resources risks a half-written file and a worktree nobody can trust, and that is
+        never worth the memory. There is deliberately no force and no queue: the caller retries
+        after the task reaches a terminal state.
+        """
+        if model not in REGISTRY:
+            raise TeamError(f"unknown model '{model}'")
+        allowed, reason = self.can_sleep(model)
+        if not allowed:
+            raise TeamBusy(reason)
+        self.members.remove(model)
+        self.emit("team", {"action": "sleep", "model": model})
+        return f"**{self.name(model)}** is asleep. Its history and journal stay readable — " \
+               f"`/wake {model}` brings it back."
+
+    def wake(self, model: str) -> str:
+        """Bring a model back into the room. Re-checks the tool is actually available, so a
+        model whose CLI was uninstalled cannot be woken into failing tasks."""
+        if model not in REGISTRY:
+            raise TeamError(f"unknown model '{model}'")
+        if model in self.members:
+            return f"**{self.name(model)}** is already in the room."
+        if model in self.known and model not in REGISTRY.available():
+            return f"**{self.name(model)}** cannot be woken: its CLI is not installed or its model " \
+                   f"is not available to the provider right now."
+        self.members.append(model)
+        self.emit("team", {"action": "wake", "model": model})
+        return f"**{self.name(model)}** is awake."
+
+    def set_lead(self, model: str) -> str:
+        """Change the leader mid-session. `lead` is read fresh at each use, so this is safe
+        between turns; a turn already in flight keeps the lead it started with."""
+        if model not in REGISTRY:
+            raise TeamError(f"unknown model '{model}'")
+        if model in TEXT_ONLY:
+            raise TeamError(f"'{model}' is text-only (no file or tool access) and can't lead")
+        if model not in self.members:
+            if model not in REGISTRY.available():
+                raise TeamError(f"'{model}' isn't installed, so it can't lead")
+            self.members.append(model)  # leading implies being in the room
+            self.emit("team", {"action": "wake", "model": model})
+        previous = self.lead
+        self.lead = model
+        self.emit("team", {"action": "lead", "model": model, "previous": previous})
+        return f"**{self.name(model)}** is the lead now" + \
+               (f" (was {self.name(previous)})." if previous != model else ".")
 
     async def ask(self, agent: str, prompt: str, cwd: str | None = None, schema: dict | None = None) -> str:
         """backend.run, passing a JSON schema when the backend supports one; output is always cleaned."""
@@ -251,6 +344,8 @@ class Orchestrator:
 
     async def execute(self, request: str, tasks: list[Task]) -> str:
         """Run an (approved) plan, then have the lead summarize."""
+        self.all_tasks.extend(tasks)
+        self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
         self.emit("plan", {"tasks": tasks})
         await self.run_tasks(request, tasks)
 
@@ -265,6 +360,12 @@ class Orchestrator:
     async def run_tasks(self, request: str, tasks: list[Task]) -> None:
         by_id = {t.id: t for t in tasks}
         running: dict[asyncio.Task, Task] = {}
+        self.all_tasks.extend(tasks)
+
+        def _sync_busy() -> None:
+            """Recompute which models hold a live task. INVARIANT S-1 reads this, so it is
+            derived from task state rather than tracked separately — the two cannot disagree."""
+            self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
 
         def launch_ready():
             for t in tasks:
@@ -276,27 +377,41 @@ class Orchestrator:
                     self.emit("task", {"task": t})
                 elif all(d.status == "done" for d in deps):
                     t.status = "running"
+                    _sync_busy()
                     self.emit("task", {"task": t})
                     running[asyncio.create_task(self._run_one(request, t, deps))] = t
 
-        launch_ready()
-        while running:
-            finished, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
-            for f in finished:
-                t = running.pop(f)
-                try:
-                    t.output, t.status = clean_text(f.result()), "done"
-                    if t.notes:
-                        with open(t.notes, "a") as nf:
-                            nf.write(f"\n## {t.title} ({t.agent})\n\n{t.output.strip()}\n")
-                except Exception as e:  # one agent failing must not kill the room
-                    t.output, t.status = f"error: {e}", "failed"
-                self.emit("task", {"task": t})
+        try:
             launch_ready()
-            # a skip can cascade; keep resolving until nothing changes
-            while any(t.status == "pending" and any(by_id[d].status in ("failed", "skipped")
-                                                    for d in t.depends_on) for t in tasks):
+            while running:
+                finished, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+                for f in finished:
+                    t = running.pop(f)
+                    try:
+                        t.output, t.status = clean_text(f.result()), "done"
+                        if t.notes:
+                            with open(t.notes, "a") as nf:
+                                nf.write(f"\n## {t.title} ({t.agent})\n\n{t.output.strip()}\n")
+                    except Exception as e:  # one agent failing must not kill the room
+                        t.output, t.status = f"error: {e}", "failed"
+                    _sync_busy()
+                    self.emit("task", {"task": t})
                 launch_ready()
+                # a skip can cascade; keep resolving until nothing changes
+                while any(t.status == "pending" and any(by_id[d].status in ("failed", "skipped")
+                                                        for d in t.depends_on) for t in tasks):
+                    launch_ready()
+        finally:
+            # A cancelled turn (the user quit, or the run was interrupted) leaves its tasks still
+            # marked running. Recomputing the busy set from that stale status would wedge those
+            # models as unsleepable for the rest of the session, and leave the board claiming work
+            # is in flight when nothing is. Mark them failed so the truth reaches the UI.
+            for t in self.all_tasks:
+                if t.status in BUSY_STATUSES:
+                    t.output = t.output or "cancelled before it finished"
+                    t.status = "failed"
+                    self.emit("task", {"task": t})
+            _sync_busy()
 
     async def _run_one(self, request: str, t: Task, deps: list[Task]) -> str:
         dep_text = "".join(f"\nResult of {d.id} ({d.title}, by {d.agent}):\n{clip(d.output)}\n" for d in deps)

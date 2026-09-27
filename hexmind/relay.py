@@ -240,7 +240,140 @@ HELP = """**Commands**
 - `/ranks` each model's audit track record by domain
 - `/drafts on|off` the lead's plan waits for approval before anything runs · `/approve` run it · `/discard` drop it
 - `/nick MODEL NAME` give a model a nickname · `/nick MODEL` clear it · `/nick` list
+- `/team` the roster: who is awake, who is asleep, and what each model is for
+- `/models` every known model, what it is best at, and whether it is installed
+- `/model NAME` one model's full card
+- `/sleep NAME` put a model to sleep · `/wake NAME` bring it back
+- `/lead [NAME|recommend]` show, change, or ask the team who should lead
 - `/help` this list"""
+
+
+def _team_rows(orch) -> list[str]:
+    """One line per known model: awake/asleep, busy, and what it is for. Shared by /team and
+    /models so the two can never describe the roster differently."""
+    from .core import BUSY_STATUSES, REGISTRY
+
+    live = set(REGISTRY.available())
+    rows = []
+    for name in REGISTRY.by_weight():
+        m = REGISTRY.get(name)
+        if name in orch.members:
+            state = "**lead**" if name == orch.lead else "awake"
+            if name in orch.busy:
+                held = [t for t in orch.all_tasks if t.agent == name and t.status in BUSY_STATUSES]
+                state += f" · working {', '.join(t.id for t in held)}"
+        elif name in live:
+            state = "asleep"
+        else:
+            state = "not installed"
+        rows.append(f"- `{name}` — {state} · {m.label}: {m.best_at}")
+    return rows
+
+
+async def _cmd_team(orch, args: list[str]) -> str:
+    from .core import REGISTRY
+
+    if args and args[0] in REGISTRY:
+        return REGISTRY.describe(args[0])
+    awake = len(orch.members)
+    asleep = len(orch.asleep())
+    lines = [f"**Team** — {awake} awake, {asleep} asleep, lead **{orch.name(orch.lead)}**", ""]
+    lines += _team_rows(orch)
+    lines += ["", "A model that is working cannot be put to sleep until its task finishes. "
+              "`/sleep NAME` · `/wake NAME` · `/lead NAME` · `/model NAME`"]
+    return "\n".join(lines)
+
+
+async def _cmd_sleep_wake(orch, args: list[str], sleeping: bool) -> str:
+    from .core import REGISTRY, TeamBusy, TeamError
+
+    if not args:
+        verb = "/sleep" if sleeping else "/wake"
+        return f"Which model? e.g. `{verb} opencode-ling` — `/team` lists them all."
+    name = args[0]
+    try:
+        return orch.sleep(name) if sleeping else orch.wake(name)
+    except TeamBusy as e:
+        return f"**Not now.** {e}"
+    except TeamError as e:
+        return f"**{e}** — `/team` lists the known models."
+
+
+async def _cmd_lead(orch, args: list[str]) -> str:
+    from .core import REGISTRY, TeamError
+
+    if not args:
+        rows = [f"- `{m}` — {REGISTRY.get(m).label}: {REGISTRY.get(m).best_at}"
+                for m in REGISTRY.by_weight(orch.members)]
+        return f"**Lead is {orch.name(orch.lead)}.** Change it with `/lead NAME`, " \
+               f"or ask the team with `/lead recommend`.\n\n" + "\n".join(rows)
+    if args[0] == "recommend":
+        return await _lead_recommend(orch)
+    try:
+        return orch.set_lead(args[0])
+    except TeamError as e:
+        return f"**{e}**"
+
+
+RECOMMEND_PROMPT = """You are advising the user of a room of AI agent teammates. \
+{lead} is the current lead and is stepping back.
+
+Team members and what each is for:
+{roster}
+
+Track record (first-attempt peer-audit results, passed/audited):
+{stats}
+
+The lead plans the work, assigns tasks, summarises for the user, and is the one whose \
+judgement the room trusts. It does not need to be the strongest coder; it needs to be good \
+at decomposition, delegation and honest summarising.
+
+Recommend the best successor. Weigh the track record heavily, but note that a model with no \
+audits yet is not proven bad. Answer ONLY with JSON:
+{{"recommendation": "<member name>", "reason": "<two sentences, concrete>", "runner_up": "<member name>"}}"""
+
+
+async def _lead_recommend(orch) -> str:
+    """Ask the room who should lead, then tell the user who to promote.
+
+    The current lead is excluded from the candidates: a model asked to name its own successor
+    is being asked to grade itself, which is the one judgement its own track record cannot
+    inform. The user applies the change with /lead NAME.
+    """
+    from .core import REGISTRY, TEXT_ONLY, extract_json
+
+    candidates = [m for m in orch.members if m not in TEXT_ONLY and m != orch.lead]
+    if not candidates:
+        return "There is no one else in the room who can lead — every other member is asleep " \
+               "or text-only. `/wake NAME` first."
+    # The advisor is the best-tracked member who is NOT the outgoing lead, so the person being
+    # replaced is never the one grading the replacement. The lead appears in the prompt as
+    # context ("is stepping back") but is not asked.
+    advisor = orch.stats.ranked(candidates, "general")[0] if orch.stats else candidates[0]
+    roster = "\n".join(f"- {m}: {REGISTRY.get(m).best_at}" for m in candidates)
+    table = orch.stats.table(candidates) if orch.stats else "No audit results yet."
+    raw = await orch.ask(advisor, RECOMMEND_PROMPT.format(lead=orch.lead, roster=roster, stats=table))
+    try:
+        data = extract_json(raw)
+        pick = data.get("recommendation")
+    except Exception:
+        pick = None
+    # A recommendation may name a model that is currently asleep — promoting it wakes it, and
+    # "you should promote opencode-ultra, it is idle but it is the right pick" is a real answer.
+    # What cannot be recommended is a text-only model, which can never lead.
+    leadable = {m for m in REGISTRY.names() if m not in TEXT_ONLY}
+    if pick not in leadable:
+        best = orch.stats.ranked(candidates, "general")[0] if orch.stats else candidates[0]
+        return (f"**{orch.name(advisor)}** did not name a valid successor, so this is the track "
+                f"record's own pick: **{orch.name(best)}**. Apply it with `/lead {best}`.")
+    reason = str(data.get("reason", "")).strip()
+    runner = data.get("runner_up")
+    asleep_note = "" if pick in orch.members else f"\n\n`{pick}` is asleep right now — promoting it wakes it."
+    out = (f"Advised by **{orch.name(advisor)}**: **{orch.name(pick)}** should replace "
+           f"**{orch.name(orch.lead)}** as lead." + (f" {reason}" if reason else "") + asleep_note)
+    if runner in leadable:
+        out += f"\n\nRunner-up: **{orch.name(runner)}** — `/lead {runner}` if you'd rather not switch."
+    return out + "\n\nThe team is only advising; nothing changes until you run `/lead`."
 
 
 async def command(orch, text: str) -> str:
@@ -290,6 +423,14 @@ async def command(orch, text: str) -> str:
             return "unknown model"
         reply = "**Nicknames**\n" + "\n".join(f"- {m} → **{orch.name(m)}**" if m in orch.nicknames
                                                 else f"- {m} _(no nickname)_" for m in orch.members)
+    elif cmd in ("/team", "/models", "/model"):
+        reply = await _cmd_team(orch, args)
+    elif cmd == "/sleep":
+        reply = await _cmd_sleep_wake(orch, args, sleeping=True)
+    elif cmd == "/wake":
+        reply = await _cmd_sleep_wake(orch, args, sleeping=False)
+    elif cmd == "/lead":
+        reply = await _cmd_lead(orch, args)
     elif cmd == "/ranks":
         table = orch.stats.table(orch.members) if orch.stats else ""
         for m in orch.nicknames:
@@ -367,7 +508,6 @@ async def run_relay(orch, ns) -> str:
 
     orch.emit("plan", {"tasks": tasks})
     await orch.run_tasks(goal, tasks)
-
     per_chain = [tasks[k * len(chain.stages):(k + 1) * len(chain.stages)] for k in range(n)]
     status = "\n".join(f"- chain {LABELS[k]}: " + ", ".join(f"{t.id} {t.status}" for t in ts)
                        for k, ts in enumerate(per_chain))
