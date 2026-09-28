@@ -56,29 +56,43 @@ launch   which(cli) per member            → who could be here
 
 `--scan` on the command line does the same before the room opens, for scripts.
 
-### Scanned models are *discovered*, not *curated*
+### Scanned models are a *catalogue*, not members
 
-A scan can turn up models `models.toml` has never heard of — that is the point of scanning. So
-the registry grows a second kind of member:
+A scan can turn up models `models.toml` has never heard of — that is the point of scanning. Measured
+on this machine, `opencode models` returns 101 ids and Ollama adds 21 more, against 16 curated
+entries. Most of the finds **cannot do the job**:
 
-| | curated (`models.toml`) | discovered (a scan) |
-| :--- | :--- | :--- |
-| `best_at`, `avoid_for` | authored | **empty** |
-| `domains` | authored | empty |
-| in `/team` and `/models` | yes, with its card | yes, marked `no profile` |
-| routable by the lead | yes | **yes, but blind** |
-| `weight` | authored | default |
+```
+google/gemini-2.5-flash-image          ← returns an image, cannot edit a file
+openai/gpt-image-1.5                  ← same
+google/gemini-2.5-pro-preview-tts      ← text to speech
+google/deep-research-max-preview      ← a research agent, not a coder
+```
 
-An undiscovered model is registered and usable, but the lead is told explicitly that it has no
-guidance for it:
+So a scan writes a **catalogue** — a cache at `~/.local/share/hexmind/catalogue.json` — and changes
+no registry entry at all. `/profile` is the one deliberate act that turns a find into a member.
+The alternative considered, registering finds as no-profile members the lead routes to blind, was
+rejected on the arithmetic: 122 rows of which ~90 cannot edit a file, in `/team`, in every prompt,
+and in the audit ranking, with a "no profile" branch needed in six places.
 
-> `opencode/some-new-model` — discovered by a scan, no profile in models.toml. I have no
-> `best_at` or `avoid_for` for it. Tell me what it is for, or `/profile NAME` to record it.
+| | curated (`models.toml`) | in the catalogue (a find) | promoted (`/profile`) |
+| :--- | :--- | :--- | :--- |
+| in the registry | yes | **no** | yes |
+| in `/team` | yes | no | yes |
+| routable by the lead | yes | no | yes |
+| `best_at` | authored | — | **you write it** |
 
-That is the honest failure mode, and it is what keeps R7 intact: you cannot misuse a model
-whose strengths nobody has written down, because the program says so out loud instead of
-guessing. `/profile NAME best_at=… avoid_for=… domains=…` writes the entry to
-`~/.config/hexmind/models.toml` so it becomes curated from then on.
+`/profile NAME best_at="…"` writes a real entry to `~/.config/hexmind/models.toml` — the overlay
+that already exists, already wins per-table, and is already documented in the bundled file. Nothing
+in the backends changes: `DIRECT_CMDS` is generated from the registry and the opencode family is
+uniform (`opencode run --auto -m <id>`), so promoting a model is a TOML row, not a code edit.
+
+**`best_at` is required.** It is the routing signal — the line the lead reads when deciding who
+gets a task — and a member without one is a name in `/team` that nothing can be assigned to. The
+refusal says so, and points at `/found`.
+
+A promoted member is `opt_in` (so a launch never silently gains one) and weighted one below the
+lowest curated entry (so `by_weight` cannot prefer a find over a hand-chosen member).
 
 ---
 

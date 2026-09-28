@@ -13,6 +13,7 @@ Room usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import shlex
 import subprocess
@@ -348,6 +349,8 @@ HELP = """**Commands**
 - `/sleep NAME` put a model to sleep · `/wake NAME` bring it back
 - `/add NAME` bring in a model this session never had · `/remove NAME` take one out for good
 - `/recommend [REQUEST]` ask the lead who it wants for this request · `/go` hand the roster back for a plan · `/cancel` drop the proposal
+- `/scan` catalogue what is installed but not yet a member · `/found [PROVIDER]` browse it
+- `/profile NAME best_at="…" [avoid_for="…" domains=a,b]` make a find a member
 - `/lead [NAME|recommend]` show, change, or ask the team who should lead
 - `/help` this list"""
 
@@ -408,6 +411,171 @@ async def _cmd_roster_change(orch, args: list[str], verb: str) -> str:
         return f"**Not now.** {e}"
     except TeamError as e:
         return f"**{e}** — `/team` lists the known models."
+
+
+async def _cmd_scan(orch, args: list[str]) -> str:
+    """Catalogue what is installed and not yet a member. Deliberately writes no registry entry.
+
+    A scan on this machine turns up a hundred-odd model ids, most of which cannot edit a file —
+    image and speech models, research agents. Making those members would mean a roster of entries
+    with no `best_at` for the lead to route by, in `/team` and in every prompt. So a scan produces
+    a catalogue, and `/profile` is the one deliberate act that turns a find into a member."""
+    from . import models as models_mod
+    from .core import REGISTRY
+
+    if args:
+        return "Bad /scan arguments: it takes none. `/found [PROVIDER]` browses what a scan found."
+    # to_thread, not a bare call: discover() is a subprocess and an HTTP request, and this is the
+    # event loop the room is running on.
+    try:
+        entries = await asyncio.to_thread(models_mod.discover)
+    except OSError as e:  # pragma: no cover - discover() swallows per-source failures itself
+        return f"**Scan failed:** {e}"
+    if not entries:
+        return "**Nothing found.** No `opencode` CLI on PATH and no Ollama answering on " \
+               f"`{os.environ.get('OLLAMA_HOST', 'http://127.0.0.1:11434')}`. `/models` still lists " \
+               "every curated member and whether it is installed."
+    entries = models_mod.align_entries(entries, REGISTRY.models)
+    path = models_mod.save_catalogue(entries)
+    known = set(orch.known)
+    fresh = [e for e in entries if e["name"] not in known]
+    providers = {}
+    for e in fresh:
+        providers.setdefault(e["provider"], []).append(e["name"])
+    headline = (f"**Scanned {len(entries)} models**, {len(fresh)} of them not members yet. "
+                f"Catalogue written to `{path}`.")
+    lines = [headline, ""]
+    for provider, names in sorted(providers.items()):
+        lines.append(f"- **{provider}** ({len(names)}): " + ", ".join(f"`{n}`" for n in names[:8])
+                     + (f", … {len(names) - 8} more" if len(names) > 8 else ""))
+    tail = ("None of these are in the room, and `/add` will not take one: a member with no "
+            "`best_at` is a member the lead cannot route to. Promote the ones you want with "
+            "`/profile NAME best_at=\"...\"` — that is the deliberate step.")
+    lines += ["", tail]
+    return "\n".join(lines)
+
+
+def _cmd_found(orch, args: list[str]) -> str:
+    """Browse the catalogue. Output, not a modal: a catalogue is looked at rarely, and 93 rows in a
+    screen would need its own keyboard model and its own phone layout to earn."""
+    from . import models as models_mod
+    from .core import REGISTRY
+    data = models_mod.load_catalogue()
+    entries = models_mod.align_entries(data.get("models") or [], REGISTRY.models)
+    if not entries:
+        return "No catalogue yet. `/scan` looks for what is installed — it is the slow command " \
+               "(one subprocess and one HTTP call), which is why launch does not do it."
+    wanted = args[0].lower() if args else ""
+    rows = [e for e in entries if not wanted or wanted in (e["provider"] or "").lower()
+            or wanted in e["name"].lower() or wanted in e["model"].lower()]
+    if not rows:
+        return f"Nothing in the catalogue matches `{args[0]}`." if args else "Nothing to show."
+    stamp = f" · scanned {data['scanned_at']}" if data.get("scanned_at") else ""
+    matched = f" matching `{args[0]}`" if args else ""
+    lines = [f"**{len(rows)} of {len(entries)} found**{matched}{stamp}", "",
+             "| model | provider | member name | status |", "| :--- | :--- | :--- | :--- |"]
+    for e in rows[:60]:
+        # lead / awake / asleep is the vocabulary /team already uses, and "not a member" is the
+        # only new word here: a find that has not been promoted.
+        if e["name"] == orch.lead:
+            status = "**lead**"
+        elif e["name"] in orch.members:
+            status = "awake"
+        elif e.get("curated"):
+            status = "asleep"  # a real member this room is not using right now
+        else:
+            status = "not a member"
+        lines.append(f"| `{e['model']}` | {e['provider']} | `{e['name']}` | {status} |")
+    if len(rows) > 60:
+        lines.append(f"| … | | | {len(rows) - 60} more — narrow it with a provider name |")
+    lines += ["", "Promote one with `/profile NAME best_at=\"what it is for\"`."]
+    return "\n".join(lines)
+
+
+def _cmd_profile(orch, args: list[str]) -> str:
+    """The gate. Writes a real member entry to the user overlay, then republishes everything derived
+    from the registry, because six module-level values were computed at import and a member that is
+    only half-present is worse than one that is absent."""
+    from . import models as models_mod
+    from .core import REGISTRY
+
+    if not args:
+        return "Which model, and what is it for? e.g. `/profile opencode-grok-code " \
+               "best_at=\"fast focused implementation\" domains=implementation,tests`"
+    name = args[0]
+    # `best_at=fast focused implementation` arrives as four tokens, and the natural thing to type is
+    # exactly that — so words after a field are folded back onto it. Quoting works too; forgiving
+    # here costs one line and saves a confusing "bad argument" on the main way anyone will use it.
+    folded: list[str] = []
+    for token in args[1:]:
+        if "=" in token or not folded:
+            folded.append(token)
+        else:
+            folded[-1] += " " + token
+    fields: dict = {}
+    for token in folded:
+        key, sep, value = token.partition("=")
+        if not sep:
+            return f"Bad /profile argument `{token}` — it must be key=value, e.g. `best_at=\"...\"`."
+        fields[key.strip()] = value.strip()
+    if "best_at" not in fields:
+        return "**`best_at` is required.** It is the routing signal: it is the line the lead reads " \
+               "when deciding who gets a task, and a member without one is a name with no purpose. " \
+               "`/found` lists what is waiting to be profiled."
+
+    accepted = {"label", "best_at", "avoid_for", "domains", "cli", "verify", "tier", "model",
+                "weight", "color", "opt_in", "think", "variant", "text_only", "footprint", "env",
+                "fallback_for"}
+    unknown = sorted(set(fields) - accepted)
+    if unknown:
+        # Refused before anything is written. Writing first and complaining afterwards would leave
+        # the model in the overlay file and absent from the registry — the half-promoted state this
+        # command exists to avoid.
+        return f"**Unknown field(s):** {', '.join(unknown)}. Accepted: {', '.join(sorted(accepted))}."
+
+    known_entry = name in REGISTRY
+    entry = None
+    if not known_entry:
+        catalogue = {e["name"]: e for e in (models_mod.load_catalogue().get("models") or [])}
+        entry = catalogue.get(name)
+        if not entry:
+            return f"**`{name}` is not a member and not in the catalogue.** `/found` lists what a " \
+                   f"scan found; `/scan` refreshes it."
+    try:
+        written = models_mod.upsert_profile(name, {
+            "label": entry["label"] if entry else REGISTRY.get(name).label,
+            "best_at": fields.pop("best_at"),
+            "avoid_for": fields.pop("avoid_for", entry["model"] if entry else ""),
+            "domains": [d for d in fields.pop("domains", "").split(",") if d],
+            "cli": entry["cli"] if entry else REGISTRY.get(name).cli,
+            "verify": entry["verify"] if entry else REGISTRY.get(name).verify,
+            "tier": entry["tier"] if entry else REGISTRY.get(name).tier,
+            "model": entry["model"] if entry else REGISTRY.get(name).model,
+            # One below the lowest curated weight, read rather than guessed: a constant would
+            # silently tie with the local models the day someone lowers a curated weight, and
+            # by_weight would then be free to put a find next to a hand-chosen member.
+            "weight": int(fields.pop("weight", min(
+                (m.weight for m in REGISTRY.models.values() if m.name != name), default=20) - 1 or 1)),
+            "color": entry["color"] if entry else REGISTRY.get(name).color,
+            # opt_in: never auto-joins a session. `/add NAME` is the explicit way in.
+            "opt_in": fields.pop("opt_in", "true").lower() in ("true", "yes", "1"),
+        })
+    except (OSError, ValueError) as e:
+        return f"**Could not write the profile:** {e}"
+    changed = models_mod.publish(REGISTRY)
+    if name not in REGISTRY:  # pragma: no cover - would mean the file did not parse back
+        return f"**Wrote `{written}` but the registry did not pick it up.** Check the file for a " \
+               f"duplicate `[models.{name}]` table."
+    if name not in orch.known:
+        orch.known.append(name)  # the session snapshot, or /add would call it unknown
+    return f"**{REGISTRY.get(name).label}** (`{name}`) is a member.\n\n" \
+           f"- **Best at:** {REGISTRY.get(name).best_at}\n" \
+           f"- **Not for:** {REGISTRY.get(name).avoid_for or '—'}\n" \
+           f"- **Profile:** `{written}`\n" \
+           + (f"- Registry republished: {', '.join(changed)}\n" if changed else "") \
+           + f"- Weight {REGISTRY.get(name).weight}, opt_in so it never auto-joins a session.\n" \
+             f"- `/wake {name}` to bring it into this room (`/add` is for a model this session " \
+             f"never had; a promoted one is known now)."
 
 
 async def _cmd_assembly(orch, args: list[str], verb: str) -> str:
@@ -583,6 +751,12 @@ async def command(orch, text: str) -> str:
         reply = posted
     elif cmd == "/cancel":
         reply = await _cmd_assembly(orch, args, "cancel")
+    elif cmd == "/scan":
+        reply = await _cmd_scan(orch, args)
+    elif cmd == "/found":
+        reply = _cmd_found(orch, args)
+    elif cmd == "/profile":
+        reply = _cmd_profile(orch, args)  # a few hundred bytes of TOML, like /nick's save
     elif cmd == "/lead":
         reply = await _cmd_lead(orch, args)
     elif cmd == "/ranks":

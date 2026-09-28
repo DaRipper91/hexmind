@@ -39,6 +39,9 @@ DIRECT_CMDS: dict[str, list[str]] = {
 
 # Free OpenCode Zen models. Prompts go over stdin, so there is no argv length ceiling.
 # --format json (plan WS-4) will replace the bare stdout read with a session-aware event stream.
+# Which keys came from the registry, so a mid-session profile can replace exactly these and leave the
+# hand-written CLIs above alone (see models.publish).
+GENERATED: set[str] = {n for n, m in REGISTRY.models.items() if m.cli == "opencode" and m.model}
 DIRECT_CMDS.update({
     name: ["opencode", "run", "--auto", "-m", m.model]
     for name, m in REGISTRY.models.items() if m.cli == "opencode" and m.model

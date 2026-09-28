@@ -1,7 +1,7 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `2c058bf` plus this turn's work
-(**pushed**), **303 tests passing**. Every row below was re-checked against the
+Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `ddb2085` plus this turn's work
+(**pushed**), **320 tests passing**. Every row below was re-checked against the
 code, not carried forward on trust — which is how the previous version came to claim `/add` and
 `/remove` work when neither command exists.
 
@@ -99,7 +99,7 @@ Setting a lead now also restores `known`, not just `members` — `/remove` can d
 lead missing from `known` would be running the room while being invisible to `/team`.
 
 *Remaining: `backends.available()` and `Registry.available()` are two functions with overlapping
-jobs. Harmless while unused, a bug the moment `/scan` needs one of them.*
+jobs. Both are read by `/scan` and `/profile` now, so this is the last item in WS-2.*
 
 **WS-3** **Done.** `set_lead`, `/lead`, `/lead recommend` and the startup `LeadPicker` modal all
 land. A session opened without a lead blocks on the picker until one is chosen (one candidate is
@@ -131,20 +131,20 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 | 2 | ~~per-stage isolation check~~ | — | **done** `79a57ce`: escalates between stages and names the one that did it |
 | 3 | ~~`Assembly` + `/go` `/cancel` `/recommend`~~ | — | **done**: the lead proposes, the user edits the live room, `/go` makes it review the disagreement and plan against what it was given |
 | 3a | ~~`/add` `/remove` — change the roster at runtime~~ | — | **done**: `Orchestrator.add`/`remove`; a model with no registry entry is refused and pointed at `/scan` `/profile` |
-| 4 | `/scan` + discovered-vs-curated + `/profile` | 3a | the user asked for it; needs something to add models to |
+| 4 | ~~`/scan` + discovered-vs-curated + `/profile`~~ | — | **done**: a scan writes a catalogue and no registry entry; `/profile` promotes one find, `best_at` required |
 | 5 | `ASSEMBLY_SCHEMA` with chains + skills | 3 | extends the plan contract |
 | 6 | `hexmind-lead` skill (`opencode-muse` authors, `opencode-ultra` reviews) | 3 | last on purpose: describe a lead that exists |
-| 7 | reconcile the two `available()` functions | 3a | 3a makes the registry's version the real one |
+| 7 | reconcile the two `available()` functions | — | `/scan` and `/profile` both read `Registry.available()`; make the registry's the real one and delete the duplicate |
 | 8 | WS-9 roster advisor | 3, WS-8 | needs a coverage check to be safe |
 | 9 | WS-11 journals | P1 | makes sleeping safe *and* records the work |
 | 10 | WS-4 sessions — the big one | nothing | 3–4 h of concurrency and event parsing; the cwd hazard needs its guard on day one |
 | 11 | WS-6 remainder: 6 local models, `think`, normalisation | nothing | independent |
 | 12 | WS-5 remainder: weight in `fallback()` and rotation | 4 | independent |
 
-**3a, 3 and the `--serve --timeout` bug are all closed.** The lead proposes a roster, the user
+**3a, 3, 4 and the `--serve --timeout` bug are all closed.** The lead proposes a roster, the user
 edits the live one with `/add` `/remove` `/sleep` `/wake`, and `/go` makes the leader plan against
 the room the user actually settled on — told what it dropped and what that costs. What is left of
-this area: `ASSEMBLY_SCHEMA` (chains and skills, design §4) and `/scan` `/profile` (TODO 4).
+this area: `ASSEMBLY_SCHEMA` (chains and skills, design §4) is what is left.
 
 ---
 
