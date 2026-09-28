@@ -1,25 +1,17 @@
 import asyncio
-import os
-import json
 import pytest
 import subprocess
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from hexmind.jules import (
     parse_github_repo,
     get_github_repo,
     get_starting_branch,
-    create_session,
-    get_session,
-    fetch_activities,
     parse_activity,
     run,
 )
 from hexmind.auditor import (
     parse_verdict,
-    audited_run,
-    AUDIT_SCHEMA,
-    Stats,
 )
 
 

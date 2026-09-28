@@ -20,7 +20,6 @@ from hexmind.core import Task
 from hexmind.qt import theme
 from hexmind.qt.graph import (
     GraphPanel,
-    TaskGraphView,
     compute_layers,
     layer_positions,
 )

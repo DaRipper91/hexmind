@@ -7,7 +7,6 @@ from hexmind.auditor import (
     pick_auditor,
     parse_verdict,
     audited_run,
-    DOMAINS,
 )
 
 

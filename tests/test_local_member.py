@@ -7,7 +7,6 @@ import pytest
 
 import hexmind.backends as backends
 from hexmind.core import Orchestrator, TEXT_ONLY
-from hexmind.relay import Chain, Stage, assign
 
 
 @pytest.fixture(autouse=True)

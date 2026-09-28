@@ -29,7 +29,7 @@ import threading
 import weakref
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal, QStringListModel
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,

@@ -8,7 +8,7 @@ import asyncio
 import pytest
 
 from hexmind.core import (BUSY_STATUSES, REGISTRY, Orchestrator, Task, TeamBusy, TeamError,
-                          ROSTER, TEXT_ONLY)
+                          TEXT_ONLY)
 from hexmind.relay import command
 
 
