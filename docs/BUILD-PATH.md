@@ -92,6 +92,7 @@ listed as part of this flow) shipped separately as WS-12.
 | chain provenance recorded in the chain notes | `relay.py` | `ddaf390` |
 | tests can no longer write the real `~/.config` (session-wide redirect) | `tests/conftest.py` | `f60566c` |
 | the `Registry.available` instance-shadow trap is closed | `tests/conftest.py` | `f60566c` |
+| **2026-09-28 audit fixes (11 tasks)** — server bind/auth/CORS, approve directives, gate warning, parse_plan findings, Qt audit checkbox, turn serialization, Jules branch detection, corrupt stats, quota-reassign, example chain paths, TUI/Qt low-risk | see `docs/plans/2026-09-28-hexmind-fixes.md` | `0d5755f`..`4fb60e3` |
 
 ---
 
