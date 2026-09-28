@@ -11,10 +11,12 @@ def plan(tasks, reply="ok"):
 
 
 def test_parse_plan_fixes_unknown_agent_and_bad_deps():
-    _, tasks = parse_plan(plan([
+    _, tasks, findings = parse_plan(plan([
         {"id": "a", "title": "x", "agent": "gpt9", "instructions": "i", "depends_on": ["zzz", "a"]},
     ]), ["claude", "agy"], "claude")
     assert tasks[0].agent == "claude" and tasks[0].depends_on == []
+    assert any("gpt9" in f for f in findings), f"expected agent finding, got {findings}"
+    assert any("zzz" in f for f in findings), f"expected dep finding, got {findings}"
 
 
 def test_parse_plan_rejects_cycle():
@@ -83,13 +85,13 @@ def test_skip_cascades_even_when_dependents_are_listed_first():
 
 def test_parse_plan_accepts_string_depends_on_and_trailing_braces():
     text = plan([{"id": "t1", "agent": "claude"}, {"id": "t2", "agent": "claude", "depends_on": "t1"}])
-    _, tasks = parse_plan(text + "\nNote: use {curly} braces carefully.", ["claude"], "claude")
+    _, tasks, _ = parse_plan(text + "\nNote: use {curly} braces carefully.", ["claude"], "claude")
     assert tasks[1].depends_on == ["t1"]
 
 
 def test_parse_plan_accepts_string_tasks_and_ignores_invalid_items():
     text = plan(["write unit tests", {"id": "t2", "title": "fix bug", "agent": "agy"}, 12345, None])
-    reply, tasks = parse_plan(text, ["claude", "agy"], "claude")
+    reply, tasks, _ = parse_plan(text, ["claude", "agy"], "claude")
     assert reply == "ok"
     assert len(tasks) == 2
     assert tasks[0].id == "t1"

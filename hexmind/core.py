@@ -36,8 +36,8 @@ TEXT_ONLY = REGISTRY.text_only()
 OPT_IN = REGISTRY.opt_in()
 
 # A member failure that means "out of quota", not "bad work": hand the task to someone else.
-QUOTA_RE = re.compile(r"usage limit|quota|rate.?limit|\b429\b|exceeded your|credit balance|"
-                      r"subscription does not have access|out of credits", re.IGNORECASE)
+QUOTA_RE = re.compile(r"usage limit|quota exceeded|exceeded your (current )?quota|rate.?limit|\b429\b|"
+                      r"credit balance|subscription does not have access|out of credits", re.IGNORECASE)
 
 # Lead plans are forced into this shape on CLIs that support structured output.
 PLAN_SCHEMA = {
@@ -310,8 +310,15 @@ def clip(text: str, n: int = 4000) -> str:
     return text if len(text) <= n else text[:n] + "\n... [truncated]"
 
 
-def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task]]:
-    """Validate the lead's plan: known agents, known deps, no cycles."""
+def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task], list[str]]:
+    """Validate the lead's plan: known agents, known deps, no cycles.
+
+    Returns ``(reply_text, tasks, findings)`` where ``findings`` are strings
+    describing silently-accepted repairs (unknown agent → lead, unknown dep →
+    dropped). Callers surface these findings to the room rather than letting
+    the plan silently coerce agent assignments.
+    """
+    findings: list[str] = []
     data = extract_json(text)
     if "tasks" in data and not isinstance(data["tasks"], list) and data.get("tasks") is not None:
         raise ValueError("tasks field must be a list")
@@ -325,7 +332,12 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
                                   depends_on=[],
                                   domain="general", gate=False))
             elif isinstance(t, dict):
-                agent = t.get("agent") if t.get("agent") in members else lead
+                raw_agent = t.get("agent")
+                if raw_agent is not None and raw_agent not in members:
+                    findings.append(
+                        f"task {t.get('id', f't{i+1}')}: agent '{raw_agent}' is not a "
+                        f"known member; falling back to lead '{lead}'")
+                agent = raw_agent if raw_agent in members else lead
                 tasks.append(Task(id=str(t.get("id") or f"t{i + 1}"), title=t.get("title", "task"),
                                   agent=agent, instructions=t.get("instructions", t.get("title", "")),
                                   depends_on=[str(d) for d in _as_list(t.get("depends_on"))],
@@ -334,7 +346,11 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
     if len(ids) != len(tasks):
         raise ValueError("duplicate task ids in plan")
     for t in tasks:
+        old_deps = t.depends_on
         t.depends_on = [d for d in t.depends_on if d in ids and d != t.id]
+        dropped = [d for d in old_deps if d not in ids and d != t.id]
+        if dropped:
+            findings.append(f"task {t.id}: dropped unknown dependency {', '.join(dropped)}")
     # cycle check: repeatedly peel off tasks whose deps are all peeled
     done: set[str] = set()
     while len(done) < len(tasks):
@@ -345,7 +361,7 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
     reply = data.get("reply", "")
     if not reply and not tasks:
         raise ValueError("plan has neither reply nor tasks")
-    return reply, tasks
+    return reply, tasks, findings
 
 
 # A lead writing JSON is told to use a boolean, but models say "yes" and "on" out of habit, and
@@ -745,10 +761,13 @@ class Orchestrator:
         finally:
             self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
-            reply, tasks = parse_plan(raw, actual, self.lead)
+            reply, tasks, plan_findings = parse_plan(raw, actual, self.lead)
         except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
-            reply, tasks = raw.strip(), []
+            reply, tasks, plan_findings = raw.strip(), [], []
         directives = parse_directives(raw, tasks)
+        if plan_findings:
+            for f in plan_findings:
+                self.emit("message", {"from": "hexmind", "text": f"⚠️ {f}"})
         if dropped or added:
             review = "\n".join(lines)
             reply = f"**Roster adjusted.** {review}\n\n{reply}" if reply else f"**Roster adjusted.** {review}"
@@ -791,11 +810,14 @@ class Orchestrator:
             schema=ASSEMBLY_SCHEMA)
         self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
-            reply, tasks = parse_plan(raw, self.members, self.lead)
+            reply, tasks, plan_findings = parse_plan(raw, self.members, self.lead)
         except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
             # lead answered in prose instead of JSON: treat it as a direct answer
-            reply, tasks = raw.strip(), []
+            reply, tasks, plan_findings = raw.strip(), [], []
         directives = parse_directives(raw, tasks)
+        if plan_findings:
+            for f in plan_findings:
+                self.emit("message", {"from": "hexmind", "text": f"⚠️ {f}"})
         self.emit("message", {"from": self.lead, "text": reply})
         if self._nothing_to_run(tasks, directives):
             self._apply_audit(directives)

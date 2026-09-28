@@ -60,3 +60,12 @@ def test_quota_failure_hands_task_to_next_member_other_failures_do_not():
     asyncio.run(Orchestrator(b2, ["claude", "codex"], "claude", lambda k, d: events.append((k, d))).handle("go"))
     task = next(d["tasks"][0] for k, d in events if k == "plan")
     assert (task.agent, task.status) == ("codex", "failed")
+
+
+def test_quota_re_matches_billing_signals_not_stray_numbers():
+    from hexmind.core import QUOTA_RE
+    for hit in ["HTTP 429 Too Many Requests", "You exceeded your current quota",
+                "Quota exceeded for model", "Your subscription does not have access to this model"]:
+        assert QUOTA_RE.search(hit), hit
+    for miss in ["error at line 14290", "see issue #4291", "the quota field in config.toml"]:
+        assert not QUOTA_RE.search(miss), miss
