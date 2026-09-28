@@ -33,7 +33,7 @@ def main() -> None:
     p.add_argument("--host", default="127.0.0.1", help="server host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
     p.add_argument("--token", default=None, metavar="TOKEN",
-                   help="auth token for the server (required if host is 0.0.0.0)")
+                   help="auth token for the server; required off loopback (or set HEXMIND_TOKEN)")
     args = p.parse_args()
 
     from .core import OPT_IN

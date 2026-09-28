@@ -361,3 +361,16 @@ def test_the_server_extra_is_actually_declared():
         assert re.search(rf"^\s*(import {module}\b|from {module}\b)", source, re.MULTILINE), \
             f"{module} is no longer imported by server.py; trim the extra"
         assert module in declared, f"{module} is imported by server.py and named by no extra"
+
+
+def test_serve_refuses_a_non_loopback_host_without_a_token(monkeypatch):
+    """The --token help promised a token was required off loopback; the server only printed a
+    warning and served unauthenticated on every interface."""
+    import types
+
+    from hexmind import server as server_mod
+
+    monkeypatch.delenv("HEXMIND_TOKEN", raising=False)
+    monkeypatch.setitem(sys.modules, "uvicorn", types.SimpleNamespace(run=lambda *a, **k: None))
+    with pytest.raises(SystemExit, match="without a token"):
+        server_mod.run_server(cwd=".", host="0.0.0.0")

@@ -20,9 +20,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .backends import DirectBackend, HcomBackend, available
-from .core import ROSTER, OPT_IN, TEXT_ONLY, Orchestrator, Task
+from .core import ROSTER, OPT_IN, Orchestrator, Task
 from .auditor import Stats, DOMAINS
-from .config import load_nicknames, save_nicknames
+from .config import save_nicknames
 from .relay import list_chains, load_chain
 
 logger = logging.getLogger(__name__)
@@ -547,10 +547,12 @@ def run_server(
 ) -> None:
     import uvicorn
 
-    if host == "0.0.0.0":
-        print("⚠️  WARNING: binding to 0.0.0.0 exposes the server to all network interfaces. "
-              "Use --host 127.0.0.1 (default) or set HEXMIND_TOKEN for auth. "
-              "See README.md for security guidance.")
+    token = token or os.environ.get("HEXMIND_TOKEN", "")
+    # Off loopback, anyone who can reach the port can drive agents that write files, so a token
+    # is a precondition rather than a warning that scrolls past.
+    if host not in ("127.0.0.1", "localhost", "::1") and not token:
+        raise SystemExit(f"hexmind: refusing to serve on {host} without a token. "
+                         "Pass --token or set HEXMIND_TOKEN, or use --host 127.0.0.1.")
 
     server = HexmindServer(
         cwd=cwd,
@@ -564,11 +566,8 @@ def run_server(
     )
     server._port = port
     server._host = host
-    server._token = token or os.environ.get("HEXMIND_TOKEN", "")
+    server._token = token
     app = create_app(server, token=server._token)
-    if host == "0.0.0.0" and not server._token:
-        print("⚠️  WARNING: binding to 0.0.0.0 without HEXMIND_TOKEN. "
-              "Set HEXMIND_TOKEN or use --host 127.0.0.1 for safety.")
     print(f"🚀 Hexmind server listening on http://{host}:{port} (ws://{host}:{port}/ws/room)")
     print(f"📁 Workspace: {server.cwd}")
     print(f"🤖 Team: {', '.join(server.orch.members)} (Lead: {server.orch.lead})")

@@ -566,9 +566,9 @@ with a `ModuleNotFoundError`.
 | `WS /ws/room` | full-duplex event stream: `init`, `message`, `plan`, `task`, `status`, `busy_state` |
 
 > [!WARNING]
-> By default the server binds `127.0.0.1` (loopback only). Set `--host 0.0.0.0` to
-> accept connections from other interfaces, or export `HEXMIND_TOKEN` to require a
-> bearer token on every `/api/` request. CORS is restricted to `localhost:8765` and
+> By default the server binds `127.0.0.1` (loopback only). Any other `--host` (e.g.
+> `0.0.0.0`) refuses to start without a token (`--token` or `HEXMIND_TOKEN`), which is then
+> required on every `/api/` request and on `/ws/room`. CORS is restricted to `localhost:8765` and
 > `127.0.0.1:8765` by default; the permissive wildcard policy is removed. Agents run
 > with edits auto-accepted, so keep the server on a trusted network or behind a
 > proxy that authenticates. See [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md).
