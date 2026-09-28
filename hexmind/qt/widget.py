@@ -197,9 +197,22 @@ class _Room(QThread):
         self.teamChanged.emit()
 
     def stop(self) -> None:
-        if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        self.wait(3000)
+        """Idempotent, and safe to call from atexit after the loop is already gone.
+
+        Both halves of that matter. `closeEvent` stops the room, the widget stays referenced by
+        whatever hosted it, and the atexit hook then finds the same room in `_LIVE_ROOMS` and stops
+        it a second time — at which point `call_soon_threadsafe` raises "Event loop is closed". A
+        host app that closes its window properly got a traceback on the way out, which is how this
+        was found: from Aether, embedding the widget for real, not from the test suite.
+        """
+        loop = self._loop
+        if loop is not None and not loop.is_closed() and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:  # closed between the check and the call
+                pass
+        if self.isRunning():
+            self.wait(3000)
 
 
 class HexmindWidget(QWidget):
@@ -239,6 +252,12 @@ class HexmindWidget(QWidget):
         self._room.turnState.connect(self._on_turn_state)
         self._room.start()
         self._room.wait_until_ready()
+        # Defence in depth for the embed case. `closeEvent` is the tidy path, but a host that
+        # embeds this and exits without closing it — a shell that stops its own workers and not
+        # its guests' — would take the process down with "QThread: Destroyed while thread is still
+        # running", which is an abort, not an exception. A widget that cannot be embedded without
+        # the host doing exactly the right thing is not a widget, it is a contract.
+        _ensure_app().aboutToQuit.connect(self._room.stop)
         if lead is None:
             self._on_message("hexmind", "No lead yet — choose one above before asking for anything.")
         self.refresh_team()

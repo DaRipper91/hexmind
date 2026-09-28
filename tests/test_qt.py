@@ -310,3 +310,18 @@ def test_the_docs_smoke_line_works_verbatim():
         env={**__import__("os").environ, "QT_QPA_PLATFORM": "offscreen"})
     assert result.returncode == 0, f"the documented smoke line failed:\n{result.stderr[-800:]}"
     assert result.stdout.strip().endswith("HexmindWidget"), result.stdout
+
+
+def test_stopping_twice_is_harmless(qapp):
+    """`closeEvent` stops the room, the widget stays referenced by its host, and the atexit hook
+    finds the same room again and stops it a second time. `call_soon_threadsafe` on a closed loop
+    raises "Event loop is closed", so a host app that closed its window properly got a traceback on
+    the way out. Found from Aether, embedding the widget for real — the test suite never saw it,
+    because pytest tears the process down differently from `close()` then exit."""
+    widget = HexmindWidget(backend=FakeBackend(), members=["claude"], lead="claude")
+    room = widget._room
+    widget.close()
+    assert not room.isRunning()
+    room.stop()  # must not raise
+    assert not room.isRunning()
+    widget.close()
