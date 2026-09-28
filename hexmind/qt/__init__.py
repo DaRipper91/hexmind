@@ -15,4 +15,8 @@ imports Aether, and this widget runs standalone.
 """
 from .widget import HexmindWidget
 
-__all__ = ["HexmindWidget"]
+try:
+    from .graph import GraphPanel, TaskGraphView
+    __all__ = ["HexmindWidget", "GraphPanel", "TaskGraphView"]
+except Exception:  # pragma: no cover - graph is presentation only
+    __all__ = ["HexmindWidget"]
