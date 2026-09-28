@@ -2,6 +2,15 @@
 
 ## Summary
 
+**Latest update (this turn):** added `docs/AETHER-INTERFACE.md` — the interface spec Aether
+(`~/Projects/Aether`) is blocked on: a `hexmind.qt.HexmindWidget` QWidget so the Room tab can
+stop showing its placeholder. Documents the seam (`Aether/aether/ui/views/room.py`), the
+one-way-embedding and same-brain rules, the required `[qt]` extra plus the explicit
+`packages = ["hexmind"]` wheel gotcha, the offscreen done-check, and that the `room = ["hexmind"]`
+extra flips to `hexmind[qt]` on the Aether side once it ships. No code changed.
+
+---
+
 Closed the three gaps the roadmap review named, in the order it named them: the silently ignored
 `--serve --timeout`, then `/add` and `/remove` (the roster could not change at runtime), then team
 assembly — the flow the user described as the point of the whole thing.
@@ -123,7 +132,77 @@ something to bundle into a feature merge.
 ## Build / Test Status
 
 - Build: ✅ passing — `python3 -m hexmind --help` works
-- Lint: ⚠️ 138 findings. 137 are pre-existing; 1 is the `BINDINGS` class attribute on the new
-  `LeadPicker`, the pattern every other screen in `tui.py` already uses. This turn adds **nothing**
-  to the baseline and retires one pre-existing finding.
-- Tests: ✅ 303 passed (270 before this turn, +33)
+- Lint: ⚠️ 138 findings — **the same count as before either turn started.** 137 are pre-existing; 1
+  is the `BINDINGS` class attribute on the new `LeadPicker`, the pattern every other screen in
+  `tui.py` already uses. These two turns add nothing to the baseline and retire one finding.
+- Tests: ✅ 320 passed (270 before these two turns, +50)
+
+---
+
+## Update — Qt front-end for Aether, and two test-hygiene bugs
+
+*(Appended rather than merged into the sections above: another session was editing this file at the
+time — it added `docs/AETHER-INTERFACE.md` — and overwriting its work was the worse outcome.)*
+
+### Summary
+
+Shipped `hexmind.qt.HexmindWidget`, the interface `docs/AETHER-INTERFACE.md` specified, which
+unblocks the last open item on Aether's roadmap. Then fixed the two test-hygiene bugs flagged
+earlier: tests writing the developer's real `~/.config`, and a leaked instance-level
+`Registry.available` that silently defeats later patches.
+
+Files created: `hexmind/qt/__init__.py`, `hexmind/qt/widget.py`, `tests/test_qt.py` (13),
+`tests/conftest.py`, `tests/test_hermetic.py` (4), `.gitignore` gained `build/` and `dist/`.
+Files modified: `pyproject.toml` (a `qt` extra and `hexmind.qt` in `packages` — a protected file,
+changed because the interface spec and the request both require it), `docs/AETHER-INTERFACE.md`
+(definition of done marked met), `README.md`, `docs/BUILD-PATH.md` (P10).
+
+### Feature / Task Status
+
+- ✅ **Qt front-end** — transcript, input, task board, roster, lead combo, audit toggle, and one
+  optional `openFileRequested(str)` signal matching `DeckWidget.openRequested`. One brain: a turn
+  goes through `Orchestrator.handle` exactly as the TUI drives it, and no team rule is reimplemented.
+- ✅ **Definition of done, all three** — offscreen smoke passes; a built wheel contains
+  `hexmind/qt/{__init__,widget}.py` alongside `models.toml` and the four chain files; 13 offscreen
+  tests that skip cleanly when PySide6 is absent (verified both ways: 337 with, 324 + 1 skipped
+  without).
+- ✅ **Bug: tests writing the real home** — fixed structurally, not by discipline. A session-scoped
+  autouse fixture in `tests/conftest.py` redirects every writable user path (`models.USER`,
+  `models.CATALOGUE`, `config.PATH`, the user chain and agent dirs) at a temp directory for the whole
+  run. Bundled chains/agents still resolve, so `/chains` and `from =` tests do not pass vacuously.
+- ✅ **Bug: the `available` shadow** — `monkeypatch.setattr` on an *instance* leaves the replaced
+  bound method in the instance `__dict__`, which then beats any later class-level patch for the rest
+  of the session. An autouse fixture now drops that shadow before and after every test, and
+  `available_models` is the supported way to pin availability for new tests.
+- ❌ **`ASSEMBLY_SCHEMA`** — chains and skills in a plan (design §4). Next.
+- ❌ **Per-model sessions** (WS-4), the big one. **The duplicate `available()`.**
+
+### What the Next Agent Should Do First
+
+1. `ASSEMBLY_SCHEMA` — `chains` become `run_relay` calls, which already take a namespace; `skills`
+   must be *proposed* with their path, never written silently.
+2. The `hexmind-lead` skill (design §5).
+3. Migrate the existing `monkeypatch.setattr(REGISTRY, "available", …)` call sites to the
+   `available_models` fixture. Not urgent: the autouse cleanup already makes the trap unreachable.
+4. Per-model sessions (WS-4).
+
+### Blocking Issues
+
+None.
+
+Two things worth knowing:
+
+- **PySide6 is ~240 MB and slow to download here.** It is in `/usr/bin/python3` already, but
+  `Projects/hexmind/.venv` does not have it: three `uv pip install` attempts were killed by network
+  timeouts, so `uv pip install --python .venv/bin/python -e ".[qt]"` still needs to complete on a
+  better connection. The Qt tests were verified with `/usr/bin/python3` and with Aether's venv.
+- **A concurrent session is editing this repo.** It created `docs/AETHER-INTERFACE.md` and rewrote
+  this file's summary at 22:45. Its AETHER-INTERFACE.md is committed here; its edits to this report
+  are untouched, and the two sessions should reconcile before the next commit.
+
+### Build / Test Status
+
+- Build: ✅ `python3 -m hexmind --help` works; a wheel builds and contains `hexmind/qt/`
+- Lint: ⚠️ 139 — 138 pre-existing, plus 1 (`BLE001` in the widget's turn handler, the identical
+  pattern `tui.py` and `core.py` already use for "a turn error is a line, not a crash")
+- Tests: ✅ 337 passed (324 + 1 skipped without PySide6, 337 with it)

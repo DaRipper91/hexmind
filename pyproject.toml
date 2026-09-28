@@ -5,6 +5,12 @@ description = "Multi-model agent team (Claude, agy, Codex, Jules) in one chat ro
 requires-python = ">=3.11"
 dependencies = ["textual>=0.80"]
 
+[project.optional-dependencies]
+# The Qt front-end (hexmind.qt.HexmindWidget) is strictly opt-in: PySide6 is a ~100 MB dependency
+# and every Textual TUI user would otherwise be made to install it. Aether embeds the widget via
+# its own `room = ["hexmind[qt]"]` extra. See docs/AETHER-INTERFACE.md.
+qt = ["PySide6>=6.5"]
+
 [project.scripts]
 hexmind = "hexmind.__main__:main"
 
@@ -13,7 +19,10 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["hexmind"]
+# Explicit, so a new subpackage is a deliberate line here. `hexmind.qt` was silently left out of a
+# wheel once already: it works perfectly from the editable .venv and fails on a clean install, which
+# is the worst way for a packaging gap to show up.
+packages = ["hexmind", "hexmind.qt"]
 
 [tool.setuptools.package-data]
 hexmind = ["chains/*.toml", "models.toml"]

@@ -652,6 +652,8 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **Roster changes at runtime:** `/add` and `/remove` alongside `/sleep` and `/wake`
 - [x] **`/scan` → `/found` → `/profile`:** catalogue what is installed (122 models here, 16 curated),
       then promote one deliberately by writing what it is for
+- [x] **Qt front-end** — `from hexmind.qt import HexmindWidget`, the same room as a widget, behind
+      the opt-in `qt` extra. Embeds in [Aether](docs/AETHER-INTERFACE.md)
 - [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](docs/TEAM-ASSEMBLY.md))
 
 **Next** — see [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map and

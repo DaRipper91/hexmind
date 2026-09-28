@@ -1,7 +1,7 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `ddb2085` plus this turn's work
-(**pushed**), **320 tests passing**. Every row below was re-checked against the
+Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `8d9ffe9` plus this turn's work
+(**pushed**), **337 tests passing** (13 of them Qt, skipped without the `qt` extra). Every row below was re-checked against the
 code, not carried forward on trust — which is how the previous version came to claim `/add` and
 `/remove` work when neither command exists.
 
@@ -29,6 +29,7 @@ proceed until something else lands.
 | P6 | WS-8 plan audit | **PART** | the `audit` chain shipped; the **traceability matrix and `/audit-plan` did not** |
 | P7 | WS-9 roster advisor | **TODO** | `/lead recommend` is adjacent but is not the over-provisioning advisor |
 | P8 | WS-11 journals | **TODO** | nothing built |
+| P10 | Qt front-end (`hexmind.qt`) | **DONE** | `HexmindWidget`; one brain with the TUI, worker-threaded; unblocks Aether's last roadmap item |
 | P9 | WS-12 `/relay clean` | **DONE** | `reaping.py`; pushed, and used for real: it reaped the merged chain's worktree and kept the stage reports |
 
 Team Assembly steps 1–7 in `TEAM-ASSEMBLY.md`: **steps 1 and 3 DONE** (no default lead, mount-safe
