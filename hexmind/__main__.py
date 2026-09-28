@@ -30,8 +30,10 @@ def main() -> None:
                    help="per-call agent timeout (default: 1800). A relay stage doing a full TDD cycle "
                         "can legitimately exceed 30 minutes, so raise this for long chains")
     p.add_argument("--serve", action="store_true", help="start headless WebSocket & REST API server")
-    p.add_argument("--host", default="0.0.0.0", help="server host (default: 0.0.0.0)")
+    p.add_argument("--host", default="127.0.0.1", help="server host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
+    p.add_argument("--token", default=None, metavar="TOKEN",
+                   help="auth token for the server (required if host is 0.0.0.0)")
     args = p.parse_args()
 
     from .core import OPT_IN
@@ -85,6 +87,7 @@ def main() -> None:
                 audit=args.audit,
                 approve_plans=args.approve_plans,
                 timeout=args.timeout,
+                token=args.token,
             )
         except ImportError as e:
             # --serve is a documented surface, so its dependencies are an extra rather than base

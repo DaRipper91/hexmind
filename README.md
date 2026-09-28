@@ -566,10 +566,12 @@ with a `ModuleNotFoundError`.
 | `WS /ws/room` | full-duplex event stream: `init`, `message`, `plan`, `task`, `status`, `busy_state` |
 
 > [!WARNING]
-> The server binds `0.0.0.0` with a permissive CORS policy and **no authentication**, and the
-> agents behind it run with edits auto-accepted. Anyone who can reach the port can drive agents
-> that write files. Keep it on a trusted network, or put it behind a proxy that authenticates.
-> Closing this is tracked in [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md).
+> By default the server binds `127.0.0.1` (loopback only). Set `--host 0.0.0.0` to
+> accept connections from other interfaces, or export `HEXMIND_TOKEN` to require a
+> bearer token on every `/api/` request. CORS is restricted to `localhost:8765` and
+> `127.0.0.1:8765` by default; the permissive wildcard policy is removed. Agents run
+> with edits auto-accepted, so keep the server on a trusted network or behind a
+> proxy that authenticates. See [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md).
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
