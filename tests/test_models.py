@@ -56,14 +56,17 @@ def test_tier_and_verify_are_valid_and_consistent():
 
 # ---------- the variant field: declared in toml, has to reach the CLI ----------
 
-def test_a_declared_variant_reaches_the_generated_argv():
+def test_a_declared_variant_reaches_the_ref():
     """`variant` used to be rendered on the /model card and on no argv, so a registry that asked for
     high reasoning effort silently got the CLI default. -m takes provider/model#variant, so the
-    suffix is the whole wiring, and the generated command is the only place it can happen."""
-    assert REGISTRY.get("opencode-ultra").variant, "the fixture must actually declare a variant"
-    argv = backends.DIRECT_CMDS["opencode-ultra"]
-    assert argv[-1] == f'{REGISTRY.get("opencode-ultra").model}#{REGISTRY.get("opencode-ultra").variant}'
-    assert argv[-1].count("#") == 1, "a ref must not be suffixed twice"
+    suffix is the whole wiring. A synthetic model, not the registry: the bundled nemotron entries
+    declare no variant (opencode rejects them), and the user overlay can change what the registry holds."""
+    from hexmind.models import Model
+
+    m = Model(name="x", label="x", best_at="x", cli="opencode", verify="path", tier="cloud",
+              model="opencode/some-model", variant="high")
+    assert m.ref == "opencode/some-model#high"
+    assert m.ref.count("#") == 1, "a ref must not be suffixed twice"
 
 
 def test_ref_is_the_bare_id_when_there_is_no_variant():
@@ -302,7 +305,7 @@ def test_opencode_team_chain_shape_is_the_adversarial_pipeline():
 
 def test_opencode_team_pinned_assignment_is_honoured():
     """The whole point of the chain: with --assign pinned, rotate must NOT be used."""
-    from hexmind.relay import Chain, Stage, assign, list_chains, load_chain
+    from hexmind.relay import assign, list_chains, load_chain
 
     chain = load_chain(list_chains()["opencode-team"])
     members = ["claude", "agy", "codex", *ALL_OPENCODE]

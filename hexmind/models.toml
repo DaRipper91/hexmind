@@ -53,6 +53,8 @@ color = "green"
 footprint = "cloud · fast and focused"
 
 # ── free OpenCode Zen models: all eight verified present in `opencode models` on 2026-09-27 ──
+# No `variant` on these: opencode 2.0.18 rejects `#minimal` and `#high` on both nemotron models
+# ("Variant unavailable", checked live 2026-09-28). Declare one only after `opencode run -m id#v` works.
 
 [models.opencode]
 label = "NVIDIA Nemotron 3.5 Lightning (Free)"
@@ -66,7 +68,6 @@ tier = "cloud"
 weight = 100
 color = "bright_blue"
 footprint = "cloud · sub-second"
-variant = "minimal"
 
 [models.opencode-ultra]
 label = "NVIDIA Nemotron 3 Ultra (Free)"
@@ -80,7 +81,6 @@ tier = "cloud"
 weight = 100
 color = "blue"
 footprint = "cloud · heavy CoT"
-variant = "high"
 
 [models.opencode-muse]
 label = "Meta Muse Spark 1.3 (Free)"
