@@ -1,7 +1,7 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `7c71fd2`
-(**pushed**, nothing unpushed), **270 tests passing**. Every row below was re-checked against the
+Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `2c058bf` plus this turn's work
+(**pushed**), **303 tests passing**. Every row below was re-checked against the
 code, not carried forward on trust — which is how the previous version came to claim `/add` and
 `/remove` work when neither command exists.
 
@@ -19,7 +19,7 @@ proceed until something else lands.
 | :--- | :--- | :--- | :--- |
 | P0 | WS-1 registry | **DONE** | `models.toml` + `models.py`; `ROSTER` generated; D2/D4/D6 closed |
 | P0 | verify stdin | **DONE** | stdin confirmed, no arg ceiling |
-| P1 | WS-2 team management | **PART** | `/sleep` `/wake` work; **`/add` and `/remove` do not exist**; `backends.available()` and `Registry.available()` still overlap |
+| P1 | WS-2 team management | **DONE** | `/sleep` `/wake` `/add` `/remove` all work; the two `available()` functions are the only thing left |
 | P1 | WS-7 descriptions | **PART** | `/models` `/model NAME` cards exist; no browsable modal |
 | P1 | WS-10 `/team` surface | **DONE** | `TeamScreen` built by the `opencode-team` chain, INVARIANT S-1 in the UI |
 | P2 | WS-3 leader control | **DONE** | `set_lead` + `/lead` + `/lead recommend` + the startup `LeadPicker` modal all land |
@@ -83,13 +83,23 @@ chain left behind are recorded under Risks below rather than left in a queue.
 
 ## PART — the named gap in each
 
-**WS-2** Two gaps, and the first one is bigger than it was scored. `/sleep` and `/wake` work;
-**`/add` and `/remove` were never built** — `models.py:226` names them in a docstring, which is
-probably how the previous version of this map came to list them as working. So the roster cannot
-be changed at runtime at all, and `/scan` (TODO 4) has nothing to add to yet. Separately,
-`backends.available()` and `Registry.available()` are two functions with overlapping jobs, harmless
-while unused and a bug the moment `/add` needs one of them. *Gap: build `/add` `/remove`, then
-delete one `available()`.*
+**WS-2** **Done, apart from the duplicate `available()`.** Four verbs, one shape, one refusal
+path: `/sleep` parks a session and is reversible, `/wake` revives it, `/add` brings in a model this
+session never had (one added to `models.toml` after launch, or excluded at start), and `/remove`
+forgets it for the session while leaving its registry entry, stats and nickname alone. Both
+refusals come from the orchestrator (`can_sleep`, `can_retire`) and the UI disables the control
+from the same answer, so a command and a click cannot disagree.
+
+`/add` deliberately refuses a model with no registry entry, and says so: the roster every prompt is
+generated from is `models.toml`, so a model with no entry has no `best_at`, no `avoid_for` and no
+colour, and admitting one at runtime would build a roster nothing else agrees with. `/scan` finds
+what is installed; `/profile` is what turns a find into a member.
+
+Setting a lead now also restores `known`, not just `members` — `/remove` can drop a model, and a
+lead missing from `known` would be running the room while being invisible to `/team`.
+
+*Remaining: `backends.available()` and `Registry.available()` are two functions with overlapping
+jobs. Harmless while unused, a bug the moment `/scan` needs one of them.*
 
 **WS-3** **Done.** `set_lead`, `/lead`, `/lead recommend` and the startup `LeadPicker` modal all
 land. A session opened without a lead blocks on the picker until one is chosen (one candidate is
@@ -119,8 +129,8 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 | :--- | :--- | :--- | :--- |
 | 1 | ~~startup leader picker~~ | — | **done** `7c71fd2`: `LeadPicker`; `/lead` with no lead says so |
 | 2 | ~~per-stage isolation check~~ | — | **done** `79a57ce`: escalates between stages and names the one that did it |
-| 3 | `Assembly` + `/go` `/cancel` `/recommend` | nothing | **now the user's core flow and the next thing to build** |
-| 3a | `/add` `/remove` — change the roster at runtime | nothing | WS-2's real gap; `/scan` and `/go` both need it |
+| 3 | ~~`Assembly` + `/go` `/cancel` `/recommend`~~ | — | **done**: the lead proposes, the user edits the live room, `/go` makes it review the disagreement and plan against what it was given |
+| 3a | ~~`/add` `/remove` — change the roster at runtime~~ | — | **done**: `Orchestrator.add`/`remove`; a model with no registry entry is refused and pointed at `/scan` `/profile` |
 | 4 | `/scan` + discovered-vs-curated + `/profile` | 3a | the user asked for it; needs something to add models to |
 | 5 | `ASSEMBLY_SCHEMA` with chains + skills | 3 | extends the plan contract |
 | 6 | `hexmind-lead` skill (`opencode-muse` authors, `opencode-ultra` reviews) | 3 | last on purpose: describe a lead that exists |
@@ -131,8 +141,10 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 | 11 | WS-6 remainder: 6 local models, `think`, normalisation | nothing | independent |
 | 12 | WS-5 remainder: weight in `fallback()` and rotation | 4 | independent |
 
-**3 is the next thing to build.** The usability blocker (1) is closed and the correctness gap (2) is
-closed, so nothing is standing between this code and a room a person can actually sit in and use.
+**3a, 3 and the `--serve --timeout` bug are all closed.** The lead proposes a roster, the user
+edits the live one with `/add` `/remove` `/sleep` `/wake`, and `/go` makes the leader plan against
+the room the user actually settled on — told what it dropped and what that costs. What is left of
+this area: `ASSEMBLY_SCHEMA` (chains and skills, design §4) and `/scan` `/profile` (TODO 4).
 
 ---
 
@@ -142,8 +154,8 @@ closed, so nothing is standing between this code and a room a person can actuall
 | :--- | --- |
 | merge conflict on `relay.py` with the chain | **happened, resolved.** Only `tests/test_relay.py` actually conflicted; `relay.py` auto-merged with all three work sets intact. The real risk was a *silent* one: the chain's rewrite dropped two imports a main-side test needed, which compiles and then fails at runtime |
 | isolation check is after-the-fact | per-stage fix landed, but it is still detection, not prevention — a genuine jail would need a filesystem sandbox |
-| `--serve --timeout N` is silently ignored | **open.** `run_server()` takes no timeout, so the backend is built with 1800 s no matter what the flag says. Found by the chain, left as out of scope. Needs a `server.py` change |
-| `/add` and `/remove` do not exist | **open.** The roster cannot change at runtime; this map previously listed both as working |
+| `--serve --timeout N` was silently ignored | **fixed.** `run_server` and `HexmindServer` take the timeout and hand it to the backend; the test covers argv → main → run_server → backend with only uvicorn stopped |
+| `/add` and `/remove` did not exist | **fixed.** Both built, so the roster changes at runtime and `/scan` has something to add to |
 | shared-mode relays get **zero** isolation verification | unresolved trade-off; the current gate is a blunt disable |
 | `Stats` is one or two samples deep | `opencode-ultra` is 0/2 on architecture. The rankings are a prior, not evidence yet |
 | audit chain ignored "read-only" and edited `main` | prompt-level control is worthless; only the after-the-fact check caught it |

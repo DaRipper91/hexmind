@@ -446,6 +446,11 @@ The lead knows the nicknames, so you can just say *"have Rex review it"*.
 | `/model NAME` | one model's card: **best at**, **not for**, domains, live audit record |
 | `/sleep NAME` | put a model to sleep — refused while it is working ([Invariant S-1](#-the-team-and-who-is-awake)) |
 | `/wake NAME` | bring it back, re-checking its CLI is actually installed |
+| `/add NAME` | bring in a model this session never had (one added to `models.toml` after launch) |
+| `/remove NAME` | take a model out of the session for good; its history stays on disk |
+| `/recommend [REQUEST]` | ask the lead who it wants for this request — a proposal, not a decision |
+| `/go` | hand the roster you settled on back for a plan; the lead is told what you dropped |
+| `/cancel` | drop the proposal, keep the room |
 | `/lead [NAME\|recommend]` | show the leader, change it, or **ask the team** who should lead |
 | `/relay NAME\|GOAL [options]` | run a relay chain (see [options](#more-ways-to-relay)) |
 | `/relay clean [--force] [--all]` | reap finished runs' worktrees and branches; refuses any with uncommitted work |
@@ -641,6 +646,8 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **Headless server:** `--serve` with REST + WebSocket for a phone or web client
 - [x] **Jules**, **nicknames**, **mobile/touch layout**, **`--timeout`**
 - [x] **Startup leader picker** — a session with no lead blocks until you pick one
+- [x] **Roster changes at runtime:** `/add` and `/remove` alongside `/sleep` and `/wake`
+- [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](docs/TEAM-ASSEMBLY.md))
 
 **Next** — see [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map and
 [`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) for the design work
@@ -648,9 +655,9 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [ ] **Per-model sessions.** Every model keeps its own conversation across turns, keyed
       `(model, directory)` — opencode sessions are directory-bound and *hang* rather than error
 - [ ] **Live output.** A model should be visibly working instead of silent for up to 30 minutes
-- [ ] **Team assembly.** Leader recommends a roster, you edit it, hand it back, it plans against
-      what you chose — [design](docs/TEAM-ASSEMBLY.md)
 - [ ] **Per-model journals** and the leader's over-provisioning advisor
+- [ ] **`/scan`** and `/profile`: find what is actually installed, and promote a find to a member
+- [ ] **Chains and skills from a plan:** `ASSEMBLY_SCHEMA`, so a lead can ask for a relay chain
 - [ ] **The local Ollama models** from the model report, with a per-model `think` flag
 - [ ] **Preference weighting** so the free opencode models are actually favoured
 - [ ] **hcom split-terminal mode:** watch each model work in its own pane

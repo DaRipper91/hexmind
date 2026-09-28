@@ -32,7 +32,7 @@ HELP = """[b]Keys[/b] (press [b]Esc[/b] to leave the input)
   [b]v[/b]        switch Chat / Tasks
   [b]i[/b] / Enter  type a message
   [b]j[/b] / [b]k[/b]    scroll chat / move task cursor
-  [b]t[/b]        the team roster: sleep, wake, lead
+  [b]t[/b]        the team roster: add, remove, sleep, wake, lead
   [b]c[/b]        clear chat
   [b]q[/b]        quit
   [b]?[/b]        this help

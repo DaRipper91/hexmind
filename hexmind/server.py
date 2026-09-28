@@ -79,8 +79,10 @@ class HexmindServer:
         audit: bool = False,
         approve_plans: bool = False,
         stats_path: Optional[str] = None,
+        timeout: int = 1800,
     ):
         self.cwd = os.path.abspath(cwd)
+        self.timeout = timeout
         self.backend_name = backend_name
         self.lead = lead
         self.without = without or []
@@ -95,7 +97,8 @@ class HexmindServer:
         if self.lead not in self.members and self.members:
             self.lead = self.members[0]
 
-        self.backend = (HcomBackend if self.backend_name == "hcom" else DirectBackend)(self.cwd)
+        self.backend = (HcomBackend if self.backend_name == "hcom" else DirectBackend)(
+            self.cwd, timeout=timeout)
         stats_file = stats_path or os.path.expanduser("~/.local/share/hexmind/stats.json")
         self.stats = Stats(stats_file)
         
@@ -377,6 +380,7 @@ def run_server(
     with_: Optional[List[str]] = None,
     audit: bool = False,
     approve_plans: bool = False,
+    timeout: int = 1800,
 ) -> None:
     import uvicorn
 
@@ -388,6 +392,7 @@ def run_server(
         with_=with_,
         audit=audit,
         approve_plans=approve_plans,
+        timeout=timeout,
     )
     app = create_app(server)
     print(f"🚀 Hexmind server listening on http://{host}:{port} (ws://{host}:{port}/ws/room)")

@@ -331,3 +331,158 @@ def test_help_lists_the_new_commands():
     reply = asyncio.run(command(make()[0], "/help"))
     for cmd in ("/team", "/models", "/model NAME", "/sleep NAME", "/wake NAME", "/lead"):
         assert cmd in reply
+
+
+# ---------- add / remove: a model this session never had, and one it forgets ----------
+
+def _session_without(*dropped):
+    """An orchestrator whose `known` set starts life without these models — what a session that was
+    launched with a narrow roster, or that has already used /remove, actually looks like."""
+    known = [m for m in REGISTRY.names() if m not in dropped]
+    events = []
+    orch = Orchestrator(FakeBackend(), ["claude", "agy"], "claude", emit=lambda k, d: events.append((k, d)),
+                        known=known)
+    return orch, events
+
+
+def test_add_brings_in_a_model_the_session_never_had(monkeypatch):
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "qwen"])
+    orch, events = _session_without("qwen")
+
+    reply = orch.add("qwen")
+
+    assert "is in the room" in reply
+    assert "qwen" in orch.members and "qwen" in orch.known
+    assert ("team", {"action": "add", "model": "qwen"}) in events
+
+
+def test_add_is_distinct_from_wake_and_says_which_one_you_want(monkeypatch):
+    """Both bring a model into the room, but /wake revives one that is still known and /add brings
+    in one that is not. Being unable to tell them apart is how a user ends up confused about why
+    a model is missing, so each answer names the other."""
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "qwen"])
+    orch, _ = _session_without("qwen")
+    orch.add("qwen")
+    orch.sleep("qwen")
+
+    assert "already known and asleep" in orch.add("qwen"), "/add must point at /wake"
+    assert "already in the room" in orch.add("agy")
+    assert "qwen" not in orch.members, "a no-op must not wake the model as a side effect"
+
+
+def test_adding_a_model_with_no_installed_cli_is_refused_with_a_reason(monkeypatch):
+    """The same guard `wake` uses: a model whose tool is missing must not be added into failing
+    tasks, and the answer has to say why rather than looking like success."""
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy"])
+    orch, _ = _session_without("qwen")
+
+    reply = orch.add("qwen")
+
+    assert "cannot be added" in reply and "not installed" in reply
+    assert "qwen" not in orch.known, "a refused add must not register the model anyway"
+
+
+def test_add_rejects_a_model_that_is_not_in_the_registry_at_all():
+    orch, _ = _session_without()
+    with pytest.raises(TeamError, match="unknown model"):
+        orch.add("gpt-9")
+
+
+def test_remove_drops_the_model_from_the_session_entirely():
+    """Unlike sleep, remove forgets the model: it must not reappear in /team, must not be offered
+    as lead, and /add is the only way back."""
+    orch, events = make()
+
+    reply = orch.remove("opencode-ling")
+
+    assert "out of the session" in reply
+    assert "opencode-ling" not in orch.members
+    assert "opencode-ling" not in orch.known
+    assert "opencode-ling" not in orch.asleep()
+    assert ("team", {"action": "remove", "model": "opencode-ling"}) in events
+
+
+def test_remove_keeps_the_registry_entry_its_stats_and_its_journal():
+    """Only the session forgets the model. Dropping the registry entry would destroy every audit
+    record and nickname ever learned about it."""
+    orch, _ = make()
+    orch.nicknames["opencode-ling"] = "Ling"
+    orch.remove("opencode-ling")
+
+    assert "opencode-ling" in REGISTRY.models
+    assert orch.nicknames["opencode-ling"] == "Ling"
+
+
+def test_a_working_model_cannot_be_removed():
+    orch, _ = make()
+    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
+    orch.busy = {"opencode-pickle"}
+
+    with pytest.raises(TeamBusy) as err:
+        orch.remove("opencode-pickle")
+
+    assert "working on t1" in str(err.value)
+    assert "opencode-pickle" in orch.members and "opencode-pickle" in orch.known
+
+
+def test_the_lead_cannot_be_removed_from_under_the_room():
+    orch, _ = make()
+    with pytest.raises(TeamBusy, match="is the lead"):
+        orch.remove("claude")
+    assert "claude" in orch.known, "a refused removal must not drop the lead from the session"
+
+
+def test_removing_something_the_session_does_not_have_says_so():
+    orch, _ = _session_without("qwen")
+    with pytest.raises(TeamBusy, match="not in this session"):
+        orch.remove("qwen")
+
+
+def test_a_model_removed_then_made_lead_comes_back_into_the_session(monkeypatch):
+    """remove takes a model out of `known`; set_lead puts it in `members`. If it did not restore
+    `known` too, the room would be led by a model that /team cannot see."""
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "codex"])
+    orch, _ = make()
+    orch.remove("codex")
+    assert "codex" not in orch.known
+
+    orch.set_lead("codex")
+
+    assert orch.lead == "codex"
+    assert "codex" in orch.known, "a lead must be visible to /team"
+    assert "codex" in orch.members
+
+
+# ---------- the commands ----------
+
+def test_add_and_remove_commands_round_trip(monkeypatch):
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "qwen"])
+    orch, _ = _session_without("qwen")
+
+    assert "is in the room" in asyncio.run(command(orch, "/add qwen"))
+    assert "qwen" in orch.members
+    assert "out of the session" in asyncio.run(command(orch, "/remove qwen"))
+    assert "qwen" not in orch.known
+
+
+def test_a_busy_model_reports_not_now_rather_than_crashing_the_message_loop():
+    orch, _ = make()
+    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
+    orch.busy = {"opencode-pickle"}
+
+    reply = asyncio.run(command(orch, "/remove opencode-pickle"))
+
+    assert "Not now" in reply and "t1" in reply
+    assert "opencode-pickle" in orch.known
+
+
+def test_add_and_remove_need_a_model_name():
+    orch, _ = make()
+    for verb in ("/add", "/remove"):
+        assert "Which model?" in asyncio.run(command(orch, verb))
+
+
+def test_help_lists_add_and_remove():
+    reply = asyncio.run(command(make()[0], "/help"))
+    for cmd in ("/add NAME", "/remove NAME"):
+        assert cmd in reply

@@ -76,6 +76,38 @@ class Task:
     auditor: str = ""
 
 
+@dataclass
+class Assembly:
+    """The pre-flight negotiation: leader recommends a roster, the user edits it, `/go` hands the
+    result back and the leader plans against the team the user actually chose.
+
+    There is one roster, not two. `/add` `/remove` `/sleep` `/wake` edit `orchestrator.members`
+    directly, so the proposal is never a second copy of the team that can drift from the live one —
+    `recommended` is kept only to show the lead what it asked for and what it got.
+    """
+    request: str = ""                                # the request the roster is being built for
+    recommended: list[str] = field(default_factory=list)  # the leader's pick, kept after /go
+    reasons: dict[str, str] = field(default_factory=dict)
+    room: list[str] = field(default_factory=list)    # who was in the room when it proposed
+
+    def dropped(self, actual: list[str]) -> list[str]:
+        """What the user took out. The lead reviews the disagreement, not just the final list."""
+        return [m for m in self.recommended if m not in actual]
+
+    def added(self, actual: list[str]) -> list[str]:
+        """What the user put in *since the proposal*, which is not the same as what the lead did
+        not ask for: a model that was already in the room when it recommended is not a change the
+        user made, and telling the lead it was would be noise on the one call that has to be
+        read carefully."""
+        return [m for m in actual if m not in self.room]
+
+
+# Returned by an operation that has already posted its own messages to the room, so the caller does
+# not post the same text twice. `execute` and `run_relay` behave this way; making it a value rather
+# than a convention is what stops a second copy reaching the user. Lives here, not in relay, because
+# core is the lower layer and imports relay lazily.
+POSTED = object()
+
 # A task in one of these states means its model is mid-edit, so INVARIANT S-1 applies to it.
 # Single source of truth: auditor.audited_run sets `auditing` and `revising`, and the sleep check
 # reads this rather than re-listing the states.
@@ -101,6 +133,74 @@ Rules:
 - Split work into phases with depends_on. Independent tasks run at the same time.
 - Tasks that edit the same files must not run in parallel; chain them with depends_on.
 - Set "gate": true only for high-impact tasks whose mistakes would break later work (core logic, migrations, security).
+- For a simple question or chat, answer directly in "reply" and return "tasks": [].
+"""
+
+RECOMMEND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "members": {"type": "array", "items": {"type": "string"}},
+        "reasons": {"type": "object", "additionalProperties": {"type": "string"}},
+    },
+    "required": ["members"],
+}
+
+# The review call is PLAN_SCHEMA unchanged: same plan, but asked against the roster the user
+# actually settled on. ASSEMBLY_SCHEMA (chains + skills) is the next step of the plan contract and
+# is deliberately not in here — see docs/TEAM-ASSEMBLY.md 4.
+
+RECOMMEND_PROMPT = """You are {lead} of a team of AI coding agents, and the user is deciding who
+should be in the room for one request.
+
+The user asked:
+{request}
+
+Every model hexmind knows about, and what it is good and bad at:
+{roster}
+
+Track record, where there is one:
+{stats}
+
+Which members do you want on this? Answer ONLY with a JSON object:
+{{"members": ["<name>", ...], "reasons": {{"<name>": "<one line, why this model>"}}}}
+
+Rules:
+- Use only names from the list above.
+- Prefer the fewest members that cover the work. An idle model costs a process and a session, and a
+  specialist you did not need is worse than a generalist that was.
+- If the request needs a kind of model that is not on the list, say so in a reason rather than
+  picking the nearest thing.
+- This is a proposal, not a decision. The user edits it and hands it back.
+"""
+
+REVIEW_PROMPT = """You are {lead} of a team of AI coding agents.
+
+You recommended these members for this request:
+{recommended}
+{reasons}
+The user settled on this room instead:
+{actual}
+{dropped}
+Your track record for this request:
+{stats}
+
+The user said:
+{request}
+
+Plan for the team the user actually chose, not the one you asked for. If dropping a member costs
+you something, say what it costs in "reply" before the plan. Then answer ONLY with a JSON object:
+{{"reply": "what the team will do, and anything the roster you were given cannot do",
+  "tasks": [{{"id": "t1", "title": "short title", "agent": "<team member>",
+             "instructions": "complete, self-contained instructions", "depends_on": [],
+             "domain": "<one of: {domains}>", "gate": false}}]}}
+
+Rules:
+- Assign each task to a member who is actually in the room you were given. Never plan for a model
+  the user removed, and never plan for one they never had.
+- The user may call members by nickname; in the JSON always use the member name.
+- Split work into phases with depends_on. Independent tasks run at the same time.
+- Tasks that edit the same files must not run in parallel; chain them with depends_on.
+- Set "gate": true only for high-impact tasks whose mistakes would break later work.
 - For a simple question or chat, answer directly in "reply" and return "tasks": [].
 """
 
@@ -210,6 +310,7 @@ class Orchestrator:
         from .config import load_nicknames
         self.nicknames: dict[str, str] = load_nicknames()  # model -> user's display name
         self.approve_plans = False  # True: the lead's plan waits for /approve or /discard
+        self.assembly: Assembly | None = None  # pending /recommend \u2192 /go negotiation
         self.pending: tuple[str, list[Task]] | None = None  # (request, tasks) awaiting approval
         self.busy: set[str] = set()  # models holding a non-terminal task; enforces INVARIANT S-1
         self.all_tasks: list[Task] = []  # every task this session, for the busy set and /team
@@ -267,6 +368,68 @@ class Orchestrator:
         self.emit("team", {"action": "wake", "model": model})
         return f"**{self.name(model)}** is awake."
 
+    def can_retire(self, model: str) -> tuple[bool, str]:
+        """(allowed, reason) for /remove, which is stronger than /sleep: sleep keeps the model
+        known so it comes back with `/wake`, retire drops it from this session entirely. It is
+        refused for the lead and for a busy model for the same reasons as sleep — INVARIANT S-1 is
+        about a model holding a live task, and a lead that is not in the room cannot answer."""
+        if model not in self.known:
+            return False, f"{self.name(model)} is not in this session"
+        if model == self.lead:
+            return False, f"{self.name(model)} is the lead — `/lead <model>` first"
+        if model in self.busy:
+            held = ", ".join(f"{t.id} {t.title}" for t in self.all_tasks
+                             if t.agent == model and t.status in BUSY_STATUSES)
+            return False, f"{self.name(model)} is working on {held} — it can be retired once that finishes"
+        return True, ""
+
+    def add(self, model: str) -> str:
+        """Bring a model into this session for the first time: it becomes known *and* awake.
+
+        Distinct from `/wake`, which revives a model that is already known (asleep). `/add` is for a
+        model hexmind was not tracking — one discovered by `/scan`, or one registered in models.toml
+        after the session started. An opt-in model is the whole point of this command: `--with` is
+        how you ask for one at launch, and `/add NAME` is how you ask for one mid-session.
+
+        Availability is re-checked here, not assumed: a model whose CLI is missing must not be
+        added into failing tasks, which is the same guard `wake` uses."""
+        if model not in REGISTRY:
+            # Deliberately a hard boundary. The roster every prompt is generated from is
+            # models.toml, so a model with no registry entry has no best_at, no avoid_for and no
+            # colour, and adding one at runtime would mean a roster nothing else agrees with.
+            # `/scan` finds what is installed; `/profile` is what turns a find into a member.
+            raise TeamError(f"unknown model '{model}' — `/scan` finds what is installed, "
+                            f"`/profile {model}` is what registers it")
+        if model in self.known:
+            if model in self.members:
+                return f"**{self.name(model)}** is already in the room."
+            return f"**{self.name(model)}** is already known and asleep — `/wake {model}` brings it back."
+        if model not in REGISTRY.available():
+            return f"**{self.name(model)}** cannot be added: its CLI is not installed or its model " \
+                   f"is not available to the provider right now."
+        self.known.append(model)
+        self.members.append(model)
+        self.emit("team", {"action": "add", "model": model})
+        return f"**{self.name(model)}** is in the room. {REGISTRY.get(model).best_at}."
+
+    def remove(self, model: str) -> str:
+        """Take a model out of this session for good: asleep *and* no longer known, so it will not
+        appear in `/team`, will not be offered by `/lead`, and `/add` is the only way back.
+
+        Its registry entry, stats and journal are untouched — only this session forgets it, so
+        nothing that was learned about the model is lost."""
+        if model not in REGISTRY:
+            raise TeamError(f"unknown model '{model}'")
+        allowed, reason = self.can_retire(model)
+        if not allowed:
+            raise TeamBusy(reason)
+        if model in self.members:
+            self.members.remove(model)
+        self.known.remove(model)
+        self.emit("team", {"action": "remove", "model": model})
+        return f"**{self.name(model)}** is out of the session. Its history stays on disk; " \
+               f"`/add {model}` brings it back."
+
     def set_lead(self, model: str) -> str:
         """Change the leader mid-session. `lead` is read fresh at each use, so this is safe
         between turns; a turn already in flight keeps the lead it started with."""
@@ -278,6 +441,9 @@ class Orchestrator:
             if model not in REGISTRY.available():
                 raise TeamError(f"'{model}' isn't installed, so it can't lead")
             self.members.append(model)  # leading implies being in the room
+            if model not in self.known:
+                self.known.append(model)  # ...and in this session: /remove can drop a model, and
+                # a lead that is not in `known` would be invisible in /team while running the room
             self.emit("team", {"action": "wake", "model": model})
         previous = self.lead
         self.lead = model
@@ -310,6 +476,121 @@ class Orchestrator:
         # ponytail: last 3 exchanges verbatim; summarize older ones if context gets tight
         lines = [f"User: {u}\nTeam: {a[:1500]}" for u, a in self.history[-3:]]
         return "Earlier in this room:\n" + "\n\n".join(lines) + "\n\n"
+
+    # ---------- team assembly: /recommend, /go, /cancel ----------
+    def _catalog(self) -> str:
+        """Every model hexmind knows, with the strengths the lead routes on — wider than `_roster`,
+        which describes the room. A recommendation has to be able to name a model that is not yet
+        in it, which is the whole point of asking before the roster is settled."""
+        lines = []
+        for name in REGISTRY.by_weight([m for m in self.known if m in REGISTRY]):
+            m = REGISTRY.get(name)
+            lines.append(f"- {name}: {m.best_at} · not for {', '.join(m.avoid_for) or 'nothing in particular'}")
+        return "\n".join(lines)
+
+    def _track_record(self, members: list[str]) -> str:
+        if not self.stats:
+            return "No audit history yet. Judge on best_at and avoid_for alone.\n"
+        table = self.stats.table(members)
+        return table if table.startswith("|") else "No audit history yet. Judge on best_at and avoid_for alone.\n"
+
+    async def recommend(self, request: str) -> str:
+        """Ask the current lead which members it wants for this request. One call, no tools, and it
+        changes nothing: the result is a proposal the user edits. The roster is not touched here."""
+        if self.lead is None:
+            raise TeamError("no lead yet — pick one with /lead NAME first")
+        if not request.strip():
+            raise TeamError("/recommend needs the request it is building a team for")
+        if not self.known:
+            raise TeamError("no models registered — check hexmind/models.toml")
+        self.assembly = Assembly(request=request.strip(), room=list(self.members))
+        self.emit("status", {"agent": self.lead, "state": "planning"})
+        try:
+            raw = await self.ask(self.lead, RECOMMEND_PROMPT.format(
+                lead=self.name(self.lead), request=self.assembly.request,
+                roster=self._catalog(), stats=self._track_record(list(self.known))),
+                schema=RECOMMEND_SCHEMA)
+        finally:
+            self.emit("status", {"agent": self.lead, "state": "idle"})
+        try:
+            data = extract_json(raw)
+            members = [m for m in (data.get("members") or []) if m in REGISTRY]
+            reasons = {k: v for k, v in (data.get("reasons") or {}).items() if k in REGISTRY}
+        except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
+            return f"**{self.name(self.lead)}** answered in prose instead of a team. Nothing changed — " \
+                   f"try `/recommend` again, or build the room by hand with `/wake` and `/add`."
+        if not members:
+            return f"**{self.name(self.lead)}** could not name a single usable member for this. " \
+                   f"Nothing changed — `/scan` looks for what is installed."
+        self.assembly.recommended, self.assembly.reasons = members, reasons
+        lines = [f"**{self.name(self.lead)} recommends** for __{request.strip()}__:", ""]
+        for m in members:
+            lines.append(f"- `{m}`" + (f" — {reasons[m]}" if m in reasons else ""))
+        note = ("A proposal, not a decision. `/add` and `/remove` change the room, `/wake` and "
+                "`/sleep` park members, then `/go` hands it back for a plan.")
+        lines += ["", note]
+        return "\n".join(lines)
+
+    async def assemble_go(self):
+        """Hand the room the user actually settled on back to the lead, which reviews the
+        disagreement and plans against it. Falls back to the ordinary plan path when there is no
+        pending assembly, so `/go` is never worse than typing the request."""
+        assembly = self.assembly
+        if assembly is None:
+            return ""
+        request, recommended, reasons = assembly.request, list(assembly.recommended), dict(assembly.reasons)
+        actual = list(self.members)
+        dropped, added = assembly.dropped(actual), assembly.added(actual)
+        if not actual:
+            self.assembly = None
+            return "**The room is empty.** `/wake` or `/add` someone, then `/go` again."
+        self.assembly = None  # consumed: a second /go must not re-review a spent assembly
+        from .auditor import DOMAINS
+        lines = []
+        if dropped:
+            lines.append(f"You asked for and the user dropped: {', '.join(dropped)}.")
+        if added:
+            lines.append(f"The user added: {', '.join(added)}.")
+        self.emit("status", {"agent": self.lead, "state": "planning"})
+        try:
+            raw = await self.ask(self.lead, REVIEW_PROMPT.format(
+                lead=self.name(self.lead), request=request,
+                recommended=", ".join(recommended) or "(nothing)",
+                reasons="\n".join(f"  {m}: {r}" for m, r in reasons.items()) + "\n" if reasons else "",
+                actual=", ".join(actual),
+                dropped=("\n".join(lines) + "\n") if lines else "",
+                stats=self._track_record(actual), domains=", ".join(DOMAINS)),
+                schema=PLAN_SCHEMA)
+        finally:
+            self.emit("status", {"agent": self.lead, "state": "idle"})
+        try:
+            reply, tasks = parse_plan(raw, actual, self.lead)
+        except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
+            reply, tasks = raw.strip(), []
+        if dropped or added:
+            review = "\n".join(lines)
+            reply = f"**Roster adjusted.** {review}\n\n{reply}" if reply else f"**Roster adjusted.** {review}"
+        self.emit("message", {"from": self.lead, "text": reply})
+        if not tasks:
+            self.history.append((request, reply))
+            return POSTED
+        if self.approve_plans:
+            self.pending = (request, tasks)
+            self.emit("message", {"from": "hexmind", "text":
+                                  "**Draft plan: nothing runs until you decide.** `/approve` to run it, "
+                                  "`/discard` to drop it."})
+            self.history.append((request, reply))
+            return POSTED
+        return await self.execute(request, tasks)
+
+    def cancel_assembly(self) -> str:
+        """Abandon the negotiation. The roster is untouched — it was never a copy — and the next
+        request plans against the room as it stands."""
+        if self.assembly is None:
+            return "Nothing to cancel — no team is being assembled."
+        who = self.assembly.request
+        self.assembly = None
+        return f"**Cancelled.** The proposal for _{who}_ is gone. The room is as you left it."
 
     async def handle(self, request: str) -> str:
         if request.startswith("/"):

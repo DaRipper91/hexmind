@@ -80,6 +80,7 @@ def main() -> None:
             with_=args.with_,
             audit=args.audit,
             approve_plans=args.approve_plans,
+            timeout=args.timeout,
         )
         return
 

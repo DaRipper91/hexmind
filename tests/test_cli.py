@@ -274,3 +274,34 @@ def test_text_only_lead_error_lists_only_models_that_can_lead(monkeypatch, tmp_p
         cli.main()
     assert "text-only" in str(err.value)
     assert "claude" in str(err.value) and "qwen" not in str(err.value).split("pick one of:")[1]
+
+
+def test_serve_hands_the_timeout_to_the_backend_too(monkeypatch, tmp_path):
+    """--serve built its backend inside HexmindServer and run_server took no timeout, so
+    `hexmind --serve --timeout 60` was accepted by argparse and then quietly used 1800. The help
+    text promises the flag applies to the agent, whichever surface you are on. The whole chain is
+    exercised: argv -> main -> run_server -> HexmindServer -> backend, with only uvicorn stopped."""
+    import types
+
+    import hexmind.__main__ as cli
+    from hexmind import server as server_mod
+
+    seen = {}
+
+    class RecordingBackend:
+        def __init__(self, cwd, timeout=1800):
+            seen["timeout"], self.cwd = timeout, cwd
+
+        async def run(self, agent, prompt, cwd=None, schema=None):
+            return ""
+
+    monkeypatch.setattr(server_mod, "DirectBackend", RecordingBackend)
+    monkeypatch.setattr(server_mod, "available", lambda members: ["claude"])
+    monkeypatch.setattr("hexmind.__main__.available", lambda members: ["claude"])
+    monkeypatch.setitem(sys.modules, "uvicorn", types.SimpleNamespace(run=lambda *a, **k: None))
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude",
+                                      "--serve", "--timeout", "60"])
+    cli.main()
+
+    assert seen.get("timeout") == 60, f"--serve dropped the timeout: {seen}"

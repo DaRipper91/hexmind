@@ -307,14 +307,28 @@ same to swap.
 | step | depends on | delivers |
 | :--- | :--- | :--- |
 | 1 | — | mount-safe `set_lead`; drop the default lead; `--lead` required for `--once` |
-| 2 | 1 | `Assembly` + `/go`, `/cancel`, `/recommend`, recommend/review calls |
-| 3 | 1 | `set_lead` never crashes; startup picker modal |
+| 2 | 1 | `Assembly` + `/go`, `/cancel`, `/recommend`, recommend/review calls — **done** |
+| 3 | 1 | `set_lead` never crashes; startup picker modal — **done** |
 | 4 | — | `/scan` + discovered/curated split + `/profile` |
 | 5 | 2 | `ASSEMBLY_SCHEMA` with `chains` and `skills`; chain + skill directives |
 | 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `opencode-muse`, reviewed by `opencode-ultra` |
 | 7 | — | `/relay clean` (WS-12), so the chains this flow requests do not accumulate worktrees forever |
 
 Steps 2, 4 and 6 are independent of each other. Step 3 must not land before step 1.
+
+**Steps 2 and 3 are built** (the `--serve --timeout` fix and `/add` `/remove` came with them).
+Step 4 (`/scan`, `/profile`) is the next piece and is what makes `/add` useful for a model
+`models.toml` has never heard of: `/add` refuses a model with no registry entry on purpose, because
+the roster every prompt is generated from *is* `models.toml`.
+
+What step 2 shipped, and one deliberate difference from the design above: the `Assembly` keeps a
+snapshot of **who was in the room when the lead proposed** (`Assembly.room`). `dropped` is
+recommended-minus-room; `added` is room-minus-*that snapshot*, not room-minus-recommended —
+otherwise every member that was already awake would be reported to the lead as something the user
+chose, which is noise on the one call that has to be read carefully.
+
+`ASSEMBLY_SCHEMA` (chains + skills, §4) is not built. `/go` uses `PLAN_SCHEMA` unchanged: the
+lead reviews the roster and plans, and a lead that wants a chain says so in its reply.
 
 Step 6 is deliberately last: the skill should describe a lead that exists, not one that is
 planned.

@@ -21,7 +21,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .core import Task, clip, extract_json
+from .core import POSTED, Task, clip, extract_json
 
 CHAIN_DIRS = [Path.home() / ".config/hexmind/chains", Path(__file__).parent / "chains"]
 LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -346,6 +346,8 @@ HELP = """**Commands**
 - `/models` every known model, what it is best at, and whether it is installed
 - `/model NAME` one model's full card
 - `/sleep NAME` put a model to sleep · `/wake NAME` bring it back
+- `/add NAME` bring in a model this session never had · `/remove NAME` take one out for good
+- `/recommend [REQUEST]` ask the lead who it wants for this request · `/go` hand the roster back for a plan · `/cancel` drop the proposal
 - `/lead [NAME|recommend]` show, change, or ask the team who should lead
 - `/help` this list"""
 
@@ -387,18 +389,50 @@ async def _cmd_team(orch, args: list[str]) -> str:
 
 
 async def _cmd_sleep_wake(orch, args: list[str], sleeping: bool) -> str:
-    from .core import REGISTRY, TeamBusy, TeamError
+    return await _cmd_roster_change(orch, args, "sleep" if sleeping else "wake")
+
+
+async def _cmd_roster_change(orch, args: list[str], verb: str) -> str:
+    """`/sleep` `/wake` `/add` `/remove` are one shape: a name, one change, one refusal. Sleep parks
+    a session and is reversible; add is for a model this session never had; remove forgets it
+    entirely. Every refusal is the orchestrator's to make — the TUI disables the control from the
+    same `can_sleep`/`can_retire` answers, so a command and a click cannot disagree."""
+    from .core import TeamBusy, TeamError
 
     if not args:
-        verb = "/sleep" if sleeping else "/wake"
         return f"Which model? e.g. `{verb} opencode-ling` — `/team` lists them all."
     name = args[0]
     try:
-        return orch.sleep(name) if sleeping else orch.wake(name)
+        return getattr(orch, verb)(name)
     except TeamBusy as e:
         return f"**Not now.** {e}"
     except TeamError as e:
         return f"**{e}** — `/team` lists the known models."
+
+
+async def _cmd_assembly(orch, args: list[str], verb: str) -> str:
+    """`/recommend` `/go` `/cancel` — the pre-flight negotiation. `/recommend` is deliberately the
+    only one of the three that takes free text, because it is the one that needs to know what the
+    roster is being built for; without a request the lead is being asked to guess."""
+    from .core import TeamBusy, TeamError
+
+    if verb == "cancel":
+        return orch.cancel_assembly()
+    if verb == "go":
+        if orch.assembly is None:
+            return "No team is being assembled. `/recommend <request>` starts one, or just ask for the " \
+                   "work directly and the current room will plan it."
+        try:
+            return await orch.assemble_go()
+        except TeamBusy as e:
+            return f"**Not now.** {e}"
+        except TeamError as e:
+            return f"**{e}**"
+    request = " ".join(args).strip() or (orch.history[-1][0] if orch.history else "")
+    try:
+        return await orch.recommend(request)
+    except TeamError as e:
+        return f"**{e}**"
 
 
 async def _cmd_lead(orch, args: list[str]) -> str:
@@ -538,6 +572,17 @@ async def command(orch, text: str) -> str:
         reply = await _cmd_sleep_wake(orch, args, sleeping=True)
     elif cmd == "/wake":
         reply = await _cmd_sleep_wake(orch, args, sleeping=False)
+    elif cmd in ("/add", "/remove"):
+        reply = await _cmd_roster_change(orch, args, cmd[1:])
+    elif cmd == "/recommend":
+        reply = await _cmd_assembly(orch, args, "recommend")
+    elif cmd == "/go":
+        posted = await _cmd_assembly(orch, args, "go")
+        if posted is POSTED:
+            return ""  # the lead posted the plan and the summary itself
+        reply = posted
+    elif cmd == "/cancel":
+        reply = await _cmd_assembly(orch, args, "cancel")
     elif cmd == "/lead":
         reply = await _cmd_lead(orch, args)
     elif cmd == "/ranks":
@@ -566,6 +611,8 @@ async def command(orch, text: str) -> str:
                 reply = f"Relay failed: {e}"
     else:
         reply = HELP
+    if reply is POSTED:
+        return ""
     orch.emit("message", {"from": "hexmind", "text": reply})
     return reply
 
