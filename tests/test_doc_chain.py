@@ -49,6 +49,12 @@ def test_a_chain_whose_agents_are_missing_is_reported_not_skipped(tmp_path, monk
     with pytest.raises(BrokenChain) as err:
         load_chain(chain)
 
-    assert "missing ~/Projects/doc-chain" in str(err.value)
+    # Assert the invariant, not a hardcoded path. The example chain's `from =` refs have been
+    # repointed before (they were once a personal `~/Projects/doc-chain/...` checkout, which made
+    # the example unloadable on any other machine), and a test that pinned the literal path broke
+    # on that repoint while still testing nothing that matters. What matters is that the message
+    # names the *first stage's* ref, so the failure is actionable.
+    first_ref = tomllib.loads(EXAMPLE.read_text())["stages"][0]["from"]
+    assert f"missing {first_ref}" in str(err.value)
     # a path-shaped reference is not searched for by name, so no "looked in ..." hint is added
     assert "looked for a file named this" not in str(err.value)

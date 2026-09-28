@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import shlex
 import subprocess
@@ -23,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .core import POSTED, Task, clip, extract_json
+
+logger = logging.getLogger(__name__)
 
 CHAIN_DIRS = [Path.home() / ".config/hexmind/chains", Path(__file__).parent / "chains"]
 LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -989,8 +992,8 @@ async def run_relay(orch, ns, provenance: str = "") -> str:
     # backends.py kills process groups.
     try:
         (Path(root) / ".hexmind" / "active").write_text(f"{run}\n{os.getpid()}\n")
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning("Could not write active marker (%s): run start not recorded; /relay clean may reap a live run", e)
     table = "| chain | " + " | ".join(s.name for s in chain.stages) + " |\n|" + "---|" * (len(chain.stages) + 1) + "\n"
     table += "\n".join(f"| {LABELS[k]} | " + " | ".join(orch.name(a) for a in row) + " |" for k, row in enumerate(grid))
     say(f"**Relay `{chain.name}`**: {n} chain(s) × {len(chain.stages)} stages · assign={ns.assign} · "

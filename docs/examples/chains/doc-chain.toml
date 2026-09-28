@@ -1,4 +1,5 @@
-# Imports the doc-chain Claude Code subagents (~/Projects/doc-chain); any model can run any stage.
+# Imports the doc-chain Claude Code subagents (bundled under hexmind/chains/doc-chain);
+# any model can run any stage.
 # Pass the document you want with --goal, e.g.  /relay doc-chain --goal "setup manual for the CLI"
 # Verify gates itself: it only runs when doc-plan.md marks the doc type as Verify-triggering,
 # otherwise that stage just reports that it was skipped. Drafts stay under drafts/ until you promote them.
@@ -7,20 +8,20 @@ description = "Plan, draft, verify (when the doc type needs it) and review one t
 
 [[stages]]
 name = "plan"
-from = "~/Projects/doc-chain/claude-code/.claude/agents/doc-chain-plan.md"
+from = "claude-code/.claude/agents/doc-chain-plan.md"
 domain = "docs"
 
 [[stages]]
 name = "draft"
-from = "~/Projects/doc-chain/claude-code/.claude/agents/doc-chain-draft.md"
+from = "claude-code/.claude/agents/doc-chain-draft.md"
 domain = "docs"
 
 [[stages]]
 name = "verify"
-from = "~/Projects/doc-chain/claude-code/.claude/agents/doc-chain-verify.md"
+from = "claude-code/.claude/agents/doc-chain-verify.md"
 domain = "shell"
 
 [[stages]]
 name = "review"
-from = "~/Projects/doc-chain/claude-code/.claude/agents/doc-chain-review.md"
+from = "claude-code/.claude/agents/doc-chain-review.md"
 domain = "review"

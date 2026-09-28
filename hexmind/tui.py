@@ -761,6 +761,8 @@ class HexmindApp(App):
             for key, t in list(self.tasks.items()):
                 if t.agent in gone:
                     del self.tasks[key]
+            # Sync self.members so the #team bar stays current (fixes stale team bar after /add /remove).
+            self.members = list(self.orch.members)
             self.apply_size(self.size.width, self.size.height)  # recomputes sub_title for the new lead
             self.build_table()
         elif kind == "plan":

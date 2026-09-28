@@ -10,11 +10,15 @@ Provides:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from typing import Callable, Any
 
 from .core import clip
+
+logger = logging.getLogger(__name__)
 
 DOMAINS: list[str] = [
     "architecture",
@@ -78,6 +82,14 @@ class Stats:
                 with open(path, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
             except Exception:
+                # Corrupt stats file: back it up and start fresh rather than wiping
+                # history silently (a corrupt stats.json drives auditor picks and /ranks).
+                backup = f"{path}.corrupt.{int(time.time())}"
+                try:
+                    os.replace(path, backup)
+                    logger.warning("Stats file %s was corrupt; backed up to %s", path, backup)
+                except OSError:
+                    logger.warning("Could not back up corrupt stats file %s", path)
                 self.data = {}
 
     def _save(self) -> None:
