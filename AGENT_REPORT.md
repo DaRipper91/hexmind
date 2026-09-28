@@ -262,6 +262,24 @@ One lint finding added (`BLE001` in `run_chains`): a chain that cannot run becom
 than a dead turn, which is the same deliberate pattern `tui.py` and `relay.py` already use.
 Narrowing it to a known exception list would reintroduce the dead turn for anything unanticipated.
 
+### README voice pass (final commit for now)
+
+Sharpened the prose without touching the design. `docs/design-philosophy.md` is explicit that the
+philosophy fixes the *language* — dark substrate, posted signals, phased rhythm, restraint — "but
+not the sentences spoken in it", and that text appears "only as labels, badges, and single-line
+verdicts". So the boldness here is in the claims, not the styling: imperatives, declaratives, and
+verdicts stated outright ("Evidence, not vibes", "A model never reviews its own work", "It advises.
+Nothing changes until you run `/lead NAME`"), with no hype adjectives and no exclamation marks.
+
+Verified structural identity rather than asserting it: the diff is 57 insertions / 57 deletions, a
+pure 1:1 swap, and the only line containing a visual element is the tests badge — which said **249**
+against an actual **364**. Images (32), Mermaid blocks (6), badges (6), H2s (17), table rows (72)
+and `<p align>` blocks (27) are all unchanged in count, and every one of those elements is
+byte-identical except the badge.
+
+Also fixed a duplicated phrase found on the way through: "The full map lives in
+[`docs/BUILD-PATH.md`] for the full map."
+
 ### Build / Test Status
 
 - Build: ✅ `python3 -m hexmind --help` works; a wheel builds and contains `hexmind/qt/`

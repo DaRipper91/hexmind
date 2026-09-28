@@ -8,31 +8,30 @@
   <img alt="Textual TUI" src="https://img.shields.io/badge/TUI-Textual-5A4FCF">
   <img alt="Team" src="https://img.shields.io/badge/team-16%20members-8%20free%20opencode-c084fc">
   <img alt="Relay chains" src="https://img.shields.io/badge/chains-4%20bundled-0ea5e9">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-249%20passing-0A9EDC?logo=pytest&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-364%20passing-0A9EDC?logo=pytest&logoColor=white">
 </p>
 
 # Hexmind
 
 **One chat room. Several AI models. One team.**
 
-You type a request once. A lead model reads the team roster, decides which model is best
-for each piece, and turns your request into a task graph. Independent tasks run at the
-same time, later phases wait for earlier ones, and when everything is done the lead writes
-you one answer.
+Type a request once. A lead reads the roster, decides who is best for each piece, and turns
+your request into a task graph: independent tasks run at once, later phases wait for earlier
+ones, and the lead writes you one answer at the end.
 
-Hexmind doesn't ask the same question to three models and paste their replies side by side.
-The models split the work, hand results to each other, check each other's work, and build
-a track record that decides who gets trusted with what.
+Hexmind does not ask three models the same question and paste their replies side by side.
+The models split the work, hand results to each other, check each other's work, and build a
+track record that decides who gets trusted with what.
 
 - **Real agents, not API calls.** Every member runs as its own CLI (`claude`, `agy`,
   `codex`) in your project folder. Each model brings the skills, subagents, MCP servers and
   config you've already set up for it.
-- **Relay chains.** Any multi-stage workflow (for example a six-stage repo audit) can run as N
-  parallel chains with models rotating through the stages.
-- **Peer audit.** The runner-up model reviews each task against the real files, with a
-  bounded revise loop and escalation to you when they can't agree.
-- **Evidence-based rankings.** Audit verdicts are recorded per model and per domain. Those
-  records pick the auditors and are shown to the lead when it assigns work.
+- **Relay chains.** Any multi-stage workflow — a six-stage repo audit, say — runs as N parallel
+  chains with models rotating through the stages.
+- **Peer audit.** The runner-up reviews each task against the real files, in a bounded revise
+  loop that escalates to you when the two of them cannot agree.
+- **Evidence, not vibes.** Verdicts are recorded per model and per domain, and those records
+  pick the auditors and are shown to the lead every time it plans.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -59,7 +58,8 @@ a track record that decides who gets trusted with what.
 
 ## 🚀 Quickstart
 
-**Requirements:** Python 3.11+, and at least one of these CLIs installed and logged in:
+**Requirements:** Python 3.11+, and at least one of these CLIs installed and logged in.
+Only what is on your `PATH` becomes a member.
 
 | member | CLI | runs as |
 |---|---|---|
@@ -72,8 +72,6 @@ a track record that decides who gets trusted with what.
 | `kimi` | [Kimi Code CLI](https://moonshotai.github.io/kimi-code/) | `kimi -p … --output-format stream-json` — prompt goes on argv, not stdin (kimi's only stdin mode is the heavier ACP protocol), so very large prompts may hit an OS arg-length limit unlike every other member |
 | `qwen` *(opt-in: `--with qwen`)* | local `qwen3:4b` via [Ollama](https://ollama.com) | text only: no files, no tools; never leads or audits; skipped by relay rotation |
 
-Hexmind only includes members whose CLI is on your `PATH`.
-
 ```bash
 git clone https://github.com/DaRipper91/hexmind.git
 cd hexmind
@@ -83,8 +81,8 @@ cd ~/Projects/your-app
 hexmind                    # open the room here
 ```
 
-The base install is just the TUI. Two surfaces are opt-in, because their dependencies are large or
-only needed by one flag:
+The base install is the TUI and nothing else. Two surfaces are opt-in because their dependencies
+are heavy, or needed by exactly one flag:
 
 ```bash
 pip install -e ".[server]"   # hexmind --serve   (FastAPI + uvicorn)
@@ -92,12 +90,11 @@ pip install -e ".[qt]"       # hexmind.qt        (PySide6, ~240 MB)
 pip install -e ".[dev]"      # running the test suite
 ```
 
-`--serve` says exactly which extra to install if it is missing, rather than failing with a
-`ModuleNotFoundError`.
+`--serve` names the extra it needs instead of raising a `ModuleNotFoundError` at you.
 
 > [!WARNING]
-> Agents run with edits auto-accepted in the room's folder so they can actually do the work.
-> Use a git repo, and review diffs before you commit.
+> Agents run with edits auto-accepted in the room's folder, because a model that stops to ask
+> about every edit is a model that does not finish. Work in a git repo, and read the diff.
 
 ```bash
 hexmind --lead claude            # choose who leads the room; no default, you pick
@@ -296,9 +293,9 @@ and `--assign pinned`.
 > 30-minute default: `hexmind --audit --timeout 5400`.
 
 **`opencode-team`, `fix-review` and `audit` are how this project builds itself** — see
-[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md). They pin specific models per stage, deliberately:
-the builder is never the reviewer, and the two auditors fail in opposite directions (one looks
-for what is *wrong*, one for what is *missing*).
+[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md). Every stage is pinned to a specific model, on purpose:
+the builder is never the reviewer, and the two auditors fail in opposite directions — one hunts
+what is *wrong*, one hunts what is *missing*.
 
 If the name isn't a saved chain, the whole text becomes a goal and the lead designs a
 3–7 stage chain for it.
@@ -345,8 +342,8 @@ Stage reports are kept in `.hexmind/runs/<run>/chain-<X>.md` (Hexmind gitignores
 
 ## 🔍 Peer audit
 
-Turn it on with `--audit` or `/audit on`. Each task is checked by a different model than
-the one that did it:
+Turn it on with `--audit` or `/audit on`. **A model never reviews its own work** — every task
+is checked by a model that did not write it:
 
 1. **Primary** does the task.
 2. **Runner-up audits.** Among the other members, the one with the best track record in the
@@ -398,7 +395,8 @@ audit, so the task passes straight through.
 ## 📊 Rankings
 
 Every audit's **first** verdict is recorded against the primary model in the task's domain.
-Revisions don't count, so the record measures first-attempt quality.
+Revisions do not count: the record measures first-attempt quality, not how hard someone had to be
+argued into agreeing.
 
 Domains: `architecture` `implementation` `refactor` `tests` `debugging` `research` `docs`
 `review` `shell` `ui` `general`
@@ -485,20 +483,21 @@ Keys: `enter` send · `↑/↓` browse tasks · `ctrl+l` clear chat · `ctrl+q` 
 
 <p align="center"><img src="docs/assets/team.svg" alt="The /team roster: lead, awake, working, asleep and absent members, and Invariant S-1" width="100%"></p>
 
-Sixteen models are registered. You do not run all of them — you **wake** the ones you want.
+Sixteen models are registered. You will not run all of them — you **wake** the ones you want.
 
 **Sleeping is a state, not a deletion.** A sleeping model keeps its registry entry, its `best_at`,
 its audit record and its journal, so you can still ask what it did and why. Waking it resumes
 that history rather than starting a stranger.
 
 **`/model NAME` is the anti-misuse tool.** Every model states what it is *not* for, because the
-costliest mistake here is handing an architecture job to a model that will do it competently and
-quietly badly. The lead reads the same fields, so the room and the docs cannot disagree.
+costliest failure here is not an error — it is handing an architecture job to a model that will do
+it competently and quietly badly. The lead reads the same fields, so the room and the docs cannot
+disagree.
 
 **`/lead recommend`** asks the room who should lead, briefed on every member's strengths and
-their audit record. It deliberately never asks the outgoing lead — a model grading its own
-successor is the one judgement its own track record cannot inform. It advises; nothing changes
-until you run `/lead NAME`.
+their audit record. It deliberately never asks the outgoing lead: a model grading its own successor
+is the one judgement its own track record cannot inform. **It advises. Nothing changes until you
+run `/lead NAME`.**
 
 > **Invariant S-1 — a working model cannot be put to sleep.** If a model holds a live task, the
 > sleep request is refused and the blocking task is named. There is no override and no queue.
@@ -587,10 +586,10 @@ room.openFileRequested.connect(editor.open)   # optional: a path double-clicked 
 stack.addWidget(room)
 ```
 
-One brain, not a second implementation: a turn goes through the same orchestrator the TUI drives, so
-sleep, lead, the busy set and the audit behave identically whichever front-end asked. A turn runs on
-a worker thread with its own event loop, because a model can think for thirty minutes and the GUI
-must not. The lead combo is the picker — with no lead chosen, sending says so and sends nothing.
+One brain, not a second implementation: a turn goes through the same orchestrator the TUI drives,
+so sleep, lead, the busy set and the audit behave identically whichever front-end asked. A turn runs
+on a worker thread with its own event loop — a model can think for thirty minutes, and the GUI must
+not. The lead combo is the picker: with no lead chosen, sending says so and sends nothing.
 
 It embeds into [Aether](docs/AETHER-INTERFACE.md) (one-way: Hexmind never imports Aether), and runs
 standalone too.
@@ -599,10 +598,9 @@ standalone too.
 
 ## 📜 Chain files
 
-Chains are TOML. Hexmind looks in `~/.config/hexmind/chains/` (yours win) and the bundled
+Chains are TOML. Hexmind reads `~/.config/hexmind/chains/` first — yours win — then the bundled
 `hexmind/chains/`: **`feature`**, **`opencode-team`**, **`fix-review`** and **`audit`**. Only
-self-contained chains are bundled;
-chains that import your own agent files live in
+self-contained chains are bundled; a chain that imports your own agent files belongs in
 [`docs/examples/chains/`](docs/examples/chains/README.md) to copy.
 
 ```toml
@@ -667,8 +665,8 @@ timeline
         Local models : the six Ollama engines, per-model think flag
 ```
 
-Shipped is proven by the suite; next is ordered by dependency. The full map lives in
-[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map. What follows is the short version.
+Shipped here is proven by the suite; next is ordered by dependency. The full map lives in
+[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md). What follows is the short version.
 
 **Shipped**
 
@@ -678,9 +676,9 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **Evidence-based rankings:** per-domain track record that drives auditor choice and lead assignments
 - [x] **Model registry:** `models.toml` as the single source of truth; roster prose, argv, colours and the hcom exclusion all generated from it
 - [x] **All 8 free opencode models** as team members, plus Space Bunny and LongCat 2.5
-- [x] **Live team:** `/sleep` `/wake` `/models` `/model` `/team` and the `TeamScreen` modal
+- [x] **Live team:** `/sleep` `/wake` `/models` `/model` `/team` and the `TeamScreen` modal — INVARIANT S-1 enforced in the UI, not just the model
 - [x] **Leader control:** `/lead`, `/lead recommend`, and **no default leader** — you pick
-- [x] **Isolation:** a task is told which directory is its own, and a breach is *detected* after a relay run
+- [x] **Isolation:** a task is told which directory is its own, and a breach is *detected* and blamed on the stage that caused it
 - [x] **Two self-auditing pipelines:** `opencode-team` (audit → TDD build → coverage → critique) and `fix-review` / `audit`
 - [x] **`/relay clean`:** reaps finished worktrees, refuses any with uncommitted work
 - [x] **hcom backend:** persistent headless agents, one thread per request
@@ -688,22 +686,24 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **Jules**, **nicknames**, **mobile/touch layout**, **`--timeout`**
 - [x] **Startup leader picker** — a session with no lead blocks until you pick one
 - [x] **Roster changes at runtime:** `/add` and `/remove` alongside `/sleep` and `/wake`
-- [x] **`/scan` → `/found` → `/profile`:** catalogue what is installed (122 models here, 16 curated),
-      then promote one deliberately by writing what it is for
+- [x] **`/scan` → `/found` → `/profile`:** catalogue what is installed — 122 models here, 16 curated —
+      then promote exactly one, deliberately, by writing down what it is for
 - [x] **Qt front-end** — `from hexmind.qt import HexmindWidget`, the same room as a widget, behind
       the opt-in `qt` extra. Embeds in [Aether](docs/AETHER-INTERFACE.md)
 - [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](docs/TEAM-ASSEMBLY.md))
 - [x] **Chains and skills in a plan:** the lead can ask for a relay chain — run for real through
       `/relay`, with a provenance line in its notes — and for a skill to use. `create` and `edit`
-      come back to you as proposals; nothing is written to your skill directory without your say-so
+      come back as proposals: **nothing is written to your skill directory without your say-so**
 
-**Next** — see [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map and
-[`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) for the design work
+**Next** — [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) is the map, re-derived from the code;
+[`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) is why any of this exists
 
 - [ ] **Per-model sessions.** Every model keeps its own conversation across turns, keyed
-      `(model, directory)` — opencode sessions are directory-bound and *hang* rather than error
-- [ ] **Live output.** A model should be visibly working instead of silent for up to 30 minutes
-- [ ] **Per-model journals** and the leader's over-provisioning advisor
+      `(model, directory)`. opencode sessions are directory-bound and *hang* rather than error,
+      which is why the guard is day-one work and not a follow-up
+- [ ] **Live output.** A model is currently silent for up to thirty minutes while it thinks.
+      It should be visibly working
+- [ ] **Per-model journals**, and the leader's over-provisioning advisor
 - [ ] **The local Ollama models** from the model report, with a per-model `think` flag
 - [ ] **Preference weighting** so the free opencode models are actually favoured
 - [ ] **hcom split-terminal mode:** watch each model work in its own pane
@@ -717,7 +717,7 @@ pip install -e . pytest
 python3 -m pytest tests
 ```
 
-The tests use a fake backend, so no model CLIs or network are needed. They cover plan
+364 tests, a fake backend, no model CLIs and no network. They cover plan
 parsing and the task graph (`test_core.py`), relay loading, rotation and worktrees
 (`test_relay.py`), the auditor and rankings (`test_auditor.py`,
 `test_audit_integration.py`), both backends with mocked subprocesses (`test_backends.py`,
@@ -754,8 +754,8 @@ exclusion all derive from it.
 
 That is not tidiness. The roster used to be a hand-written dict, and `opencode-muse` came to be
 described with *another model's* specialty — repo-wide scanning, which is `opencode-longcat`'s
-job — with nothing to catch it. A model that says it is good at repo scans will be given repo
-scans. Now a description cannot drift from the data behind it, and you can override any model
+job — with nothing to catch it. A model that claims it is good at repo scans gets given repo
+scans. **Now a description cannot drift from the data behind it**, and you can override any model
 without touching Python:
 
 ```toml
