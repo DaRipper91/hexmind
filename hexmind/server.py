@@ -6,13 +6,17 @@ Provides a full-duplex WebSocket event stream and REST API for remote clients
 from __future__ import annotations
 
 import asyncio
+import base64
+import logging
 import os
+import secrets
 import time
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .backends import DirectBackend, HcomBackend, available
@@ -20,6 +24,8 @@ from .core import ROSTER, OPT_IN, TEXT_ONLY, Orchestrator, Task
 from .auditor import Stats, DOMAINS
 from .config import load_nicknames, save_nicknames
 from .relay import list_chains, load_chain
+
+logger = logging.getLogger(__name__)
 
 
 class PromptRequest(BaseModel):
@@ -45,8 +51,8 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, subprotocol: Optional[str] = None):
+        await websocket.accept(subprotocol=subprotocol)
         async with self._lock:
             self.active_connections.append(websocket)
 
@@ -66,6 +72,117 @@ class ConnectionManager:
             for d in dead:
                 if d in self.active_connections:
                     self.active_connections.remove(d)
+
+
+_SUBPROTOCOL_PREFIX = "hexmind.token."
+
+
+def validate_token(provided: str, expected: str) -> bool:
+    """Constant-time comparison; both sides must be non-empty."""
+    if not provided or not expected:
+        return False
+    return secrets.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
+
+
+def _b64url(value: str) -> str:
+    """Unpadded base64url encoding (RFC 2616 tokens forbid '=')."""
+    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def token_to_subprotocol(token: str) -> str:
+    """Wrap a token into the subprotocol form clients offer during handshake."""
+    return _SUBPROTOCOL_PREFIX + _b64url(token)
+
+
+def subprotocol_to_token(value: str) -> str:
+    """Decode a hexmind.token.* subprotocol back into the raw token, or ''."""
+    if not value.startswith(_SUBPROTOCOL_PREFIX):
+        return ""
+    encoded = value[len(_SUBPROTOCOL_PREFIX):]
+    encoded += "=" * (-len(encoded) % 4)
+    try:
+        return base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def bearer_token(header: str) -> str:
+    """Extract the token from an 'Authorization: Bearer <token>' header."""
+    scheme, _, value = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return value.strip()
+
+
+def extract_ws_token(websocket: WebSocket) -> Tuple[str, Optional[str]]:
+    """Pull the token from the subprotocol, query string, or Authorization header.
+
+    Returns (token, subprotocol_to_echo); the second element is set only when
+    the token arrived via a subprotocol, so the server can echo that exact
+    value back in the accept handshake.
+    """
+    for sub in websocket.headers.getlist("sec-websocket-protocol"):
+        for piece in sub.split(","):
+            piece = piece.strip()
+            token = subprotocol_to_token(piece)
+            if token:
+                return token, piece
+    token = websocket.query_params.get("token", "")
+    if token:
+        return token, None
+    auth = websocket.headers.get("authorization", "")
+    if auth:
+        token = bearer_token(auth)
+        if token:
+            return token, None
+    return "", None
+
+
+def allowed_origins(host: str, port: int) -> List[str]:
+    """Origins a browser may connect from, derived from the bound host/port.
+
+    Localhost aliases are always permitted; a concrete bind host (e.g. a LAN
+    IP) is added unless it is the wildcard 0.0.0.0/:: form.
+    """
+    names = ["127.0.0.1", "localhost"]
+    if host and host not in ("0.0.0.0", "::"):
+        names.append(host)
+    origins: List[str] = []
+    for name in dict.fromkeys(names):
+        origins.append(f"http://{name}:{port}")
+        origins.append(f"ws://{name}:{port}")
+    return origins
+
+
+def authorize_ws(
+    websocket: WebSocket,
+    expected_token: str,
+    allowed: List[str],
+) -> Tuple[str, Optional[str], Optional[Tuple[int, str]]]:
+    """Inspect a handshake before it is accepted.
+
+    Returns (token, subprotocol, rejection); rejection is None when the
+    handshake may proceed, otherwise a (close_code, reason) pair.
+    """
+    origin = websocket.headers.get("origin", "")
+    token, subprotocol = extract_ws_token(websocket)
+
+    if origin:
+        if origin not in allowed:
+            return token, subprotocol, (4003, "Origin not allowed")
+    else:
+        # Browsers always send an Origin on WS connects; its absence means a
+        # non-browser client. It may connect only when it proves it holds the
+        # token (the documented exception), otherwise reject.
+        if not validate_token(token, expected_token):
+            if expected_token:
+                return token, subprotocol, (4001, "Missing or invalid token")
+            return token, subprotocol, (4003, "Origin header required")
+
+    if expected_token and not validate_token(token, expected_token):
+        return token, subprotocol, (4001, "Missing or invalid token")
+
+    return token, subprotocol, None
 
 
 class HexmindServer:
@@ -118,6 +235,9 @@ class HexmindServer:
             stats=self.stats,
         )
         self.orch.approve_plans = self.approve_plans
+        self._port = 8765
+        self._host = "127.0.0.1"
+        self._token = ""
 
     def _task_to_dict(self, t: Task) -> dict:
         d = asdict(t)
@@ -244,16 +364,28 @@ class HexmindServer:
         return True
 
 
-def create_app(server: HexmindServer) -> FastAPI:
+def create_app(server: HexmindServer, token: str | None = None) -> FastAPI:
     app = FastAPI(title="Hexmind API & Realtime Room", version="0.1.0")
+    app._hexmind_server = server
+    if token is not None:
+        server._token = token
 
+    origins = allowed_origins(server._host or "127.0.0.1", server._port or 8765)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next: Callable):
+        if server._token and request.url.path.startswith("/api/"):
+            provided = request.headers.get("Authorization", "")
+            if not validate_token(bearer_token(provided), server._token):
+                return JSONResponse(status_code=401, content={"detail": "Missing or invalid token"})
+        return await call_next(request)
 
     @app.get("/api/status")
     async def get_status():
@@ -329,7 +461,17 @@ def create_app(server: HexmindServer) -> FastAPI:
 
     @app.websocket("/ws/room")
     async def websocket_room(websocket: WebSocket):
-        await server.manager.connect(websocket)
+        token, subprotocol, rejection = authorize_ws(
+            websocket,
+            server._token or "",
+            allowed_origins(server._host or "127.0.0.1", server._port or 8765),
+        )
+        if rejection:
+            code, reason = rejection
+            logger.warning("WS rejected (%s) origin=%r", reason, websocket.headers.get("origin", ""))
+            await websocket.close(code=code, reason=reason)
+            return
+        await server.manager.connect(websocket, subprotocol=subprotocol)
         try:
             # Send initial state sync immediately upon connection
             await websocket.send_json({
@@ -372,7 +514,7 @@ def create_app(server: HexmindServer) -> FastAPI:
 
 def run_server(
     cwd: str,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8765,
     backend: str = "direct",
     lead: str = "opencode-ultra",
@@ -381,8 +523,14 @@ def run_server(
     audit: bool = False,
     approve_plans: bool = False,
     timeout: int = 1800,
+    token: str | None = None,
 ) -> None:
     import uvicorn
+
+    if host == "0.0.0.0":
+        print("⚠️  WARNING: binding to 0.0.0.0 exposes the server to all network interfaces. "
+              "Use --host 127.0.0.1 (default) or set HEXMIND_TOKEN for auth. "
+              "See README.md for security guidance.")
 
     server = HexmindServer(
         cwd=cwd,
@@ -394,7 +542,13 @@ def run_server(
         approve_plans=approve_plans,
         timeout=timeout,
     )
-    app = create_app(server)
+    server._port = port
+    server._host = host
+    server._token = token or os.environ.get("HEXMIND_TOKEN", "")
+    app = create_app(server, token=server._token)
+    if host == "0.0.0.0" and not server._token:
+        print("⚠️  WARNING: binding to 0.0.0.0 without HEXMIND_TOKEN. "
+              "Set HEXMIND_TOKEN or use --host 127.0.0.1 for safety.")
     print(f"🚀 Hexmind server listening on http://{host}:{port} (ws://{host}:{port}/ws/room)")
     print(f"📁 Workspace: {server.cwd}")
     print(f"🤖 Team: {', '.join(server.orch.members)} (Lead: {server.orch.lead})")

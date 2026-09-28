@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import os
 import re
 from collections.abc import Callable
@@ -17,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .models import Registry
+
+logger = logging.getLogger(__name__)
 
 # The team roster. GENERATED from hexmind/models.toml — see models.py. Every model has a structured
 # entry (best_at, avoid_for, domains, weight); the prose the lead reads is derived from it, so a
@@ -79,6 +82,9 @@ ASSEMBLY_SCHEMA = {
                 "why": {"type": "string"},
             },
             "required": ["action", "name"]}},
+        # Not required: a plan that says nothing about peer audit leaves the room's current
+        # setting alone. Only a deliberate true/false flips it.
+        "audit": {"type": "boolean"},
     },
     "required": ["reply", "tasks"],
 }
@@ -180,6 +186,9 @@ Rules:
   "create" and "edit" are *proposals*: hexmind shows them to the user and does not write anything.
 - If the work needs something this room cannot do — a model that is not here, a skill nobody has
   installed — say it in "reply" and keep going with what you can. Never pretend a request was honoured.
+- "audit" sets peer audit, where a runner-up model reviews every task before the room calls it done.
+  Set it to true or false ONLY when the user asked to turn peer audit on or off; say nothing
+  otherwise, and leaving it out keeps the room's current setting. Do not decide it yourself.
 """
 
 RECOMMEND_SCHEMA = {
@@ -257,6 +266,9 @@ Rules:
   "create" and "edit" are *proposals*: hexmind shows them to the user and does not write anything.
 - If the work needs something this room cannot do — a model that is not here, a skill nobody has
   installed — say it in "reply" and keep going with what you can. Never pretend a request was honoured.
+- "audit" sets peer audit, where a runner-up model reviews every task before the room calls it done.
+  Set it to true or false ONLY when the user asked to turn peer audit on or off; say nothing
+  otherwise, and leaving it out keeps the room's current setting. Do not decide it yourself.
 """
 
 SYNTH_PROMPT = """You are the lead of an AI agent team. The user asked:
@@ -336,28 +348,40 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
     return reply, tasks
 
 
+# A lead writing JSON is told to use a boolean, but models say "yes" and "on" out of habit, and
+# rejecting those outright would silently drop a real request to turn peer audit on. We read the
+# obvious synonyms; anything outside these sets is reported as a finding, never guessed at.
+_AUDIT_TRUE_WORDS = frozenset({"true", "on", "yes", "enable", "enabled", "1"})
+_AUDIT_FALSE_WORDS = frozenset({"false", "off", "no", "disable", "disabled", "0"})
+
+
 @dataclass
 class Directives:
     """What the lead asked for beyond the task list: relay chains to run, skills to use or write,
-    and anything it asked for that this room cannot do.
+    peer audit on or off, and anything it asked for that this room cannot do.
 
     `findings` is the point of the whole class. A lead that asks for a skill nobody has installed,
     or for a chain with no goal, is asking for something the room cannot deliver — and a request
     that vanishes is worse than one that is refused, because the lead's own summary is the only
-    thing the user is guaranteed to read (design §5, item 8)."""
+    thing the user is guaranteed to read (design §5, item 8).
+
+    `audit` is `None` when the plan said nothing about it, so an absent field stays absent: the
+    lead's silence never turns a safety switch on or off behind the user's back."""
 
     chains: list[dict] = field(default_factory=list)
     skills: list[dict] = field(default_factory=list)
+    audit: bool | None = None
     findings: list[str] = field(default_factory=list)
 
     def __bool__(self) -> bool:
-        return bool(self.chains or self.skills or self.findings)
+        return bool(self.chains or self.skills or self.findings or self.audit is not None)
 
 
 def parse_directives(text: str, tasks: list[Task]) -> Directives:
-    """Read `chains` and `skills` out of a plan. A sibling of `parse_plan`, not part of it: that
-    function's `(reply, tasks)` contract is what the TUI, the server, the relay and two dozen tests
-    depend on, and a plan with neither new field must parse exactly as it did before.
+    """Read `chains`, `skills` and `audit` out of a plan. A sibling of `parse_plan`, not part of
+    it: that function's `(reply, tasks)` contract is what the TUI, the server, the relay and two
+    dozen tests depend on, and a plan with none of the new fields must parse exactly as it did
+    before.
 
     Everything is validated here rather than at the point of use, so a malformed directive is
     reported once, in the room, instead of throwing from inside a relay run."""
@@ -409,6 +433,20 @@ def parse_directives(text: str, tasks: list[Task]) -> Directives:
             task = ""
         out.skills.append({"action": action, "name": name, "task": task,
                            "why": str(entry.get("why") or "")})
+
+    if "audit" in data:
+        raw = data.get("audit")
+        if raw is None:
+            pass  # explicitly "no opinion" — same as the field being absent
+        elif isinstance(raw, bool):
+            out.audit = raw
+        elif isinstance(raw, str) and raw.strip().lower() in _AUDIT_TRUE_WORDS | _AUDIT_FALSE_WORDS:
+            word = raw.strip().lower()
+            out.audit = word in _AUDIT_TRUE_WORDS
+        else:
+            out.findings.append(
+                f"dropped an audit directive of {raw!r}; expected true or false "
+                f"(peer audit is unchanged)")
     return out
 
 
@@ -715,7 +753,8 @@ class Orchestrator:
             review = "\n".join(lines)
             reply = f"**Roster adjusted.** {review}\n\n{reply}" if reply else f"**Roster adjusted.** {review}"
         self.emit("message", {"from": self.lead, "text": reply})
-        if not tasks and not directives.chains and not directives.skills:
+        if self._nothing_to_run(tasks, directives):
+            self._apply_audit(directives)
             self.history.append((request, reply))
             return POSTED
         if self.approve_plans:
@@ -724,7 +763,7 @@ class Orchestrator:
             self.emit("message", {"from": "hexmind", "text":
                                   "**Draft plan: nothing runs until you decide.** `/approve` to run it, "
                                   "`/discard` to drop it."})
-            if directives.chains or directives.skills:
+            if directives.chains or directives.skills or directives.audit is not None:
                 self.emit("message", {"from": "hexmind", "text": self._directive_preview(directives)})
             self.history.append((request, reply))
             return POSTED
@@ -758,7 +797,8 @@ class Orchestrator:
             reply, tasks = raw.strip(), []
         directives = parse_directives(raw, tasks)
         self.emit("message", {"from": self.lead, "text": reply})
-        if not tasks and not directives.chains and not directives.skills:
+        if self._nothing_to_run(tasks, directives):
+            self._apply_audit(directives)
             self.history.append((request, reply))
             return reply
 
@@ -769,7 +809,7 @@ class Orchestrator:
                      (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "") for t in tasks]
             note = "**Draft plan: nothing runs until you decide.** `/approve` to run it, `/discard` to drop it."
             self.emit("message", {"from": "hexmind", "text": note + "\n\n" + "\n".join(lines)})
-            if directives.chains or directives.skills:
+            if directives.chains or directives.skills or directives.audit is not None:
                 self.emit("message", {"from": "hexmind", "text": self._directive_preview(directives)})
             self.history.append((request, reply))
             return reply
@@ -786,9 +826,47 @@ class Orchestrator:
             verb = "inject" if skill["action"] == "use" else f"propose `{skill['action']}`"
             lines.append(f"- **skill** {verb} `{skill['name']}`"
                          + (f" into {skill['task']}" if skill["task"] else ""))
+        if directives.audit is not None:
+            lines.append(f"- **peer audit** {'on' if directives.audit else 'off'}")
         if directives.findings:
             lines += [f"- _could not do: {f}_" for f in directives.findings]
         return "**Also in this plan**\n\n" + "\n".join(lines)
+
+    def _nothing_to_run(self, tasks: list[Task], directives: Directives) -> bool:
+        """True when a plan carries no work, so answering it would only buy a synthesis round-trip.
+
+        An `audit`-only plan is why this is worth asking at all. `execute()` always ends in a lead
+        synthesis call, and a plan whose only content is a boolean has nothing to synthesise about.
+        The exception is `/drafts on`: there the switch is still a decision the user has not made,
+        so the plan is staged and applied on `/approve` instead.
+        """
+        if tasks or directives.chains or directives.skills:
+            return False
+        return directives.audit is None or not self.approve_plans
+
+    def _apply_audit(self, directives: Directives | None) -> None:
+        """Turn peer audit on or off if the lead's plan said to, and say so where the user sees it.
+
+        Deliberately its own method rather than a step inside `execute()`: a plan whose only
+        directive is `audit` has no tasks to run, and `execute()` always ends in a lead synthesis
+        round-trip, so routing it through there would spend a model call to set a boolean.
+
+        `None` — the field absent, or the lead answering `"audit": null` — is not a request, and
+        neither is a request to set the switch to the value it already holds. Both are no-ops: a
+        safety control the lead can silently move is a control nobody can rely on.
+        """
+        if directives is None or directives.audit is None or directives.audit == self.audit:
+            return
+        self.audit = directives.audit
+        self.emit("message", {"from": "hexmind",
+                              "text": f"**Peer audit is now {'on' if self.audit else 'off'}** — the "
+                                      f"lead asked for it in this plan."})
+        if self.audit and self.stats is None:
+            # The room reviews a task only when it has somewhere to record the result, so asking
+            # for audit in a room with no ledger buys a promise this room cannot keep.
+            directives.findings.append(
+                "peer audit was turned on, but this room has no audit ledger, so no task will "
+                "actually be reviewed — pass stats=... to make it real")
 
     # ---------- lead directives: chains and skills (design §4) ----------
     def apply_skills(self, tasks: list[Task], skills: list[dict]) -> tuple[list[str], list[str]]:
@@ -861,6 +939,7 @@ class Orchestrator:
         Chains run after the task list, not interleaved: a chain is the lead's own plan for work it
         could not express as a graph, and the summary has to cover both, so the order has to be
         predictable rather than clever."""
+        self._apply_audit(directives)  # before the graph runs: audit changes how tasks execute
         self.record(tasks)
         proposals: list[str] = []
         chain_report = ""
@@ -1009,6 +1088,12 @@ class Orchestrator:
         if t.notes:
             prompt += (f"\nThis is one stage of a relay chain. Every earlier stage's full report is in {t.notes}"
                        " — read it first. Hexmind appends your final reply to it; don't edit it yourself.")
+        if t.gate and not self.audit:
+            logger.warning("task %s has gate:true but audit is off; task will run without peer review. "
+                           "Enable /audit to enforce gate enforcement.", t.id)
+            self.emit("message", {"from": "hexmind",
+                                  "text": f"⚠️ Task {t.id} has **gate:true** but audit is off. "
+                                          f"Enable /audit to enforce the gate."})
         tried = {t.agent}
         while True:
             try:

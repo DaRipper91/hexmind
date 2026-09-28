@@ -33,6 +33,14 @@ LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 AGENT_DIRS = [Path.home() / ".claude/agents", Path.home() / ".agents/agents",
               Path(".claude/agents"), Path(".agents/agents")]
 
+# `/audit` accepts the obvious synonyms rather than just "on"/"off", because a leader
+# flipping a safety switch will type whichever word is in their head first. Unknown words
+# are a no-op, not a silent flip — we say what we understood and what we'd accept.
+_AUDIT_WORDS: dict[str, bool] = {
+    "on": True, "true": True, "yes": True, "enable": True, "enabled": True, "1": True,
+    "off": False, "false": False, "no": False, "disable": False, "disabled": False, "0": False,
+}
+
 
 def resolve_agent_file(ref: str) -> Path | None:
     """Find an agent file given a full path, or a bare filename to look up in AGENT_DIRS.
@@ -339,7 +347,8 @@ HELP = """**Commands**
 - `/relay NAME|GOAL [-n 3] [--assign rotate|best|pinned] [--workspace shared|worktree] [--end merge|compare|list] [--goal TEXT]`
   run a chain; `x3` works as `-n 3`. Unknown NAME = a goal the lead designs stages for.
 - `/chains` list chain files
-- `/audit on|off` runner-up model reviews every task (bounded revise loop; `gate = true` tasks block on failure)
+- `/audit on|off` runner-up model reviews every task (bounded revise loop; `gate = true` tasks block on failure).
+  Bare `/audit` shows the current state; the lead can also set it in a plan with `"audit": true|false`
 - `/ranks` each model's audit track record by domain
 - `/drafts on|off` the lead's plan waits for approval before anything runs · `/approve` run it · `/discard` drop it
 - `/nick MODEL NAME` give a model a nickname · `/nick MODEL` clear it · `/nick` list
@@ -722,13 +731,29 @@ async def command(orch, text: str) -> str:
                 if directives and (directives.chains or directives.skills):
                     extra = (f" and {len(directives.chains)} chain(s), "
                              f"{len(directives.skills)} skill request(s)")
+                # The audit directive rode along with the discarded plan, so it was discarded
+                # too — say so, or the leader sees a plan that asked for audit on and no state change.
+                if directives and directives.audit is not None:
+                    extra += " and an audit change"
                 reply = f"Discarded the draft plan ({len(tasks)} tasks{extra}). Nothing ran."
             else:
                 return await orch.execute(request, tasks, directives)  # execute posts its own messages
     elif cmd == "/audit":
-        if args and args[0] in ("on", "off"):
-            orch.audit = args[0] == "on"
-        reply = f"Peer audit is **{'on' if orch.audit else 'off'}**."
+        if args:
+            word = args[0].lower()
+            if word in _AUDIT_WORDS:
+                orch.audit = _AUDIT_WORDS[word]
+                reply = f"Peer audit is **{'on' if orch.audit else 'off'}**."
+            else:
+                # No bare `/audit` state echo here: the leader asked to change something and
+                # typed a word we don't recognise, so lead with what's valid, not with a
+                # state line that reads like the change already happened.
+                reply = (f"`{args[0]}` isn't a peer-audit setting — nothing changed. "
+                         f"Use `/audit on` or `/audit off` "
+                         f"(also accepted: true/false, yes/no, enable/disable, 1/0). "
+                         f"Peer audit is still **{'on' if orch.audit else 'off'}**.")
+        else:
+            reply = f"Peer audit is **{'on' if orch.audit else 'off'}**."
     elif cmd == "/nick":
         from .config import save_nicknames
         if len(args) >= 2 and args[0] in orch.members:
