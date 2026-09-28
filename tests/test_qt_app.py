@@ -225,7 +225,7 @@ def host(monkeypatch, qapp):
     built = []
 
     def _make_window(*a, **kw):
-        built.append(kw.get("room"))
+        built.append(kw)
         return StubWindow()
 
     monkeypatch.setattr(A, "HexmindWindow", _make_window)
@@ -288,6 +288,13 @@ def test_main_builds_exactly_one_window(host):
     thread out from under the window about to be shown."""
     A.main([])
     assert len(host.built) == 1
+
+
+def test_main_passes_its_flags_to_the_room(host, tmp_path):
+    """The parsed --lead/--without/--audit/--cwd used to be dropped: main() built `HexmindWindow()`
+    bare, so the room ignored every flag and ran the unfiltered roster in the current folder."""
+    assert A.main(["--lead", "codex", "--without", "claude", "--audit", "--cwd", str(tmp_path)]) == 0
+    assert host.built == [{"members": ["codex"], "lead": "codex", "audit": True, "cwd": str(tmp_path)}]
 
 
 def test_the_window_does_not_write_a_local_stylesheet(window, room):

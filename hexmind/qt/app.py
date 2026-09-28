@@ -20,6 +20,7 @@ import argparse
 import os
 import subprocess
 import sys
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -40,19 +41,19 @@ ORG_NAME = "hexmind"
 class HexmindWindow(QMainWindow):
     """A window that owns the stylesheet and a menu bar, wrapped around one room."""
 
-    def __init__(self, room: QWidget | None = None) -> None:
+    def __init__(self, room: QWidget | None = None, **room_kwargs: Any) -> None:
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} — multi-model agent team")
         self.resize(1280, 820)
 
         # `room` is injectable so a test can stand a window up around a stub, and so the window is
         # never the reason a room fails to build.
-        self.room = room if room is not None else self._build_room()
+        self.room = room if room is not None else self._build_room(**room_kwargs)
         self.setCentralWidget(self.room)
         self._build_menus()
         self.statusBar().showMessage(f"working in {getattr(self.room, 'cwd', os.getcwd())}")
 
-    def _build_room(self) -> QWidget:
+    def _build_room(self, **room_kwargs: Any) -> QWidget:
         """Stand up the room with an audit ledger wired in.
 
         This is the module that *is* the application, so it is where the ledger's location gets
@@ -63,7 +64,7 @@ class HexmindWindow(QMainWindow):
         from .stats import stats_path
         from .widget import HexmindWidget
 
-        return HexmindWidget(stats=auditor.Stats(stats_path()))
+        return HexmindWidget(stats=auditor.Stats(stats_path()), **room_kwargs)
 
     def _build_menus(self) -> None:
         # The menus are kept as attributes, not just used as locals. `QMenuBar.actions()[i].menu()`
@@ -224,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     # a second one would hand the first window's closeEvent to the room when that window is garbage
     # collected -- which stops the room's QThread out from under the window we are about to show.
     try:
-        window = HexmindWindow()
+        window = HexmindWindow(members=members, lead=args.lead, audit=args.audit, cwd=cwd)
     except Exception as exc:  # noqa: BLE001 - a bad flag should not be a bare traceback
         QMessageBox.critical(None, f"{APP_NAME} could not start", str(exc))
         return 1
