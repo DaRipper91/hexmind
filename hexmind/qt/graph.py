@@ -143,7 +143,30 @@ def _hue(status: str) -> str:
             return theme.state_hue(status)
         except Exception:
             pass
+    return _fallback_hue(status)
+
+
+def _fallback_hue(status: str) -> str:
+    """Only reached if `theme` failed to import, which means the app has no palette at all.
+
+    The values mirror `theme.STATE_HUE`; a second copy is the lesser evil next to an
+    ImportError at class-definition time, and this path is a degraded render, not the real one.
+    """
     return {"done": "#5fd68a", "failed": "#f2686b", "running": "#39d0d8"}.get(status, "#6b7a94")
+
+
+def _edge_hue(broken: bool) -> str:
+    """A dependency edge. Broken edges are amber because they are a warning, not a failure —
+    the task itself may still be fine; it just can no longer run."""
+    if theme is not None:
+        return theme.AMBER if broken else theme.INK_FAINT
+    return "#e8b04b" if broken else "#5a6577"
+
+
+def _ink() -> str:
+    if theme is not None:
+        return theme.INK
+    return "#e6edf7"
 
 
 class Node(QGraphicsEllipseItem):
@@ -165,9 +188,9 @@ class Edge(QGraphicsLineItem):
         self.src = src
         self.dst = dst
         self.reason = reason
-        r = src.rect().center() + src.pos() if False else None  # keep simple: use stored ends
-        # ends are set by caller via setLine; keep refs for tests
-        pen = QPen(QColor("#e8b04b") if reason else QColor("#61afef"))
+        # Ends are set by the caller via setLine; the src/dst refs are kept so a test (and the
+        # in-place update path) can tell which tasks an edge joins without re-parsing the line.
+        pen = QPen(QColor(_edge_hue(bool(reason))))
         pen.setWidth(2 if not reason else 3)
         if reason:
             pen.setStyle(Qt.PenStyle.DashLine)
@@ -206,7 +229,7 @@ class TaskGraphView(QGraphicsView):
             label = QGraphicsSimpleTextItem(f"{tid}")
             label.setPos(x + R + 6, y - 10)
             try:
-                label.setBrush(QColor("#ffffff"))
+                label.setBrush(QColor(_ink()))
             except Exception:
                 pass
             self._scene.addItem(label)
@@ -281,7 +304,7 @@ class TaskGraphView(QGraphicsView):
                 s, d = _id_of(e.src.task), _id_of(e.dst.task)
                 if d in skipped_by and skipped_by[d] in (s, _id_of(task), tid):
                     e.reason = f"{skipped_by[d]} failed → {d} skipped"
-                    pen = QPen(QColor("#e8b04b"))
+                    pen = QPen(QColor(_edge_hue(True)))
                     pen.setWidth(3)
                     pen.setStyle(Qt.PenStyle.DashLine)
                     e.setPen(pen)

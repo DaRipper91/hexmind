@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -118,7 +119,7 @@ class _Room(QThread):
     turnState = Signal(bool)        # True while a turn is in flight
 
     def __init__(self, backend: Any, members: list[str], lead: str | None, audit: bool,
-                 cwd: str) -> None:
+                 cwd: str, stats: Any | None = None) -> None:
         super().__init__()
         self._cwd = cwd
         self._pending: list[tuple[str, Any]] = []
@@ -127,7 +128,12 @@ class _Room(QThread):
         # submit while a turn is running, so the two are serialised here rather than in the loop.
         self._orch_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self.orch = Orchestrator(backend, list(members), lead, emit=self._emit, audit=audit)
+        # `stats` is injected, not resolved here, for the same reason the TUI injects it
+        # (`tui.py:520`): where the ledger lives is policy, and policy belongs to whoever
+        # built the front-end. This is the room, not the application. Passing `None` is a valid
+        # choice — it means "this session records no audit history", not "this is broken".
+        self.orch = Orchestrator(backend, list(members), lead, emit=self._emit, audit=audit,
+                                 stats=stats)
         self._turn_in_flight = False  # serialises submit() calls (no Qt equivalent of is_busy)
         _LIVE_ROOMS.add(self)
 
@@ -175,18 +181,6 @@ class _Room(QThread):
             if self._turn_in_flight:
                 return
             asyncio.run_coroutine_threadsafe(self._set_lead(name), self._loop)
-
-    def snapshot(self) -> dict:
-        """Roster + members for display. Read on the caller's thread; the widget uses it only to
-        redraw, and every mutation happens on the room thread."""
-        orch = self.orch
-        return {
-            "lead": orch.lead,
-            "members": list(orch.members),
-            "known": list(orch.known),
-            "busy": set(orch.busy),
-            "tasks": {t.id: t for t in orch.all_tasks},
-        }
 
     # ---------- what the room does, on its own thread ----------
     async def _handle(self, text: str) -> None:
@@ -260,6 +254,7 @@ class HexmindWidget(QWidget):
         lead: str | None = None,
         audit: bool = False,
         cwd: str | None = None,
+        stats: Any | None = None,
     ) -> None:
         _ensure_app()
         super().__init__(parent)
@@ -275,7 +270,7 @@ class HexmindWidget(QWidget):
         self.lead = lead
 
         self._build_ui()
-        self._room = _Room(backend, self.members, lead, audit, self.cwd)
+        self._room = _Room(backend, self.members, lead, audit, self.cwd, stats)
         self._room.message.connect(self._on_message)
         self._room.taskChanged.connect(self._on_task)
         self._room.teamChanged.connect(self.refresh_team)
@@ -293,6 +288,30 @@ class HexmindWidget(QWidget):
         if lead is None:
             self._on_message("hexmind", "No lead yet — choose one above before asking for anything.")
         self.refresh_team()
+        # The timeline is built empty in `_build_ui` because `set_host` reads a snapshot, and no
+        # snapshot exists before `_Room` does. Now there is one to read.
+        if self.timeline is not None:
+            self.timeline.set_host(self)
+        # The palette is installed on the *widget*, not on a bare CommandPalette: the Ctrl+K
+        # shortcut is parented to it, so a palette with no parent has no live shortcut.
+        try:
+            from .palette import install_palette
+            self._palette = install_palette(self)
+        except Exception:  # pragma: no cover - presentation only
+            self._palette = None
+
+    def snapshot(self) -> dict:
+        """Roster + tasks for any panel hosted here.
+
+        The timeline is duck-typed on a host exposing `snapshot()`, and `_Room` already had one.
+        Pointing it at the widget instead of the room would silently clear it, because a bare
+        `HexmindWidget` has no such method — so this is the delegate that makes the widget itself a
+        valid host, and it is also what `_refresh_graph` and the task-detail reader go through."""
+        room = getattr(self, "_room", None)
+        if room is None or not room.isRunning():
+            return {"lead": self.lead, "members": self.members, "known": [],
+                    "busy": set(), "tasks": {}}
+        return room.snapshot()
 
     def _on_audit_toggle(self, state: int) -> None:
         """Task 5: connect the Peer audit checkbox to the live orchestrator."""
@@ -373,12 +392,37 @@ class HexmindWidget(QWidget):
         self.input.setCompleter(completer)
         self._completer = completer
 
-        right = QSplitter(Qt.Orientation.Vertical)
-        right.addWidget(self.team)
-        right.addWidget(self.tasks)
+        # Advanced: the reliability ledger, read-only, straight off disk. The orchestrator is the
+        # only thing that writes it — this panel never records, so a view cannot skew the numbers
+        # it is reporting. `agents` is the room's roster, so the chart order matches the team table.
+        try:
+            from .stats import StatsPanel
+            self.stats = StatsPanel(agents=self.members)
+        except Exception:  # pragma: no cover - presentation only
+            self.stats = None
+
+        # Advanced: the audit/verdict timeline. Built empty and pointed at the room after the room
+        # exists, because `set_host` reads a snapshot that cannot exist before `_Room` is built.
+        try:
+            from .timeline import TimelinePanel
+            self.timeline = TimelinePanel()
+        except Exception:  # pragma: no cover - presentation only
+            self.timeline = None
+
+        # Tabs rather than a stacked splitter: five panels of very different shapes (two tables, a
+        # node graph, two charts, a timeline) do not share vertical space well, and the QSS in
+        # theme.stylesheet() already styles QTabBar — the tabbed right-hand side was the intent.
+        right = QTabWidget()
+        right.setAccessibleName("Room views")
+        right.setDocumentMode(True)
+        right.addTab(self.team, "Team")
+        right.addTab(self.tasks, "Tasks")
         if self.graph is not None:
-            right.addWidget(self.graph)
-        right.setStretchFactor(1, 1)
+            right.addTab(self.graph, "Graph")
+        if self.timeline is not None:
+            right.addTab(self.timeline, "Timeline")
+        if self.stats is not None:
+            right.addTab(self.stats, "Stats")
         self._right = right
 
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -399,10 +443,15 @@ class HexmindWidget(QWidget):
         try:
             from PySide6.QtCore import QSettings
             self._settings = QSettings("hexmind", "room")
-            for key, sp in (("split", split), ("right", right)):
-                geo = self._settings.value(f"qt/{key}")
-                if geo is not None:
-                    sp.restoreState(geo)
+            geo = self._settings.value("qt/split")
+            if geo is not None:
+                split.restoreState(geo)
+            # A QTabWidget has no `saveState()` — a tab widget's layout is its tab order, not a
+            # geometry — so the right side persists as the index the user last looked at. Clamped,
+            # because an extension or a downgraded install can leave a stale index behind.
+            index = self._settings.value("qt/right", None, type=int)
+            if index is not None and 0 <= index < right.count():
+                right.setCurrentIndex(index)
         except Exception:
             self._settings = None
 
@@ -443,6 +492,11 @@ class HexmindWidget(QWidget):
         self.status.setText("working…" if busy else "ready")
         self.input.setEnabled(not busy)  # one request at a time, as the TUI's turn lock does
         self.sendButton.setEnabled(not busy)
+        if not busy and self.stats is not None:
+            # End of turn, not start: the orchestrator is the only writer of the ledger, and it
+            # writes as it finishes each task. Reading at the end shows the whole turn, not a
+            # half-updated copy of it.
+            self.stats.reload()
 
     # ---------- what the room says back ----------
     def _on_message(self, who: str, text: str) -> None:
@@ -459,7 +513,7 @@ class HexmindWidget(QWidget):
         if getattr(self, "graph", None) is None:
             return
         try:
-            snap = self._room.snapshot() if self._room.isRunning() else {"tasks": {}}
+            snap = self.snapshot()
             self.graph.set_tasks(list(snap.get("tasks", {}).values()))
         except Exception:
             pass
@@ -483,7 +537,7 @@ class HexmindWidget(QWidget):
             return
         tid = first.text()
         try:
-            snap = self._room.snapshot() if self._room.isRunning() else {"tasks": {}}
+            snap = self.snapshot()
             task = snap.get("tasks", {}).get(tid)
             if task is None:
                 return
@@ -509,6 +563,7 @@ class HexmindWidget(QWidget):
                 item.setData(Qt.ItemDataRole.UserRole, task.id)
             self.tasks.setItem(row, column, item)
         self._refresh_graph()
+        self._refresh_timeline()
 
     def _on_task_activated(self, item: QTableWidgetItem) -> None:
         row = item.row()
@@ -529,8 +584,7 @@ class HexmindWidget(QWidget):
 
     def refresh_team(self) -> None:
         """Redraw the roster from the room's snapshot. Called on team events and after a turn."""
-        snap = self._room.snapshot() if self._room.isRunning() else {
-            "lead": self.lead, "members": self.members, "known": [], "busy": set(), "tasks": {}}
+        snap = self.snapshot()
         lead, members = snap["lead"], snap["members"]
         self.lead = lead
 
@@ -553,6 +607,15 @@ class HexmindWidget(QWidget):
             state = "lead" if name == lead else ("busy " + ", ".join(held[name]) if name in held else "awake")
             self._add_row(self.team, (name, state, ", ".join(_domains(name))))
         self._refresh_graph()
+        self._refresh_timeline()
+
+    def _refresh_timeline(self) -> None:
+        if getattr(self, "timeline", None) is None:
+            return
+        try:
+            self.timeline.refresh()
+        except Exception:
+            pass
 
     def _add_row(self, table: QTableWidget, values: tuple[str, ...]) -> None:
         row = table.rowCount()
@@ -574,7 +637,8 @@ class HexmindWidget(QWidget):
         try:
             if getattr(self, "_settings", None) is not None:
                 self._settings.setValue("qt/split", self._split.saveState())
-                self._settings.setValue("qt/right", self._right.saveState())
+                # The tab widget has no saveState(); its layout *is* its current index.
+                self._settings.setValue("qt/right", self._right.currentIndex())
         except Exception:
             pass
         if self._room.isRunning():

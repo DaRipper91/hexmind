@@ -325,3 +325,19 @@ def test_stopping_twice_is_harmless(qapp):
     room.stop()  # must not raise
     assert not room.isRunning()
     widget.close()
+
+
+def test_the_widget_hands_the_audit_ledger_to_the_orchestrator(room):
+    """T16: `Orchestrator` records every audit verdict into `stats`, and with no ledger it records
+    nothing at all. The checkbox still turns green, the panel still renders — and the session
+    silently writes no history. The widget forwards what it is given, and does not resolve a path
+    itself, so the same fix covers `hexmind`, the TUI, the server and here.
+
+    `None` stays legal: an embedder that keeps its own ledger, or wants none, is not misconfigured."""
+    from hexmind import auditor
+
+    ledger = auditor.Stats("/tmp/hexmind-t16-stats.json")
+    widget = room(stats=ledger)
+    assert widget._room.orch.stats is ledger
+
+    assert room()._room.orch.stats is None

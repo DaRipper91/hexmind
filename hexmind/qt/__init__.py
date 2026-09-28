@@ -13,10 +13,24 @@ not freeze while a model thinks.
 Aether (`~/Projects/Aether`) embeds this in its Room tab. The import is one-way: Hexmind never
 imports Aether, and this widget runs standalone.
 """
+from importlib import import_module
+
 from .widget import HexmindWidget
 
-try:
-    from .graph import GraphPanel, TaskGraphView
-    __all__ = ["HexmindWidget", "GraphPanel", "TaskGraphView"]
-except Exception:  # pragma: no cover - graph is presentation only
-    __all__ = ["HexmindWidget"]
+# Each panel is guarded separately rather than in one try/except. They are presentation only, but they
+# fail for different reasons -- graph and timeline need nothing beyond PySide6, stats optionally
+# wants pyqtgraph -- so one ImportError should not blank out the others' names.
+__all__ = ["HexmindWidget"]
+
+for _module, _names in (
+    (".graph", ("GraphPanel", "TaskGraphView")),
+    (".timeline", ("TimelinePanel",)),
+    (".stats", ("StatsPanel",)),
+):
+    try:
+        globals().update({_name: getattr(import_module(_module, __name__), _name) for _name in _names})
+        __all__.extend(_names)
+    except Exception:  # pragma: no cover - panels are presentation only
+        pass
+del _module, _names
+

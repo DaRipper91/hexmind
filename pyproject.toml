@@ -9,7 +9,10 @@ dependencies = ["textual>=0.80"]
 # The Qt front-end (hexmind.qt.HexmindWidget) is strictly opt-in: PySide6 is a ~100 MB dependency
 # and every Textual TUI user would otherwise be made to install it. Aether embeds the widget via
 # its own `room = ["hexmind[qt]"]` extra. See docs/AETHER-INTERFACE.md.
-qt = ["PySide6>=6.5"]
+# pyqtgraph draws the stats panel's stacked bars; it is imported behind a try/except so the rest of
+# the GUI still works without it (the stats tab degrades to the raw ledger plus an install hint).
+# qtawesome and qdarkstyle are the icon set and the base theme, likewise optional at import time.
+qt = ["PySide6>=6.5", "pyqtgraph>=0.13", "numpy>=1.26", "qtawesome>=1.3", "qdarkstyle>=3.2"]
 # `--serve` is a shipped surface (README documents the REST + WebSocket API) and server.py imports
 # fastapi and pydantic at module level. Declaring neither meant a clean `pip install hexmind` gave
 # you a broken --serve, with a ModuleNotFoundError traceback out of the argument parser. Same
@@ -22,6 +25,9 @@ dev = ["pytest>=8", "httpx2>=2"]
 
 [project.scripts]
 hexmind = "hexmind.__main__:main"
+# The standalone window. Same widget, same orchestrator; the only difference is that main() owns the
+# QApplication and applies theme.stylesheet() app-wide, which an embedded widget must never do.
+hexmind-gui = "hexmind.qt.app:main"
 
 [build-system]
 requires = ["setuptools>=64"]
