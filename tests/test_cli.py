@@ -233,6 +233,37 @@ def test_no_members_at_all_is_a_clear_error(monkeypatch, tmp_path):
     assert "PATH" in str(err.value)
 
 
+# ---------- --timeout reaches the backend ----------
+
+def test_the_timeout_flag_reaches_the_backend(monkeypatch, tmp_path):
+    """A relay stage doing a real TDD cycle can outlast the 1800s default, and --timeout exists for
+    exactly that. Nothing proved the parsed value got as far as the backend that enforces it, so a
+    renamed or dropped keyword would have kept the help text and silently left the flag doing
+    nothing. Assert the value the backend is built with, with and without the flag."""
+    seen = {}
+
+    class RecordingBackend:
+        def __init__(self, cwd, timeout=1800):
+            seen["timeout"], self.cwd = timeout, cwd
+
+        async def run(self, agent, prompt, cwd=None, schema=None):
+            if "Answer ONLY with a JSON object" in prompt:
+                return json.dumps({"reply": "on it", "tasks": []})
+            return "done"
+
+    monkeypatch.setattr(cli, "DirectBackend", RecordingBackend)
+    monkeypatch.setattr(cli, "available", lambda members: ["claude"])
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
+    cli.main()
+    assert seen["timeout"] == 1800, "the documented default must still be what the backend gets"
+
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude",
+                                      "--timeout", "7200", "--once", "hi"])
+    cli.main()
+    assert seen["timeout"] == 7200
+
+
 def test_text_only_lead_error_lists_only_models_that_can_lead(monkeypatch, tmp_path):
     import hexmind.__main__ as cli
 

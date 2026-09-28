@@ -100,6 +100,33 @@ def test_narrow_tab_bar_keeps_every_tap_target_whole(size):
     asyncio.run(go())
 
 
+@pytest.mark.parametrize("size", [(40, 20), (30, 20), (14, 20)])
+def test_task_sheet_button_row_stays_inside_the_viewport(size):
+    """The same pattern the tab bar had (cc529e9): auto-width buttons in a one-row bar with a
+    1-cell margin each. The tab bar had six controls and overflowed at the 40-column floor; the
+    sheet has only two short labels (Close/Copy) so it has room to spare at 40 and only overflows at
+    ≤14 columns. The margin-right: 0 fix prevents regression if more buttons or longer labels are
+    added, and this test covers the actual overflow threshold (14) as well as the phone floor (30, 40)."""
+    width = size[0]
+
+    async def go():
+        app = _app()
+        async with app.run_test(size=size) as pilot:
+            await _run_plan(app, pilot)
+            await pilot.press("escape")
+            app.query_one("#tasks", DataTable).focus()
+            await pilot.press("enter")  # one tap on a row opens its detail sheet
+            await pilot.pause()
+            assert type(app.screen).__name__ == "TaskScreen"
+            for button in app.screen.query("Button"):
+                assert button.region.height == 1
+                assert button.region.width >= len(str(button.label)), f"{button.id} is truncated"
+                assert button.region.right <= width, f"{button.id} sticks out: {button.region}"
+            _assert_no_horizontal_overflow(app, width)
+
+    asyncio.run(go())
+
+
 def test_chat_wraps_inside_narrow_screen():
     async def go():
         app = _app()

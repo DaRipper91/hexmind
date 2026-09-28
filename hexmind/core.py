@@ -378,7 +378,11 @@ class Orchestrator:
         except OSError as e:  # an unwritable notes file must not fail the stage that just finished
             self.emit("message", {"from": "hexmind", "text": f"Could not write the relay notes: {e}"})
 
-    async def run_tasks(self, request: str, tasks: list[Task]) -> None:
+    async def run_tasks(self, request: str, tasks: list[Task], on_finish=None) -> None:
+        """Run the graph. `on_finish(task)` is called once per task as it reaches a terminal state —
+        done, failed, skipped, or cancelled — so a caller can act on stage boundaries (a relay
+        isolation check compares the main folder after each stage). Every exit that ends a task goes
+        through `_finish`, so a task is never reported twice and never missed."""
         by_id = {t.id: t for t in tasks}
         running: dict[asyncio.Task, Task] = {}
         self.record(tasks)
@@ -388,6 +392,13 @@ class Orchestrator:
             derived from task state rather than tracked separately — the two cannot disagree."""
             self.busy = {t.agent for t in self.all_tasks if t.status in BUSY_STATUSES}
 
+        def _finish(t: Task) -> None:
+            self.record_note(t)  # after the status is set: a failed or skipped stage is still history
+            _sync_busy()
+            self.emit("task", {"task": t})
+            if on_finish is not None:
+                on_finish(t)
+
         def launch_ready():
             for t in tasks:
                 if t.status != "pending":
@@ -395,8 +406,7 @@ class Orchestrator:
                 deps = [by_id[d] for d in t.depends_on]
                 if any(d.status in ("failed", "skipped") for d in deps):
                     t.status = "skipped"
-                    self.record_note(t)
-                    self.emit("task", {"task": t})
+                    _finish(t)
                 elif all(d.status == "done" for d in deps):
                     t.status = "running"
                     _sync_busy()
@@ -413,9 +423,7 @@ class Orchestrator:
                         t.output, t.status = clean_text(f.result()), "done"
                     except Exception as e:  # one agent failing must not kill the room
                         t.output, t.status = f"error: {e}", "failed"
-                    self.record_note(t)  # after the try, so a failed stage's diagnosis is recorded too
-                    _sync_busy()
-                    self.emit("task", {"task": t})
+                    _finish(t)
                 launch_ready()
                 # a skip can cascade; keep resolving until nothing changes
                 while any(t.status == "pending" and any(by_id[d].status in ("failed", "skipped")
@@ -433,6 +441,8 @@ class Orchestrator:
                     t.status = "failed"
                     self.record_note(t)
                     self.emit("task", {"task": t})
+                    if on_finish is not None and any(t is mine for mine in tasks):
+                        on_finish(t)  # a stage cut off mid-flight can still have left a mess
             _sync_busy()
 
     def _workspace_block(self, t: Task) -> str:

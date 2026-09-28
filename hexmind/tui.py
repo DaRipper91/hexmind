@@ -70,7 +70,11 @@ class TaskScreen(ModalScreen):
     #sheet { width: 100%; height: 90%; border: solid $primary; background: $surface; }
     #sheet RichLog { height: 1fr; }
     #sheet Horizontal { height: 1; }
-    #sheet Button { width: auto; min-width: 0; margin-right: 1; }
+    /* Same rule the tab bar got in cc529e9: a 1-cell margin on every auto-width button bought
+       nothing (they carry their own padding) and only ever cost columns. With two short labels the
+       row still has room to spare at the 40-column floor, but the margin is what put the tab bar's
+       `?` off the screen, and this sheet is a phone-width screen too. */
+    #sheet Button { width: auto; min-width: 0; margin-right: 0; }
     """
     BINDINGS = [("escape,q", "dismiss", "Close")]
 
