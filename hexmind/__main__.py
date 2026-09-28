@@ -69,19 +69,29 @@ def main() -> None:
                   f"      use --backend direct for the full team.", file=sys.stderr)
 
     if args.serve:
-        from .server import run_server
-        run_server(
-            cwd=args.cwd,
-            host=args.host,
-            port=args.port,
-            backend=args.backend,
-            lead=args.lead,
-            without=args.without,
-            with_=args.with_,
-            audit=args.audit,
-            approve_plans=args.approve_plans,
-            timeout=args.timeout,
-        )
+        # The guard spans the call, not just the import: run_server does `import uvicorn` lazily, so
+        # a missing uvicorn with fastapi present would otherwise escape as a bare traceback from
+        # inside a function the user never called.
+        try:
+            from .server import run_server
+            run_server(
+                cwd=args.cwd,
+                host=args.host,
+                port=args.port,
+                backend=args.backend,
+                lead=args.lead,
+                without=args.without,
+                with_=args.with_,
+                audit=args.audit,
+                approve_plans=args.approve_plans,
+                timeout=args.timeout,
+            )
+        except ImportError as e:
+            # --serve is a documented surface, so its dependencies are an extra rather than base
+            # weight. Say how to get them instead of letting an ImportError out of the argument
+            # parser tell someone they are missing a module.
+            sys.exit(f"--serve needs the server extra, which is not installed ({e}).\n"
+                     f"      pip install 'hexmind[server]'")
         return
 
     # hcom: each model is a persistent headless hcom agent (started on first use)

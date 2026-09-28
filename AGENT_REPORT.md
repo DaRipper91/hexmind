@@ -200,9 +200,33 @@ Two things worth knowing:
   this file's summary at 22:45. Its AETHER-INTERFACE.md is committed here; its edits to this report
   are untouched, and the two sessions should reconcile before the next commit.
 
+### One more packaging bug, fixed
+
+`hexmind/server.py` imports `fastapi` and `pydantic` at module level (and `uvicorn` lazily inside
+`run_server`) while `dependencies` declared only `textual>=0.80`. So a clean `pip install hexmind`
+gave you a **broken `--serve`**, and because the import sat inside the `--serve` branch of
+`main()`, the user got a `ModuleNotFoundError` traceback out of the argument parser.
+
+- `server` extra: `fastapi>=0.110`, `uvicorn>=0.29`, `pydantic>=2`. `pydantic` is a *direct* import
+  in `server.py`, so relying on it transitively through fastapi was the same bug one level down.
+- The guard now spans the call, not just the import — `run_server` imports `uvicorn` lazily, so a
+  missing uvicorn with fastapi present escaped as a bare traceback from inside a function the user
+  never called. That was found by the test, not by reading.
+- `dev` extra: `pytest>=8`, `httpx2>=2`. `httpx2` is what starlette's `TestClient` needs and
+  `tests/test_server.py` uses it; pytest was previously assumed to be ambient, which is why a fresh
+  `.venv` could not run the suite at all. Neither belongs in a user's install.
+- Two tests: one runs `--serve` with the imports blocked and asserts the message names
+  `hexmind[server]`; one asserts every third-party module `server.py` imports is named by an extra,
+  so the gap cannot come back silently.
+
+Verified end to end: `uv pip install -e ".[qt,server,dev]"` then **340 passed in the project's own
+`.venv`**, and the built wheel's metadata shows base install is still only `textual>=0.80` with
+`qt` / `server` / `dev` correctly gated behind their extras.
+
 ### Build / Test Status
 
 - Build: ✅ `python3 -m hexmind --help` works; a wheel builds and contains `hexmind/qt/`
 - Lint: ⚠️ 139 — 138 pre-existing, plus 1 (`BLE001` in the widget's turn handler, the identical
   pattern `tui.py` and `core.py` already use for "a turn error is a line, not a crash")
-- Tests: ✅ 337 passed (324 + 1 skipped without PySide6, 337 with it)
+- Tests: ✅ 340 passed — in the project's own `.venv` with `.[qt,server,dev]`, which is the first
+  time a fresh venv has been able to run the whole suite at all

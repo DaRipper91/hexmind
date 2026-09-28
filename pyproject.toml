@@ -10,6 +10,15 @@ dependencies = ["textual>=0.80"]
 # and every Textual TUI user would otherwise be made to install it. Aether embeds the widget via
 # its own `room = ["hexmind[qt]"]` extra. See docs/AETHER-INTERFACE.md.
 qt = ["PySide6>=6.5"]
+# `--serve` is a shipped surface (README documents the REST + WebSocket API) and server.py imports
+# fastapi and pydantic at module level. Declaring neither meant a clean `pip install hexmind` gave
+# you a broken --serve, with a ModuleNotFoundError traceback out of the argument parser. Same
+# opt-in shape as `qt`, and the same floor as agentdeck's `web` extra.
+server = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2"]
+# Development and test only. `httpx2` is what starlette's TestClient needs, and tests/test_server.py
+# uses it; pytest was previously assumed to be ambient, which is why a fresh .venv could not run the
+# suite at all. Nothing here belongs in a user's install.
+dev = ["pytest>=8", "httpx2>=2"]
 
 [project.scripts]
 hexmind = "hexmind.__main__:main"

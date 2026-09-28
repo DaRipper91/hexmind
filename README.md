@@ -82,6 +82,18 @@ cd ~/Projects/your-app
 hexmind                    # open the room here
 ```
 
+The base install is just the TUI. Two surfaces are opt-in, because their dependencies are large or
+only needed by one flag:
+
+```bash
+pip install -e ".[server]"   # hexmind --serve   (FastAPI + uvicorn)
+pip install -e ".[qt]"       # hexmind.qt        (PySide6, ~240 MB)
+pip install -e ".[dev]"      # running the test suite
+```
+
+`--serve` says exactly which extra to install if it is missing, rather than failing with a
+`ModuleNotFoundError`.
+
 > [!WARNING]
 > Agents run with edits auto-accepted in the room's folder so they can actually do the work.
 > Use a git repo, and review diffs before you commit.
@@ -507,7 +519,7 @@ until you run `/lead NAME`.
 | `--approve-plans` | off | the lead's plan waits for `/approve` or `/discard` |
 | `--timeout SECONDS` | `1800` | per-call agent timeout. A relay stage doing a full TDD cycle can exceed 30 min |
 | `--once "REQUEST"` | none | run one request without the TUI and print the results |
-| `--serve` | off | headless FastAPI + WebSocket server |
+| `--serve` | off | headless FastAPI + WebSocket server — needs the `server` extra |
 | `--host HOST` | `0.0.0.0` | server bind address |
 | `--port PORT` | `8765` | server port |
 

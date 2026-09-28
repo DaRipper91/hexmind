@@ -305,3 +305,59 @@ def test_serve_hands_the_timeout_to_the_backend_too(monkeypatch, tmp_path):
     cli.main()
 
     assert seen.get("timeout") == 60, f"--serve dropped the timeout: {seen}"
+
+
+# ---------- the server extra is declared, and its absence is explained ----------
+
+def test_serve_says_how_to_install_its_extra_instead_of_raising_a_traceback(monkeypatch, tmp_path):
+    """`--serve` is documented in the README, and server.py imports fastapi and pydantic at module
+    level while base `dependencies` declared only textual. So a clean install had a broken --serve
+    that failed with a ModuleNotFoundError out of the argument parser. The dependencies are now an
+    extra, and the path that finds them missing has to be helpful."""
+    import builtins
+
+    import hexmind.__main__ as cli
+
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name.split(".")[0] in ("fastapi", "uvicorn", "pydantic"):
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    # An earlier test in this file imports hexmind.server, so without this the module is already in
+    # sys.modules and the guarded import would never run — the test would pass for the wrong reason.
+    monkeypatch.delitem(sys.modules, "hexmind.server", raising=False)
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    monkeypatch.setattr("hexmind.__main__.available", lambda members: ["claude"])
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--serve"])
+
+    with pytest.raises(SystemExit) as err:
+        cli.main()
+
+    message = str(err.value)
+    assert "--serve needs the server extra" in message
+    assert "hexmind[server]" in message, "the message must say exactly what to install"
+    assert "Traceback" not in message
+
+
+def test_the_server_extra_is_actually_declared():
+    """A guard against the same gap coming back: the extra has to name what server.py imports."""
+    import tomllib
+    from pathlib import Path
+
+    pyproject = tomllib.loads((Path(__file__).resolve().parent.parent / "pyproject.toml").read_text())
+    extras = pyproject["project"]["optional-dependencies"]
+    assert "server" in extras, f"no server extra: {sorted(extras)}"
+    declared = " ".join(extras["server"])
+    assert "fastapi" in declared, extras["server"]
+    assert "uvicorn" in declared, extras["server"]
+
+    # and every third-party module server.py imports at module level is covered by some extra
+    import re
+    source = (Path(__file__).resolve().parent.parent / "hexmind" / "server.py").read_text()
+    for module in ("fastapi", "pydantic", "uvicorn"):
+        # `from fastapi import ...` as well as `import uvicorn`, wherever it appears in the file
+        assert re.search(rf"^\s*(import {module}\b|from {module}\b)", source, re.MULTILINE), \
+            f"{module} is no longer imported by server.py; trim the extra"
+        assert module in declared, f"{module} is imported by server.py and named by no extra"
