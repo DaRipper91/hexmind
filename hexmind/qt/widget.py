@@ -22,14 +22,17 @@ the picker: sending with none set says so instead of reaching a backend with no 
 from __future__ import annotations
 
 import asyncio
+import atexit
 import os
 import threading
+import weakref
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QHBoxLayout,
@@ -64,6 +67,39 @@ def _looks_like_path(text: str) -> str | None:
     return None
 
 
+# A QApplication that is created here must be kept alive by a reference we own: if it is garbage
+# collected, Qt aborts the process. Aether always has one already; this is for a developer standing
+# the widget up on its own, which is exactly the smoke line in docs/AETHER-INTERFACE.md.
+_APP: QApplication | None = None
+
+
+def _ensure_app() -> QApplication:
+    """Return the running QApplication, creating one if this is a standalone process.
+
+    A QWidget cannot be constructed before a QApplication exists, and Qt's answer to trying is to
+    abort rather than to raise — so a missing application is a hard crash with no traceback, which
+    is a poor first experience for a one-liner. Creating it is idempotent and harmless when a host
+    app is already running."""
+    global _APP
+    app = QApplication.instance()
+    if app is None:
+        _APP = app = QApplication([])
+    return app
+
+
+# Every live room, so the interpreter can shut them down. A QThread destroyed while running aborts
+# the process, and `closeEvent` is not called when a program simply ends — so a script that builds
+# a widget and exits, which is exactly the smoke line in docs/AETHER-INTERFACE.md, would otherwise
+# die on the way out. Weak, so a closed widget is not kept alive by this.
+_LIVE_ROOMS: weakref.WeakSet[_Room] = weakref.WeakSet()
+
+
+@atexit.register
+def _stop_live_rooms() -> None:
+    for room in list(_LIVE_ROOMS):
+        room.stop()
+
+
 class _Room(QThread):
     """The orchestrator and its event loop, off the GUI thread.
 
@@ -87,6 +123,7 @@ class _Room(QThread):
         self._orch_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self.orch = Orchestrator(backend, list(members), lead, emit=self._emit, audit=audit)
+        _LIVE_ROOMS.add(self)
 
     # ---------- the bridge from the orchestrator to Qt ----------
     def _emit(self, kind: str, data: dict) -> None:
@@ -181,6 +218,7 @@ class HexmindWidget(QWidget):
         audit: bool = False,
         cwd: str | None = None,
     ) -> None:
+        _ensure_app()
         super().__init__(parent)
         self.cwd = os.path.abspath(cwd or os.getcwd())
         if members is None:

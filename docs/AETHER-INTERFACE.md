@@ -70,13 +70,25 @@ Aether's problem, not this repo's — included here so the timing is understood.
 
 ## Definition of done for this repo — **all three met**
 
-1. **Offscreen smoke passes.** `HexmindWidget()` constructs, and `HexmindWidget(parent)` works the
-   way `RoomView` calls it (`widget_cls(self)`).
+1. **Offscreen smoke passes** — run verbatim, in a subprocess:
+   ```
+   QT_QPA_PLATFORM=offscreen ./.venv/bin/python -c "from hexmind.qt import HexmindWidget; w = HexmindWidget(); print(w.__class__.__name__)"
+   # -> HexmindWidget
+   ```
+   `HexmindWidget(parent)` also works the way `RoomView` calls it (`widget_cls(self)`).
 2. **The clean wheel includes `hexmind/qt/`.** Verified by building a wheel and listing it:
    `hexmind/qt/__init__.py` and `hexmind/qt/widget.py` are both in the archive, alongside
    `models.toml` and the four chain files.
-3. **`tests/test_qt.py` — 13 tests**, offscreen, mirroring Aether's own PySide6 test style, and
+3. **`tests/test_qt.py` — 14 tests**, offscreen, mirroring Aether's own PySide6 test style, and
    skipped wholesale when PySide6 is absent.
+
+   Two things the smoke line needs cannot be true in-process — this suite already owns a
+   `QApplication` and always closes its widgets — so it runs as a subprocess test. It failed twice
+   before it passed, both times by *aborting* rather than raising, which is Qt's answer to both and
+   is undiagnosable from a traceback: no `QApplication` existed, and then a `QThread` was destroyed
+   while running when the interpreter ended without a `closeEvent`. The widget now creates an
+   application if there is none (keeping a reference, or it would be collected out from under Qt)
+   and stops its live rooms from an `atexit` hook.
 
 ## What shipped
 

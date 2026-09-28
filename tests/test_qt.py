@@ -287,3 +287,26 @@ def test_accessible_names_are_set_so_a_screen_reader_has_something(qapp):
         assert widget.team.accessibleName() == "Team"
     finally:
         widget.close()
+
+
+def test_the_docs_smoke_line_works_verbatim():
+    """docs/AETHER-INTERFACE.md defines done #1 as this exact one-liner, so it is run as a
+    subprocess: two things it needs cannot be true in-process, because this test session already
+    owns a QApplication and always closes its widgets.
+
+    It failed twice before it passed, both times by aborting rather than raising: no QApplication
+    at all, and then a QThread destroyed while running when the interpreter ended without a
+    closeEvent. Qt's answer to both is to take the process down, which is a terrible first
+    experience for a one-liner and impossible to debug from a traceback."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "from hexmind.qt import HexmindWidget; w = HexmindWidget(); print(w.__class__.__name__)"],
+        capture_output=True, text=True, cwd=str(root), timeout=120, check=False,
+        env={**__import__("os").environ, "QT_QPA_PLATFORM": "offscreen"})
+    assert result.returncode == 0, f"the documented smoke line failed:\n{result.stderr[-800:]}"
+    assert result.stdout.strip().endswith("HexmindWidget"), result.stdout
