@@ -39,11 +39,13 @@ DIRECT_CMDS: dict[str, list[str]] = {
 
 # Free OpenCode Zen models. Prompts go over stdin, so there is no argv length ceiling.
 # --format json (plan WS-4) will replace the bare stdout read with a session-aware event stream.
+# -m takes provider/model#variant, and Model.ref appends the declared variant, so the reasoning
+# effort in models.toml actually reaches the CLI instead of only being shown on the /model card.
 # Which keys came from the registry, so a mid-session profile can replace exactly these and leave the
 # hand-written CLIs above alone (see models.publish).
 GENERATED: set[str] = {n for n, m in REGISTRY.models.items() if m.cli == "opencode" and m.model}
 DIRECT_CMDS.update({
-    name: ["opencode", "run", "--auto", "-m", m.model]
+    name: ["opencode", "run", "--auto", "-m", m.ref]
     for name, m in REGISTRY.models.items() if m.cli == "opencode" and m.model
 })
 
@@ -79,6 +81,9 @@ def _signal_group(pid: int, sig: int) -> None:
     try:
         os.killpg(pid, sig)
     except ProcessLookupError:
+        pass
+    except PermissionError:
+        # PID reused after the original process exited; nothing more to do.
         pass
 
 
@@ -135,11 +140,11 @@ async def run_local(agent: str, prompt: str, timeout: int) -> str:
         if _active_local is not None and _active_local != agent:
             try:
                 await asyncio.to_thread(_ollama_generate, LOCAL_MODELS[_active_local], "", 10, keep_alive=0)
-            except OSError:
+            except (OSError, ValueError):
                 pass  # best-effort: Ollama frees it on its own keep_alive timeout regardless
         try:
             result = await asyncio.to_thread(_ollama_generate, LOCAL_MODELS[agent], prompt, timeout)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             raise RuntimeError(f"{agent} (Ollama {LOCAL_MODELS[agent]}) failed: {e}") from e
         _active_local = agent
         return result

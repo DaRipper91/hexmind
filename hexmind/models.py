@@ -61,6 +61,19 @@ class Model:
     def is_local(self) -> bool:
         return self.tier == "local"
 
+    @property
+    def ref(self) -> str:
+        """The `provider/model[#variant]` string a CLI takes for this member.
+
+        Only the opencode family is wired, because only opencode documents a reasoning effort on the
+        model flag itself (`-m provider/model#variant`); kimi takes reasoning in its own config, so
+        appending `#max` there would be an invalid alias. A member with no variant yields the bare id
+        it declares, so adding the field cannot change a model that never had one.
+        """
+        if self.variant and self.cli == "opencode" and self.model:
+            return f"{self.model}#{self.variant}"
+        return self.model
+
     def description(self) -> str:
         """The roster line for this model. Generated, so it cannot drift from best_at/avoid_for."""
         text = f"{self.label}: {self.best_at}"
@@ -356,12 +369,16 @@ class Registry:
         """provider/model ids the opencode CLI will accept, so a typo cannot join the team."""
         if not shutil.which("opencode"):
             return set()
+        import re
         import subprocess
         try:
             out = subprocess.run(["opencode", "models"], capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.SubprocessError):
             return set()
-        return {line.strip() for line in out.stdout.splitlines() if "/" in line}
+        # Match provider/model shape (e.g. "anthropic/claude-sonnet-4-20250514"),
+        # stripping any warning or header lines the CLI may emit.
+        _model_re = re.compile(r"^[\w.-]+/[\w:.-]+$")
+        return {line.strip() for line in out.stdout.splitlines() if _model_re.match(line.strip())}
 
     def available(self) -> list[str]:
         """Members whose backing tool is actually present, in preference order."""
@@ -417,7 +434,7 @@ def publish(registry: Registry, paths: list[Path] | None = None) -> list[str]:
     backends.GENERATED.clear()
     for name, model in registry.models.items():
         if model.cli == "opencode" and model.model:
-            backends.DIRECT_CMDS[name] = ["opencode", "run", "--auto", "-m", model.model]
+            backends.DIRECT_CMDS[name] = ["opencode", "run", "--auto", "-m", model.ref]
             backends.GENERATED.add(name)
     backends.LOCAL_MODELS.clear()
     backends.LOCAL_MODELS.update({n: m.model for n, m in registry.models.items() if m.verify == "ollama"})

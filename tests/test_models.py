@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from hexmind import backends
 from hexmind.auditor import DOMAINS
 from hexmind.core import OPT_IN, ROSTER, TEXT_ONLY, REGISTRY
 from hexmind.models import BUNDLED, Registry
@@ -51,6 +52,37 @@ def test_tier_and_verify_are_valid_and_consistent():
             assert m.env, f"{name} verifies via env but names no variable"
         if m.tier == "local":
             assert m.verify == "ollama" and m.model, f"{name} is local but names no Ollama tag"
+
+
+# ---------- the variant field: declared in toml, has to reach the CLI ----------
+
+def test_a_declared_variant_reaches_the_generated_argv():
+    """`variant` used to be rendered on the /model card and on no argv, so a registry that asked for
+    high reasoning effort silently got the CLI default. -m takes provider/model#variant, so the
+    suffix is the whole wiring, and the generated command is the only place it can happen."""
+    assert REGISTRY.get("opencode-ultra").variant, "the fixture must actually declare a variant"
+    argv = backends.DIRECT_CMDS["opencode-ultra"]
+    assert argv[-1] == f'{REGISTRY.get("opencode-ultra").model}#{REGISTRY.get("opencode-ultra").variant}'
+    assert argv[-1].count("#") == 1, "a ref must not be suffixed twice"
+
+
+def test_ref_is_the_bare_id_when_there_is_no_variant():
+    """A model that never declared one must produce exactly the id it declares -- adding the field
+    cannot change a model that does not use it."""
+    for name in ALL_OPENCODE:
+        m = REGISTRY.get(name)
+        expected = m.model if not m.variant else f"{m.model}#{m.variant}"
+        assert m.ref == expected, name
+        assert backends.DIRECT_CMDS[name][-1] == m.ref, name
+
+
+def test_a_non_opencode_member_never_gets_a_variant_suffix():
+    """kimi declares variant = "max", but kimi takes reasoning in its own config and has no
+    effort flag. `#max` there would be an invalid model alias, so it must not be appended."""
+    kimi = REGISTRY.get("kimi")
+    assert kimi.variant, "the fixture must actually declare a variant"
+    assert kimi.ref == kimi.model, kimi.ref
+    assert "#" not in kimi.ref
 
 
 # ---------- the eight free models ----------
