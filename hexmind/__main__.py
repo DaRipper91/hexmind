@@ -45,7 +45,7 @@ def main() -> None:
                  "opencode, copilot, kimi) and make sure it is on your PATH.")
 
     # No default lead. A hardcoded one is wrong twice over: it crashes when that model is not
-    # installed (a commit set it to opencode-ultra and made hexmind refuse to start for anyone
+    # installed (a commit set it to nemotron-ultra and made hexmind refuse to start for anyone
     # without the opencode CLI), and it silently picks the room's spokesperson for the user. The
     # TUI asks; headless surfaces have nobody to ask, so they must say so.
     if args.lead is None:

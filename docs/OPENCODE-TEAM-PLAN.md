@@ -12,7 +12,7 @@ state. Where the two disagree, this file describes intent and BUILD-PATH describ
 
 Two places below are known to be superseded, and are marked as such where they appear:
 
-- **There is no default lead.** WS-3's original "P4 · default lead `opencode-ultra`" is wrong and
+- **There is no default lead.** WS-3's original "P4 · default lead `nemotron-ultra`" is wrong and
   was reversed; the interactive room has no default at all, and `--lead` is required for the
   headless surfaces that have nobody to ask.
 - **`/scan` does not add members.** WS-2 planned discovery to *join* the roster. It writes a
@@ -86,10 +86,10 @@ discards stdout, so every model forgets everything between tasks.
 
 | # | Defect | Location |
 | :--- | :--- | :--- |
-| D1 | `HCOM_TOOLS` has a single `"opencode"` entry, so `opencode-ultra/-muse/-mimo/-pickle/-ling` raise `unsupported hcom member` — **5 of 6 opencode members are dead in `--backend hcom`** | `backends.py:213`, `backends.py:269` |
+| D1 | `HCOM_TOOLS` has a single `"opencode"` entry, so `nemotron-ultra/-muse/-mimo/-pickle/-ling` raise `unsupported hcom member` — **5 of 6 opencode members are dead in `--backend hcom`** | `backends.py:213`, `backends.py:269` |
 | D2 | Ollama name mismatch → member silently never joins, no error (`available()` is an exact set lookup) | `backends.py:104` |
 | D3 | `"think": False` hardcoded, defeating the installed `deepseek-r1-1.5b` | `backends.py:109` |
-| D4 | `opencode-muse` roster text describes **LongCat2.5's** specialty — repo-scan work routes to the wrong model | `core.py:24` |
+| D4 | `muse-spark` roster text describes **LongCat2.5's** specialty — repo-scan work routes to the wrong model | `core.py:24` |
 | D5 | No `/lead`, `/models`, `/add`, or `/remove` command exists at all | `relay.py` |
 | D6 | `Task.status` + `AGENT_COLOR` hardcode the member list; a new model gets no colour | `core.py:84`, `tui.py:22` |
 
@@ -190,7 +190,7 @@ hand-maintained `ROSTER` prose that caused D4.
 (override at `~/.config/hexmind/models.toml` — mirrors the existing `chains/` pattern).
 
 ```toml
-[models.opencode-ultra]
+[models.nemotron-ultra]
 cli        = "opencode"
 model      = "opencode/nemotron-3-ultra-free"
 tier       = "cloud"            # cloud | local
@@ -202,7 +202,7 @@ avoid_for  = "typos, one-liners, markdown formatting"
 think      = false
 variant    = "high"
 weight     = 100               # preference; higher = favoured (R5)
-fallback_for = []              # e.g. deepseek-r1 covers opencode-ultra offline
+fallback_for = []              # e.g. deepseek-r1 covers nemotron-ultra offline
 color      = "blue"
 footprint  = "cloud · heavy CoT"
 
@@ -290,7 +290,7 @@ v2 is the honest version of "ask the team": a single model can be flattered or s
 but a weighted panel of independent opinions cannot be talked into one answer. It reuses
 `run_tasks` unchanged, so it costs almost no new machinery.
 
-**Default lead:** `opencode-ultra` (Nemotron 3 Ultra) — the report's architecture and
+**Default lead:** `nemotron-ultra` (Nemotron 3 Ultra) — the report's architecture and
 planning model. Makes R5 true from first launch.
 
 ---
@@ -418,8 +418,8 @@ The plan gets audited the way the code does — continuously, not once at the en
 
 | Model | Catches | Why it is the right tool |
 | :--- | :--- | :--- |
-| `opencode-ultra` (Nemotron 3 Ultra) | **Wrong** — bad reasoning, missed failure modes, contradictory phases | Report disposition is adversarial *by construction*: "force chain-of-thought analysis on edge cases and failure modes **before** generating implementation code" |
-| `opencode-longcat` (LongCat2.5) | **Missing** — requirements never addressed, silent omissions | The only free model that ingests plan + full diff + relevant source in one context, and its guideline already demands "line-by-line citations for every synthesized finding" |
+| `nemotron-ultra` (Nemotron 3 Ultra) | **Wrong** — bad reasoning, missed failure modes, contradictory phases | Report disposition is adversarial *by construction*: "force chain-of-thought analysis on edge cases and failure modes **before** generating implementation code" |
+| `longcat-preview` (LongCat2.5) | **Missing** — requirements never addressed, silent omissions | The only free model that ingests plan + full diff + relevant source in one context, and its guideline already demands "line-by-line citations for every synthesized finding" |
 
 An audit missing either is half an audit: Ultra finds errors in what was reasoned, LongCat
 finds what was never considered.
@@ -446,7 +446,7 @@ rewritten plan resets the baseline deliberately rather than silently.
 
 ### Rule that must not be forgotten: no self-review
 
-**If `opencode-ultra` is the default lead (WS-5), then Ultra auditing the plan is a model
+**If `nemotron-ultra` is the default lead (WS-5), then Ultra auditing the plan is a model
 reviewing its own reasoning.** This is the same trap the Antigravity section correctly
 identifies for builders ("a builder should never approve its own work"), and it applies
 symmetrically to planners.
@@ -483,8 +483,8 @@ is waste. The lead proposes the smallest roster that still covers the work:
    their work could be consolidated onto one.
 3. **Staleness** — a model has held no task for K rounds.
 
-Output is a proposal, never an action: *"sleep `opencode-mimo` and `opencode-ling` — no open
-task touches `ui` or quant work; consolidate `t3` onto `opencode-pickle`."*
+Output is a proposal, never an action: *"sleep `mimo-flash` and `ling-flash` — no open
+task touches `ui` or quant work; consolidate `t3` onto `big-pickle`."*
 
 ### The rule that makes this safe
 
@@ -522,7 +522,7 @@ leader proposes  →  auditor validates coverage  →  user applies (one action)
 ```
 
 The middle step is WS-8 doing real work. **LongCat checks that sleeping a model does not
-remove coverage the plan still requires** — *"you proposed sleeping `opencode-mimo`, but
+remove coverage the plan still requires** — *"you proposed sleeping `mimo-flash`, but
 WS-7 is a UI workstream and no other awake member covers `ui`."* Without that check, the
 leader will happily propose a roster that cannot finish the job.
 
@@ -543,9 +543,9 @@ chat commands kept as keyboard shortcuts *into* that modal:
 ```
 ┌─ Team ─────────────────────────────────────────────┐
 │  model              state      domains      stats  │
-│ ▸ opencode-pickle   ● running  impl,tests   7/8    │
-│   opencode-ultra    ○ asleep   arch,review  5/6    │
-│   opencode-mimo     ○ asleep   ui           -      │
+│ ▸ big-pickle   ● running  impl,tests   7/8    │
+│   nemotron-ultra    ○ asleep   arch,review  5/6    │
+│   mimo-flash     ○ asleep   ui           -      │
 ├────────────────────────────────────────────────────┤
 │ [Sleep] [Wake] [Lead] [Audit] [Plan] [Close]      │
 └────────────────────────────────────────────────────┘
@@ -744,7 +744,7 @@ nothing runs.
 | **P1** | WS-7 + WS-2 + WS-10 | `/team` control surface, `/models`, `/model`, sleep/wake, `/add`, `/remove`, `/pull` (R2, R7, R9) — **shipped** except `/pull` | P0 |
 | **P2** | WS-3 | `/lead`, live leader switch, `/lead recommend`, startup picker (R3, R4) — **shipped** | P0 |
 | **P3** | WS-4 | sessions keyed `(model, dir)`, live output, hcom fix (R1) | P0 |
-| **P4** | WS-5 | preference weighting (R5). ~~default lead `opencode-ultra`~~ — **reversed**: a default lead is the bug WS-3 §1 describes, not a feature | P1, P2 |
+| **P4** | WS-5 | preference weighting (R5). ~~default lead `nemotron-ultra`~~ — **reversed**: a default lead is the bug WS-3 §1 describes, not a feature | P1, P2 |
 | **P5** | WS-6 | local models, `think` flag (R6) | P0 |
 | **P6** | WS-8 | plan-audit chain, `/audit-plan`, phase-gate matrix (R8) | P1, P2 |
 | **P7** | WS-9 | leader's over-provisioning advisor (R9) | P3, P6 |
@@ -910,36 +910,36 @@ description = "Autonomous Opencode team pipeline: Nemotron audit -> Pickle TDD b
 
 [[stages]]
 name = "pre-audit"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 instructions = "Audit the feature spec and plan for architecture risks, concurrency bottlenecks, and Asahi 8GB RAM constraints. Output an approved execution contract."
 
 [[stages]]
 name = "tdd-build"
-agent = "opencode-pickle"
+agent = "big-pickle"
 instructions = "Implement the approved contract using strict Test-Driven Development (TDD). Write failing tests first, write code, run pytest, iterate until green. Match surrounding code style."
 
 [[stages]]
 name = "compliance-check"
-agent = "opencode-longcat"
+agent = "longcat-preview"
 instructions = "Ingest the full repository diff against the specification. Verify all requirements and defect fixes are present. Report any missing implementations."
 
 [[stages]]
 name = "post-critique"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 instructions = "Conduct an adversarial code and security review of the diff. Scrutinize edge cases, error handling, and silent fallbacks. Approve only when production-ready."
 ```
 
 ### 5. Tailored Skill Sets for Each Model in the Chain
 The Opencode models (specifically leveraging `opencode/muse-spark-1.3-contributor-free`, the prompt/skill engineering specialist) must generate a dedicated capability skill pack for each participating model, conforming to standard `SKILL.md` format:
 
-1. **For `opencode-ultra` (Pre-Audit & Post-Critique):**
+1. **For `nemotron-ultra` (Pre-Audit & Post-Critique):**
    * **`plan-architectural-auditor`**: Guidelines for stress-testing technical plans, memory ceilings, and failure cascades.
    * **`adversarial-code-critic`**: Checklists for finding silent drops, type mismatches, race conditions, and unhandled exceptions.
-2. **For `opencode-pickle` (TDD Builder):**
+2. **For `big-pickle` (TDD Builder):**
    * **`autonomous-tdd-builder`**: Conventions for writing pytest fixtures, atomic commits, and relentless test-driven iterations without human intervention.
-3. **For `opencode-longcat` (Compliance Inspector):**
+3. **For `longcat-preview` (Compliance Inspector):**
    * **`monorepo-diff-compliance`**: Prompts and heuristics for cross-referencing multi-file diffs against tabular requirements matrices.
-4. **For `opencode-muse` (Meta-Author):**
+4. **For `muse-spark` (Meta-Author):**
    * **`skill-chain-synthesizer`**: Automated skill generator that compiles model capabilities into valid Hexmind chain and skill files.
 
 ### 6. Model Role Summary Matrix

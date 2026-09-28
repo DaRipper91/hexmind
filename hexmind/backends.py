@@ -225,18 +225,18 @@ class DirectBackend:
 
 
 # hcom drives one agent per *tool*, and cannot select which model that tool uses. So of the eight
-# free opencode models only the default one is reachable here; the other seven are direct-only.
+# free opencode models only the default one (nemotron-lightning) is reachable here; the other seven are direct-only.
 # HexmindBackend/HcomBackend.supports() is the single source of truth for this -- members(),
 # _agent()'s error message and the --backend hcom startup notice all read it, so the exclusion
 # can never drift from the behaviour.
-HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "opencode": "opencode",
+HCOM_TOOLS = {"claude": "claude", "agy": "antigravity", "codex": "codex", "nemotron-lightning": "opencode",
               "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
 HCOM_MEMBERS = {"claude": "claude", "antigravity": "agy", "gemini": "agy", "codex": "codex",
-                "opencode": "opencode", "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
+                "opencode": "nemotron-lightning", "copilot": "copilot", "jules": "jules", "kimi": "kimi"}
 # Free opencode models that exist only as distinct -m values behind the one `opencode` tool.
 # Derived, so a newly registered opencode model is excluded by default rather than accidentally
 # appearing in hcom (which would fail at task time with a confusing error).
-HCOM_EXCLUDED = {n for n, m in REGISTRY.models.items() if m.cli == "opencode" and n != "opencode"}
+HCOM_EXCLUDED = {n for n, m in REGISTRY.models.items() if m.cli == "opencode" and n != "nemotron-lightning"}
 
 
 def hcom_unsupported(members: list[str]) -> list[str]:

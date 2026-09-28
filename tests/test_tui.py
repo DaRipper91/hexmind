@@ -151,7 +151,7 @@ def test_task_sheet_copies_output(monkeypatch):
 # commands change. INVARIANT S-1: a model holding a live task cannot be slept, so the control is
 # disabled and names the task that blocks it, rather than offering a button guaranteed to fail.
 
-ROSTER = ("claude", "agy", "opencode-pickle", "opencode-ling")
+ROSTER = ("claude", "agy", "big-pickle", "ling-flash")
 
 
 def _team_app(known=ROSTER, members=("claude", "agy"), lead="claude", plan=None):
@@ -184,10 +184,10 @@ def test_roster_lists_every_known_model_with_its_state():
             roster = app.screen
             assert type(roster).__name__ == "TeamScreen"
             # preferred-first, so the models the plan favours are the ones you reach first
-            assert _order(roster) == ["opencode-pickle", "opencode-ling", "agy", "claude"]
+            assert _order(roster) == ["big-pickle", "ling-flash", "agy", "claude"]
             assert _state(roster, "claude") == "lead"
             assert _state(roster, "agy") == "awake"
-            assert _state(roster, "opencode-pickle") == "asleep"
+            assert _state(roster, "big-pickle") == "asleep"
             assert roster.query_one("#sleep-agy", Button) and not roster.query("#wake-agy")
 
     asyncio.run(go())
@@ -224,17 +224,17 @@ def test_roster_is_keyboard_navigable_and_closes_on_escape():
             await pilot.press("escape", "t")
             roster = app.screen
             rows = list(roster.query("#roster > Vertical"))
-            assert roster.focused is rows[0].query_one("#wake-opencode-pickle"), \
+            assert roster.focused is rows[0].query_one("#wake-big-pickle"), \
                 "focus must land on the first row's control"
             await pilot.press("j")
-            assert roster.focused is rows[1].query_one("#wake-opencode-ling")
+            assert roster.focused is rows[1].query_one("#wake-ling-flash")
             await pilot.press("down")
             assert roster.focused is rows[2].query_one("#sleep-agy")
             rows[2].query_one("#lead-agy").focus()
             await pilot.press("k")
-            assert roster.focused is rows[1].query_one("#lead-opencode-ling"), "j/k keep the same control"
+            assert roster.focused is rows[1].query_one("#lead-ling-flash"), "j/k keep the same control"
             await pilot.press("k", "k")  # the cursor stops at the ends rather than wrapping
-            assert roster.focused is rows[0].query_one("#lead-opencode-pickle")
+            assert roster.focused is rows[0].query_one("#lead-big-pickle")
             await pilot.press("escape")
             assert type(app.screen).__name__ == "Screen"
             await pilot.press("escape", "t")
@@ -284,11 +284,11 @@ def test_waking_from_the_roster_puts_the_model_back():
         app = _team_app()
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.press("escape", "t")
-            await pilot.click("#wake-opencode-pickle")
+            await pilot.click("#wake-big-pickle")
             await pilot.pause()
-            assert "opencode-pickle" in app.orch.members
-            assert _state(app.screen, "opencode-pickle") == "awake"
-            assert not app.screen.query("#wake-opencode-pickle")
+            assert "big-pickle" in app.orch.members
+            assert _state(app.screen, "big-pickle") == "awake"
+            assert not app.screen.query("#wake-big-pickle")
 
     asyncio.run(go())
 
@@ -330,7 +330,7 @@ def test_the_model_card_opens_from_the_roster_and_returns_to_it():
             await pilot.press("question_mark")  # the card for the row under the cursor
             card = app.screen
             assert type(card).__name__ == "ModelCardScreen"
-            assert "opencode-pickle" in str(card.query_one(Static).render())
+            assert "big-pickle" in str(card.query_one(Static).render())
             assert "Best at:" in str(card.query_one(Static).render())
             await pilot.press("escape")
             assert type(app.screen).__name__ == "TeamScreen"
@@ -382,7 +382,7 @@ def test_every_roster_control_carries_an_accessible_label():
                 assert str(button.label).strip() and str(button.tooltip).strip(), \
                     f"{button.id} needs a label and a tooltip"
             assert "working on t1" in str(app.screen.query_one("#sleep-agy", Button).tooltip)
-            assert "wake" in str(app.screen.query_one("#wake-opencode-pickle", Button).tooltip).lower()
+            assert "wake" in str(app.screen.query_one("#wake-big-pickle", Button).tooltip).lower()
 
     asyncio.run(go())
 

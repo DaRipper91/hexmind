@@ -10,8 +10,8 @@ from hexmind.auditor import DOMAINS
 from hexmind.core import OPT_IN, ROSTER, TEXT_ONLY, REGISTRY
 from hexmind.models import BUNDLED, Registry
 
-ALL_OPENCODE = ["opencode", "opencode-ultra", "opencode-muse", "opencode-mimo",
-                "opencode-pickle", "opencode-ling", "opencode-bunny", "opencode-longcat"]
+ALL_OPENCODE = ["nemotron-lightning", "nemotron-ultra", "muse-spark", "mimo-flash",
+                "big-pickle", "ling-flash", "space-bunny", "longcat-preview"]
 
 
 def write(tmp_path, text):
@@ -100,16 +100,16 @@ def test_all_eight_free_opencode_models_are_registered():
 
 def test_the_three_previously_drifted_models_are_now_scoped_correctly():
     """These are the descriptions that were wrong and let work route to the wrong model."""
-    muse = ROSTER["opencode-muse"]
+    muse = ROSTER["muse-spark"]
     assert "skill" in muse.lower() and "prompt" in muse.lower()
-    assert "opencode-longcat" in muse, "muse must point at longcat for repo scans"
+    assert "longcat-preview" in muse, "muse must point at longcat for repo scans"
     assert "1M context" not in muse, "muse must not claim longcat's context window"
 
-    mimo = ROSTER["opencode-mimo"]
+    mimo = ROSTER["mimo-flash"]
     assert "ui" in mimo.lower()
     assert "dom" in mimo.lower()
 
-    pickle = ROSTER["opencode-pickle"]
+    pickle = ROSTER["big-pickle"]
     assert "tdd" in pickle.lower() or "failing tests" in pickle.lower()
 
 
@@ -140,8 +140,8 @@ def test_opencode_models_outrank_the_rest():
 
 
 def test_by_weight_can_rank_a_subset():
-    ranked = REGISTRY.by_weight(["claude", "opencode-pickle", "agy"])
-    assert ranked[0] == "opencode-pickle"
+    ranked = REGISTRY.by_weight(["claude", "big-pickle", "agy"])
+    assert ranked[0] == "big-pickle"
 
 
 # ---------- loading and overrides ----------
@@ -154,16 +154,16 @@ def test_bundled_registry_loads_and_lists_every_member():
 
 def test_user_file_overrides_a_single_model_without_losing_the_rest(tmp_path):
     override = write(tmp_path, """
-[models.opencode-mimo]
+[models.mimo-flash]
 label = "My MiMo"
 best_at = "only the ui work I care about"
 """)
     reg = Registry.load([BUNDLED, override])
 
-    assert reg.get("opencode-mimo").label == "My MiMo"
-    assert reg.get("opencode-mimo").cli == "opencode", "unspecified fields must fall back to the bundled entry"
+    assert reg.get("mimo-flash").label == "My MiMo"
+    assert reg.get("mimo-flash").cli == "opencode", "unspecified fields must fall back to the bundled entry"
     assert "claude" in reg, "the rest of the bundled roster must survive"
-    assert reg.get("opencode-ultra").label.startswith("NVIDIA")
+    assert reg.get("nemotron-ultra").label.startswith("NVIDIA")
 
 
 def test_invalid_tier_or_verifier_is_rejected_not_ignored(tmp_path):
@@ -187,14 +187,14 @@ def test_missing_user_override_is_fine(tmp_path):
 # ---------- generated surfaces (plan R7) ----------
 
 def test_describe_gives_a_reference_card_with_the_misuse_warnings():
-    card = REGISTRY.describe("opencode-muse")
+    card = REGISTRY.describe("muse-spark")
     for expected in ("Best at:", "Not for:", "Domains:", "Model id:"):
         assert expected in card
-    assert "opencode-longcat" in card
+    assert "longcat-preview" in card
 
 
 def test_matrix_lists_every_model_with_tier_and_status():
-    table = REGISTRY.matrix(live=set(ALL_OPENCODE), team={"opencode-pickle"}, lead="opencode-pickle")
+    table = REGISTRY.matrix(live=set(ALL_OPENCODE), team={"big-pickle"}, lead="big-pickle")
     assert table.startswith("| model |")
     for name in ALL_OPENCODE:
         assert f"`{name}`" in table
@@ -237,8 +237,8 @@ def test_opencode_member_with_a_bad_model_id_is_not_offered(monkeypatch):
 
     found = reg.available()
 
-    assert "opencode-pickle" in found
-    assert "opencode-longcat" not in found, "longcat is not in the allowed set, so it must not join"
+    assert "big-pickle" in found
+    assert "longcat-preview" not in found, "longcat is not in the allowed set, so it must not join"
 
 
 def test_detect_is_async_and_matches_available(monkeypatch):
@@ -291,10 +291,10 @@ def test_opencode_team_chain_shape_is_the_adversarial_pipeline():
 
     chain = load_chain(list_chains()["opencode-team"])
     assert [s.name for s in chain.stages] == ["pre-audit", "tdd-build", "compliance-check", "post-critique"]
-    assert chain.stages[0].agent == "opencode-ultra"
-    assert chain.stages[1].agent == "opencode-pickle"
-    assert chain.stages[2].agent == "opencode-longcat"
-    assert chain.stages[3].agent == "opencode-ultra"
+    assert chain.stages[0].agent == "nemotron-ultra"
+    assert chain.stages[1].agent == "big-pickle"
+    assert chain.stages[2].agent == "longcat-preview"
+    assert chain.stages[3].agent == "nemotron-ultra"
     # the builder must never be the reviewer
     assert chain.stages[1].agent not in {s.agent for s in (chain.stages[0], chain.stages[2], chain.stages[3])}
     # build and coverage gates: a failed implementation must not be rubber-stamped

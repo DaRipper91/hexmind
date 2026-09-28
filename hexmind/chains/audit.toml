@@ -18,7 +18,7 @@ description = "Adversarial code review plus requirement-coverage check over a co
 
 [[stages]]
 name = "review"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 domain = "review"
 instructions = """
 Adversarial code review. You did not write any of this, so you have no stake in it being right.
@@ -53,7 +53,7 @@ than manufacturing findings; "this is sound, with these two minor notes" is a va
 
 [[stages]]
 name = "coverage"
-agent = "opencode-longcat"
+agent = "longcat-preview"
 domain = "research"
 instructions = """
 Requirement-coverage check. You are checking whether the work delivers what was asked, not whether

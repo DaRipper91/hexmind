@@ -38,7 +38,7 @@ def run_main(monkeypatch, argv, tmp_path, **env):
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), *argv])
     monkeypatch.setattr(cli, "DirectBackend", BoomBackend)
-    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["nemotron-ultra", "claude"])
     return cli.main()
 
 
@@ -59,7 +59,7 @@ def test_once_prints_why_a_task_failed(monkeypatch, tmp_path, capsys):
     id/agent/status/title, so a script calling hexmind --once could see `failed` with no reason."""
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", WorkerFailsBackend)
-    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["nemotron-ultra", "claude"])
 
     cli.main()
 
@@ -84,7 +84,7 @@ def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
 
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "DirectBackend", Interrupting)
-    monkeypatch.setattr(cli, "available", lambda members: ["opencode-ultra", "claude"])
+    monkeypatch.setattr(cli, "available", lambda members: ["nemotron-ultra", "claude"])
     with pytest.raises(SystemExit) as err:
         cli.main()
     assert err.value.code == 130
@@ -92,7 +92,7 @@ def test_once_exits_130_on_interrupt(monkeypatch, tmp_path):
 
 def test_hcom_notice_lists_the_opencode_models_it_cannot_drive(monkeypatch, tmp_path, capsys):
     # __main__ binds `available` into its own namespace at import, so patch it there.
-    monkeypatch.setattr(cli, "available", lambda members: ["claude", "opencode", "opencode-longcat", "opencode-muse"])
+    monkeypatch.setattr(cli, "available", lambda members: ["claude", "nemotron-lightning", "longcat-preview", "muse-spark"])
     monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--lead", "claude", "--cwd", str(tmp_path), "--once", "hi"])
     monkeypatch.setattr(cli, "Orchestrator", lambda *a, **k: type("O", (), {"handle": _noop})())
 
@@ -100,7 +100,7 @@ def test_hcom_notice_lists_the_opencode_models_it_cannot_drive(monkeypatch, tmp_
 
     err = capsys.readouterr().err
     assert "cannot drive 2 opencode model(s)" in err
-    assert "opencode-longcat, opencode-muse" in err
+    assert "longcat-preview, muse-spark" in err
     assert "--backend direct" in err
     assert "hcom picks a tool, not a model" in err
 
@@ -108,7 +108,7 @@ def test_hcom_notice_lists_the_opencode_models_it_cannot_drive(monkeypatch, tmp_
 def test_hcom_notice_names_every_excluded_model_when_all_are_present(monkeypatch, tmp_path, capsys):
     from hexmind.backends import HCOM_EXCLUDED
 
-    monkeypatch.setattr(cli, "available", lambda members: ["claude", "opencode", *sorted(HCOM_EXCLUDED)])
+    monkeypatch.setattr(cli, "available", lambda members: ["claude", "nemotron-lightning", *sorted(HCOM_EXCLUDED)])
     monkeypatch.setattr(sys, "argv", ["hexmind", "--backend", "hcom", "--cwd", str(tmp_path), "--lead", "claude", "--once", "hi"])
     monkeypatch.setattr(cli, "Orchestrator", lambda *a, **k: type("O", (), {"handle": _noop})())
 
@@ -153,15 +153,15 @@ def test_bundled_model_registry_ships_with_the_package():
 
 
 def test_default_lead_is_opencode_ultra():
-    """Default leader must be opencode-ultra (Nemotron 3 Ultra) per OPENCODE-TEAM-PLAN."""
+    """Default leader must be nemotron-ultra (Nemotron 3 Ultra) per OPENCODE-TEAM-PLAN."""
     from hexmind.core import Orchestrator
     from hexmind.server import HexmindServer
 
-    orch = Orchestrator(None, ["opencode-ultra"])
-    assert orch.lead == "opencode-ultra"
+    orch = Orchestrator(None, ["nemotron-ultra"])
+    assert orch.lead == "nemotron-ultra"
 
     server = HexmindServer(cwd=".")
-    assert server.lead == "opencode-ultra"
+    assert server.lead == "nemotron-ultra"
 
 
 # ---------- leader selection: no default, and headless surfaces must say so ----------

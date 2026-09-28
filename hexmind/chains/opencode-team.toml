@@ -12,8 +12,8 @@
 # cannot collide. Every stage is domain-tagged, which feeds /ranks and drives which
 # model is chosen as auditor on future work.
 #
-# The builder never reviews itself: tdd-build is opencode-pickle, and both reviews
-# are opencode-ultra / opencode-longcat. The revise loop in hexmind/auditor.py will
+# The builder never reviews itself: tdd-build is big-pickle, and both reviews
+# are nemotron-ultra / longcat-preview. The revise loop in hexmind/auditor.py will
 # also pull in a runner-up auditor per task, so a stage is not trusted on the
 # chain author's say-so alone.
 
@@ -22,7 +22,7 @@ description = "Nemotron audit -> Pickle TDD build -> LongCat requirement check -
 
 [[stages]]
 name = "pre-audit"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 domain = "architecture"
 instructions = """
 Audit the work request BEFORE anything is written. You are the skeptical senior
@@ -45,7 +45,7 @@ is nothing left for it to verify.
 
 [[stages]]
 name = "tdd-build"
-agent = "opencode-pickle"
+agent = "big-pickle"
 domain = "implementation"
 gate = true
 instructions = """
@@ -73,7 +73,7 @@ believe the output was.
 
 [[stages]]
 name = "compliance-check"
-agent = "opencode-longcat"
+agent = "longcat-preview"
 domain = "review"
 gate = true
 instructions = """
@@ -100,7 +100,7 @@ encouraging.
 
 [[stages]]
 name = "post-critique"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 domain = "review"
 instructions = """
 Final adversarial review. Assume there is a defect and go find it.

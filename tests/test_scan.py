@@ -273,23 +273,23 @@ def test_a_promoted_model_the_provider_does_not_offer_cannot_be_woken(monkeypatc
 # ---------- the catalogue has to agree with the registry about names ----------
 
 def test_a_find_that_is_already_curated_reports_the_registrys_name():
-    """The eight curated opencode models are `big-pickle` and `opencode-ultra` in models.toml, but a
+    """The eight curated opencode models are `big-pickle` and `nemotron-ultra` in models.toml, but a
     scan slugs `opencode/big-pickle` to `opencode-big-pickle`. Unaligned, `/found` would list eight
     already-curated models as unpromoted finds and `/profile` on one would create a second member
     for a model the room already has."""
-    assert "opencode-ultra" in REGISTRY.models
-    real_id = REGISTRY.get("opencode-ultra").model
-    entries = [{"model": real_id, "provider": "opencode", "name": "opencode-ultra-dup",
+    assert "nemotron-ultra" in REGISTRY.models
+    real_id = REGISTRY.get("nemotron-ultra").model
+    entries = [{"model": real_id, "provider": "opencode", "name": "nemotron-ultra-dup",
                 "label": "wrong", "cli": "opencode", "verify": "path", "tier": "cloud",
                 "color": "white"}]
     aligned = models_mod.align_entries(entries, REGISTRY.models)
-    assert aligned[0]["name"] == "opencode-ultra"
+    assert aligned[0]["name"] == "nemotron-ultra"
     assert aligned[0]["curated"] is True
-    assert aligned[0]["label"] == REGISTRY.get("opencode-ultra").label
+    assert aligned[0]["label"] == REGISTRY.get("nemotron-ultra").label
 
 
 def test_the_scan_count_excludes_models_already_in_the_registry(monkeypatch):
-    real_id = REGISTRY.get("opencode-ultra").model
+    real_id = REGISTRY.get("nemotron-ultra").model
     entries = [
         {"model": real_id, "provider": "opencode", "name": "wrong-slug", "label": "x",
          "cli": "opencode", "verify": "path", "tier": "cloud", "color": "white"},
@@ -301,6 +301,6 @@ def test_the_scan_count_excludes_models_already_in_the_registry(monkeypatch):
     reply = asyncio.run(command(orch, "/scan"))
     assert "Scanned 2 models" in reply and "1 of them not members yet" in reply
     listed = asyncio.run(command(orch, "/found"))
-    row = next(l for l in listed.splitlines() if "opencode-ultra" in l)
+    row = next(l for l in listed.splitlines() if "nemotron-ultra" in l)
     assert row.endswith("asleep |"), f"a curated find must not read as unpromoted: {row}"
     assert "not a member" in listed, "the genuinely new one still does"

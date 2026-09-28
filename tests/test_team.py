@@ -23,14 +23,14 @@ class FakeBackend:
         return self.reply
 
 
-def make(members=("claude", "agy", "opencode-pickle", "opencode-ling"), lead="claude"):
+def make(members=("claude", "agy", "big-pickle", "ling-flash"), lead="claude"):
     events = []
     orch = Orchestrator(FakeBackend(), list(members), lead, emit=lambda k, d: events.append((k, d)),
                        known=list(REGISTRY.names()))
     return orch, events
 
 
-def busy_task(agent="opencode-pickle", status="running"):
+def busy_task(agent="big-pickle", status="running"):
     t = Task(id="t1", title="do the thing", agent=agent, instructions="x")
     t.status = status
     return t
@@ -40,41 +40,41 @@ def busy_task(agent="opencode-pickle", status="running"):
 
 def test_a_working_model_cannot_be_slept():
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
-    orch.busy = {"opencode-pickle"}
+    orch.all_tasks.append(busy_task("big-pickle", "running"))
+    orch.busy = {"big-pickle"}
 
     with pytest.raises(TeamBusy) as err:
-        orch.sleep("opencode-pickle")
+        orch.sleep("big-pickle")
 
     assert "working on t1" in str(err.value)
-    assert "opencode-pickle" in orch.members, "a refused sleep must not remove the model anyway"
+    assert "big-pickle" in orch.members, "a refused sleep must not remove the model anyway"
 
 
 @pytest.mark.parametrize("status", sorted(BUSY_STATUSES))
 def test_every_live_status_blocks_sleep(status):
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", status))
-    orch.busy = {"opencode-pickle"}
+    orch.all_tasks.append(busy_task("big-pickle", status))
+    orch.busy = {"big-pickle"}
     with pytest.raises(TeamBusy):
-        orch.sleep("opencode-pickle")
+        orch.sleep("big-pickle")
 
 
 @pytest.mark.parametrize("status", ["pending", "done", "failed", "skipped"])
 def test_a_terminal_or_unstarted_task_does_not_block_sleep(status):
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", status))
+    orch.all_tasks.append(busy_task("big-pickle", status))
     orch.busy = {t.agent for t in orch.all_tasks if t.status in BUSY_STATUSES}
 
-    assert orch.can_sleep("opencode-pickle")[0] is True
-    assert "asleep" in orch.sleep("opencode-pickle")
+    assert orch.can_sleep("big-pickle")[0] is True
+    assert "asleep" in orch.sleep("big-pickle")
 
 
 def test_can_sleep_explains_why_rather_than_just_refusing():
     orch, _ = make()
     orch.all_tasks.append(busy_task())
-    orch.busy = {"opencode-pickle"}
+    orch.busy = {"big-pickle"}
 
-    allowed, reason = orch.can_sleep("opencode-pickle")
+    allowed, reason = orch.can_sleep("big-pickle")
     assert allowed is False
     assert "t1" in reason and "do the thing" in reason, "the reason must name the task, not just the model"
 
@@ -97,22 +97,22 @@ def test_the_busy_set_tracks_a_real_run_and_clears_when_the_task_ends():
             return "done"
 
     orch.backend = Blocking()
-    task = busy_task("opencode-pickle", "pending")
+    task = busy_task("big-pickle", "pending")
 
     async def go():
         run = asyncio.create_task(orch.run_tasks("req", [task]))
         for _ in range(50):  # let it reach `running`
-            if "opencode-pickle" in orch.busy:
+            if "big-pickle" in orch.busy:
                 break
             await asyncio.sleep(0.01)
-        assert orch.busy == {"opencode-pickle"}, "a launched task must mark its model busy"
-        assert orch.can_sleep("opencode-pickle")[0] is False
+        assert orch.busy == {"big-pickle"}, "a launched task must mark its model busy"
+        assert orch.can_sleep("big-pickle")[0] is False
         assert orch.can_sleep("agy")[0] is True
         release.set()
         await run
         assert orch.busy == set(), "a finished task must clear its model's busy flag"
         assert task.status == "done"
-        assert orch.can_sleep("opencode-pickle")[0] is True
+        assert orch.can_sleep("big-pickle")[0] is True
 
     asyncio.run(go())
 
@@ -121,7 +121,7 @@ def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever(tmp_path):
     """The finally branch matters: without it, quitting mid-task would leave the model
     permanently unsleepable for the rest of the session."""
     orch, _ = make()
-    task = busy_task("opencode-pickle", "pending")
+    task = busy_task("big-pickle", "pending")
     notes = tmp_path / "chain-A.md"
     notes.write_text("# Chain A notes\n")
     task.notes = str(notes)
@@ -137,7 +137,7 @@ def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever(tmp_path):
     async def go():
         run = asyncio.create_task(orch.run_tasks("req", [task]))
         for _ in range(50):
-            if "opencode-pickle" in orch.busy:
+            if "big-pickle" in orch.busy:
                 break
             await asyncio.sleep(0.01)
         run.cancel()
@@ -157,31 +157,31 @@ def test_a_cancelled_turn_does_not_wedge_a_model_awake_forever(tmp_path):
 def test_sleep_removes_from_awake_but_keeps_the_model_known():
     orch, events = make()
 
-    orch.sleep("opencode-ling")
+    orch.sleep("ling-flash")
 
-    assert "opencode-ling" not in orch.members
-    assert "opencode-ling" in orch.asleep()
-    assert "opencode-ling" in orch.known, "a sleeping model must keep its registry entry"
-    assert ("team", {"action": "sleep", "model": "opencode-ling"}) in events
+    assert "ling-flash" not in orch.members
+    assert "ling-flash" in orch.asleep()
+    assert "ling-flash" in orch.known, "a sleeping model must keep its registry entry"
+    assert ("team", {"action": "sleep", "model": "ling-flash"}) in events
 
 
 def test_wake_puts_it_back():
     orch, _ = make()
-    orch.sleep("opencode-ling")
-    assert "awake" in orch.wake("opencode-ling")
-    assert "opencode-ling" in orch.members
-    assert "opencode-ling" not in orch.asleep()
+    orch.sleep("ling-flash")
+    assert "awake" in orch.wake("ling-flash")
+    assert "ling-flash" in orch.members
+    assert "ling-flash" not in orch.asleep()
 
 
 def test_waking_an_uninstalled_model_is_refused_with_a_reason(monkeypatch):
     orch, _ = make()
     monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy"])
-    orch.sleep("opencode-ling")
+    orch.sleep("ling-flash")
 
-    reply = orch.wake("opencode-ling")
+    reply = orch.wake("ling-flash")
 
     assert "cannot be woken" in reply and "not installed" in reply
-    assert "opencode-ling" not in orch.members
+    assert "ling-flash" not in orch.members
 
 
 def test_waking_something_already_awake_is_a_no_op():
@@ -207,8 +207,8 @@ def test_the_lead_cannot_be_slept_out_from_under_the_room():
 
 def test_lead_can_change_mid_session():
     orch, events = make()
-    orch.set_lead("opencode-ultra")
-    assert orch.lead == "opencode-ultra"
+    orch.set_lead("nemotron-ultra")
+    assert orch.lead == "nemotron-ultra"
     assert any(k == "team" and d.get("action") == "lead" and d.get("previous") == "claude"
                for k, d in events)
 
@@ -222,26 +222,26 @@ def test_a_text_only_model_cannot_be_lead():
 
 def test_promoting_an_asleep_model_wakes_it():
     orch, _ = make()
-    orch.sleep("opencode-pickle")
+    orch.sleep("big-pickle")
 
-    orch.set_lead("opencode-pickle")
+    orch.set_lead("big-pickle")
 
-    assert orch.lead == "opencode-pickle"
-    assert "opencode-pickle" in orch.members, "leading implies being in the room"
+    assert orch.lead == "big-pickle"
+    assert "big-pickle" in orch.members, "leading implies being in the room"
 
 
 def test_promoting_an_uninstalled_model_is_refused(monkeypatch):
     orch, _ = make()
     monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy"])
     with pytest.raises(TeamError, match="isn't installed"):
-        orch.set_lead("opencode-ultra")
+        orch.set_lead("nemotron-ultra")
     assert orch.lead == "claude", "a refused promotion must not change the lead"
 
 
 # ---------- commands ----------
 
 def test_team_command_lists_awake_asleep_and_installed():
-    orch, _ = make(members=("claude", "opencode-pickle"))
+    orch, _ = make(members=("claude", "big-pickle"))
     reply = asyncio.run(command(orch, "/team"))
     assert "1 awake" not in reply  # sanity: counts come from real state
     assert "2 awake" in reply
@@ -252,40 +252,40 @@ def test_team_command_lists_awake_asleep_and_installed():
 
 def test_team_command_reports_which_task_blocks_a_sleep():
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
-    orch.busy = {"opencode-pickle"}
+    orch.all_tasks.append(busy_task("big-pickle", "running"))
+    orch.busy = {"big-pickle"}
     reply = asyncio.run(command(orch, "/team"))
     assert "working t1" in reply, "the board must show why a model cannot sleep"
 
 
 def test_model_command_returns_a_reference_card():
     orch, _ = make()
-    reply = asyncio.run(command(orch, "/model opencode-muse"))
+    reply = asyncio.run(command(orch, "/model muse-spark"))
     assert "Best at:" in reply and "Not for:" in reply
-    assert "opencode-longcat" in reply, "the anti-pattern pointer must survive into the card"
+    assert "longcat-preview" in reply, "the anti-pattern pointer must survive into the card"
 
 
 def test_sleep_and_wake_commands_round_trip():
     orch, _ = make()
-    assert "is asleep" in asyncio.run(command(orch, "/sleep opencode-ling"))
-    assert "opencode-ling" not in orch.members
-    assert "awake" in asyncio.run(command(orch, "/wake opencode-ling"))
+    assert "is asleep" in asyncio.run(command(orch, "/sleep ling-flash"))
+    assert "ling-flash" not in orch.members
+    assert "awake" in asyncio.run(command(orch, "/wake ling-flash"))
 
 
 def test_sleep_command_on_a_busy_model_explains_instead_of_crashing():
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
-    orch.busy = {"opencode-pickle"}
-    reply = asyncio.run(command(orch, "/sleep opencode-pickle"))
+    orch.all_tasks.append(busy_task("big-pickle", "running"))
+    orch.busy = {"big-pickle"}
+    reply = asyncio.run(command(orch, "/sleep big-pickle"))
     assert "Not now" in reply and "t1" in reply
-    assert "opencode-pickle" in orch.members
+    assert "big-pickle" in orch.members
 
 
 def test_lead_command_switches_and_reports():
     orch, _ = make()
-    reply = asyncio.run(command(orch, "/lead opencode-ultra"))
+    reply = asyncio.run(command(orch, "/lead nemotron-ultra"))
     assert "is the lead now" in reply
-    assert orch.lead == "opencode-ultra"
+    assert orch.lead == "nemotron-ultra"
 
 
 def test_lead_command_with_no_args_lists_the_room():
@@ -298,27 +298,27 @@ def test_lead_command_with_no_args_lists_the_room():
 def test_lead_recommend_never_asks_the_outgoing_lead():
     """A model grading its own successor is the one judgement its track record cannot inform."""
     orch = make()[0]
-    orch.backend.reply = '{"recommendation": "opencode-ultra", "reason": "Best architecture record.", "runner_up": "agy"}'
-    orch.set_lead("opencode-pickle")
+    orch.backend.reply = '{"recommendation": "nemotron-ultra", "reason": "Best architecture record.", "runner_up": "agy"}'
+    orch.set_lead("big-pickle")
 
     reply = asyncio.run(command(orch, "/lead recommend"))
 
     advisor = orch.backend.calls[0][0]
-    assert advisor != "opencode-pickle", "the outgoing lead must not be the advisor"
+    assert advisor != "big-pickle", "the outgoing lead must not be the advisor"
     assert advisor in orch.members
-    assert "opencode-ultra" in reply
+    assert "nemotron-ultra" in reply
     assert "advising" in reply.lower()
     assert "nothing changes until" in reply, "recommendation must not silently change the lead"
-    assert orch.lead == "opencode-pickle", "recommendation must not change the lead by itself"
+    assert orch.lead == "big-pickle", "recommendation must not change the lead by itself"
 
 
 def test_lead_recommend_falls_back_to_the_track_record_on_a_bad_reply():
     orch = make()[0]
     orch.backend.reply = "I think claude would be great, honestly"
-    orch.set_lead("opencode-pickle")
+    orch.set_lead("big-pickle")
     reply = asyncio.run(command(orch, "/lead recommend"))
     assert "track record's own pick" in reply
-    assert orch.lead == "opencode-pickle"
+    assert orch.lead == "big-pickle"
 
 
 def test_lead_recommend_says_so_when_there_is_no_one_to_ask():
@@ -393,36 +393,36 @@ def test_remove_drops_the_model_from_the_session_entirely():
     as lead, and /add is the only way back."""
     orch, events = make()
 
-    reply = orch.remove("opencode-ling")
+    reply = orch.remove("ling-flash")
 
     assert "out of the session" in reply
-    assert "opencode-ling" not in orch.members
-    assert "opencode-ling" not in orch.known
-    assert "opencode-ling" not in orch.asleep()
-    assert ("team", {"action": "remove", "model": "opencode-ling"}) in events
+    assert "ling-flash" not in orch.members
+    assert "ling-flash" not in orch.known
+    assert "ling-flash" not in orch.asleep()
+    assert ("team", {"action": "remove", "model": "ling-flash"}) in events
 
 
 def test_remove_keeps_the_registry_entry_its_stats_and_its_journal():
     """Only the session forgets the model. Dropping the registry entry would destroy every audit
     record and nickname ever learned about it."""
     orch, _ = make()
-    orch.nicknames["opencode-ling"] = "Ling"
-    orch.remove("opencode-ling")
+    orch.nicknames["ling-flash"] = "Ling"
+    orch.remove("ling-flash")
 
-    assert "opencode-ling" in REGISTRY.models
-    assert orch.nicknames["opencode-ling"] == "Ling"
+    assert "ling-flash" in REGISTRY.models
+    assert orch.nicknames["ling-flash"] == "Ling"
 
 
 def test_a_working_model_cannot_be_removed():
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
-    orch.busy = {"opencode-pickle"}
+    orch.all_tasks.append(busy_task("big-pickle", "running"))
+    orch.busy = {"big-pickle"}
 
     with pytest.raises(TeamBusy) as err:
-        orch.remove("opencode-pickle")
+        orch.remove("big-pickle")
 
     assert "working on t1" in str(err.value)
-    assert "opencode-pickle" in orch.members and "opencode-pickle" in orch.known
+    assert "big-pickle" in orch.members and "big-pickle" in orch.known
 
 
 def test_the_lead_cannot_be_removed_from_under_the_room():
@@ -467,13 +467,13 @@ def test_add_and_remove_commands_round_trip(monkeypatch):
 
 def test_a_busy_model_reports_not_now_rather_than_crashing_the_message_loop():
     orch, _ = make()
-    orch.all_tasks.append(busy_task("opencode-pickle", "running"))
-    orch.busy = {"opencode-pickle"}
+    orch.all_tasks.append(busy_task("big-pickle", "running"))
+    orch.busy = {"big-pickle"}
 
-    reply = asyncio.run(command(orch, "/remove opencode-pickle"))
+    reply = asyncio.run(command(orch, "/remove big-pickle"))
 
     assert "Not now" in reply and "t1" in reply
-    assert "opencode-pickle" in orch.known
+    assert "big-pickle" in orch.known
 
 
 def test_add_and_remove_need_a_model_name():

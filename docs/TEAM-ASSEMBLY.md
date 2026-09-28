@@ -19,7 +19,7 @@ if args.lead not in members:
     sys.exit(f"lead '{args.lead}' is not available (installed members: ...)")
 ```
 
-With the default set to `opencode-ultra`, anyone without the `opencode` CLI cannot start
+With the default set to `nemotron-ultra`, anyone without the `opencode` CLI cannot start
 hexmind at all. This shipped in `a77322b`, unannounced, in a commit about something else.
 
 **Changing it can crash at runtime.** `Orchestrator.set_lead()` emits a `team` event, and the
@@ -129,7 +129,7 @@ class Assembly:
 ```
 
 `recommended` is kept after confirmation on purpose: the leader's review step needs to say
-*what you dropped and why that matters* — "you removed `opencode-longcat`, which I asked for
+*what you dropped and why that matters* — "you removed `longcat-preview`, which I asked for
 because this touches eleven files; the plan below is narrower as a result."
 
 ### Commands
@@ -266,8 +266,8 @@ whichever model holds the lead.
 8. **Report honestly.** A failed task, a missing member, an unmet requirement — the lead's
    summary is the only thing the user is guaranteed to read.
 
-Per the registry, `opencode-muse` (Muse Spark 1.3) is the model documented for agent-skill
-authoring and rule engineering, so it should author this, and `opencode-ultra` review it. That
+Per the registry, `muse-spark` (Muse Spark 1.3) is the model documented for agent-skill
+authoring and rule engineering, so it should author this, and `nemotron-ultra` review it. That
 is `opencode-team` with two stages.
 
 ---
@@ -346,7 +346,7 @@ same to swap.
 | 3 | 1 | `set_lead` never crashes; startup picker modal — **done** |
 | 4 | — | `/scan` catalogue + `/found` + `/profile` promotion — **done** (as a catalogue, not a roster — see §2) |
 | 5 | 2 | `ASSEMBLY_SCHEMA` with `chains` and `skills`; chain + skill directives — **done** |
-| 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `opencode-muse`, reviewed by `opencode-ultra` — **next** |
+| 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `muse-spark`, reviewed by `nemotron-ultra` — **next** |
 | 7 | — | `/relay clean` (WS-12), so the chains this flow requests do not accumulate worktrees forever — **done, separately** |
 
 **Steps 1–5 and 7 are done. Step 6 — the `hexmind-lead` skill — is the only thing left**, and it is

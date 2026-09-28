@@ -56,7 +56,7 @@ footprint = "cloud · fast and focused"
 # No `variant` on these: opencode 2.0.18 rejects `#minimal` and `#high` on both nemotron models
 # ("Variant unavailable", checked live 2026-09-28). Declare one only after `opencode run -m id#v` works.
 
-[models.opencode]
+[models.nemotron-lightning]
 label = "NVIDIA Nemotron 3.5 Lightning (Free)"
 best_at = "sub-second atomic work — unit tests, lint fixes, Conventional Commits, CI triage"
 avoid_for = "multi-module design; keep each prompt to one function or one failing test"
@@ -69,7 +69,7 @@ weight = 100
 color = "bright_blue"
 footprint = "cloud · sub-second"
 
-[models.opencode-ultra]
+[models.nemotron-ultra]
 label = "NVIDIA Nemotron 3 Ultra (Free)"
 best_at = "heavy chain-of-thought on system architecture, security threat modeling, concurrency tuning and ADRs; the strongest planner and auditor in the room"
 avoid_for = "one-liners and markdown formatting"
@@ -82,10 +82,10 @@ weight = 100
 color = "blue"
 footprint = "cloud · heavy CoT"
 
-[models.opencode-muse]
+[models.muse-spark]
 label = "Meta Muse Spark 1.3 (Free)"
 best_at = "agent-skill authoring, system-prompt and rule engineering, MCP and AGENTS.md schema work"
-avoid_for = "application logic and repo-wide scanning — that is opencode-longcat"
+avoid_for = "application logic and repo-wide scanning — that is longcat-preview"
 domains = ["docs", "general"]
 cli = "opencode"
 model = "opencode/muse-spark-1.3-contributor-free"
@@ -95,7 +95,7 @@ weight = 90
 color = "sky_blue1"
 footprint = "cloud · precision syntax"
 
-[models.opencode-mimo]
+[models.mimo-flash]
 label = "Xiaomi MiMo-V2.6-Flash (Free)"
 best_at = "frontend UI/UX, DOM and accessibility-tree parsing, DevTools and Playwright loops — the team's ui specialist"
 avoid_for = "deep algorithms and concurrency; keep turns short and atomic"
@@ -108,7 +108,7 @@ weight = 100
 color = "turquoise2"
 footprint = "cloud · high throughput, vision-DOM"
 
-[models.opencode-pickle]
+[models.big-pickle]
 label = "Big Pickle (Free)"
 best_at = "relentless autonomous TDD implementation — drives failing tests to green and keeps going where other models stall"
 avoid_for = "diplomacy and open-ended questions; give it a plan and a pass/fail command"
@@ -121,7 +121,7 @@ weight = 100
 color = "yellow3"
 footprint = "cloud · autonomous loop"
 
-[models.opencode-ling]
+[models.ling-flash]
 label = "Ling 3.0 Flash Fin (Free)"
 best_at = "quantitative and structured data — VPAT/Section 508, financial and tabular reasoning, SQL and indexing"
 avoid_for = "prose and multi-file refactors; demand explicit schemas"
@@ -134,7 +134,7 @@ weight = 80
 color = "green3"
 footprint = "cloud · low latency"
 
-[models.opencode-bunny]
+[models.space-bunny]
 label = "Space Bunny (Free)"
 best_at = "lateral thinking, feature ideation, breaking architectural deadlocks, game and UI mechanics"
 avoid_for = "deterministic test or security verification; best for exploring options before committing to one"
@@ -147,7 +147,7 @@ weight = 100
 color = "orchid"
 footprint = "cloud · high divergence"
 
-[models.opencode-longcat]
+[models.longcat-preview]
 label = "LongCat2.5 Preview (Free)"
 best_at = "massive-context ingestion — whole-repo and monorepo surveys, cross-document synthesis, postmortem aggregation"
 avoid_for = "small edits; best for reading everything before deciding"

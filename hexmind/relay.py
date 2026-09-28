@@ -415,7 +415,7 @@ async def _cmd_roster_change(orch, args: list[str], verb: str) -> str:
     from .core import TeamBusy, TeamError
 
     if not args:
-        return f"Which model? e.g. `{verb} opencode-ling` — `/team` lists them all."
+        return f"Which model? e.g. `{verb} ling-flash` — `/team` lists them all."
     name = args[0]
     try:
         return getattr(orch, verb)(name)
@@ -682,7 +682,7 @@ async def _lead_recommend(orch) -> str:
     except Exception:
         pick = None
     # A recommendation may name a model that is currently asleep — promoting it wakes it, and
-    # "you should promote opencode-ultra, it is idle but it is the right pick" is a real answer.
+    # "you should promote nemotron-ultra, it is idle but it is the right pick" is a real answer.
     # What cannot be recommended is a text-only model, which can never lead.
     leadable = {m for m in REGISTRY.names() if m not in TEXT_ONLY}
     if pick not in leadable:

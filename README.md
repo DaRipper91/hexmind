@@ -111,8 +111,8 @@ hexmind --once --lead claude "add a --json flag to the export command"   # one s
 ## 💬 The room
 
 ```
-┌─ Hexmind ─ direct backend · lead: opencode-ultra · audit: on ─────────────────────────────┐
-│ you                                       │ ● opencode-ultra (lead)  working: 1.t1        │
+┌─ Hexmind ─ direct backend · lead: nemotron-ultra · audit: on ─────────────────────────────┐
+│ you                                       │ ● nemotron-ultra (lead)  working: 1.t1        │
 │ add CSV export and tests for it           │ ● agy                    auditing 1.t1        │
 │                                           │ ○ codex                  idle                 │
 │ claude                                    ├──────────────────────────────────────────────┤
@@ -754,15 +754,15 @@ hexmind/
 `best_at` and `avoid_for`, and `DIRECT_CMDS`, `LOCAL_MODELS`, `AGENT_COLOR` and the hcom
 exclusion all derive from it.
 
-That is not tidiness. The roster used to be a hand-written dict, and `opencode-muse` came to be
-described with *another model's* specialty — repo-wide scanning, which is `opencode-longcat`'s
+That is not tidiness. The roster used to be a hand-written dict, and `muse-spark` came to be
+described with *another model's* specialty — repo-wide scanning, which is `longcat-preview`'s
 job — with nothing to catch it. A model that claims it is good at repo scans gets given repo
 scans. **Now a description cannot drift from the data behind it**, and you can override any model
 without touching Python:
 
 ```toml
 # ~/.config/hexmind/models.toml
-[models.opencode-mimo]
+[models.mimo-flash]
 label = "My MiMo"
 best_at = "only the narrow-mode layout work I care about"
 avoid_for = "anything touching the chat log"

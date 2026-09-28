@@ -53,7 +53,7 @@ findings.
 **The roster is generated. Never hand-edit prose about a model.**
 `core.ROSTER` comes from `REGISTRY.roster()`, which composes `best_at` and `avoid_for` from
 `models.toml`. If you need to change how a model is described, edit `models.toml`. Adding a
-hand-maintained dict is how `opencode-muse` came to be described with another model's specialty
+hand-maintained dict is how `muse-spark` came to be described with another model's specialty
 and nothing caught it. `test_roster_is_generated_from_the_registry_not_hand_written` guards this.
 
 **INVARIANT S-1: a model holding a live task cannot be put to sleep.** No force, no queue.

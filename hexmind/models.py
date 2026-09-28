@@ -1,7 +1,7 @@
 """The model registry: one structured source of truth for the team roster.
 
 `ROSTER` used to be a hand-maintained dict of prose that the lead reads to assign work. That is
-how `opencode-muse` ended up described with another model's specialty, and nothing caught it. The
+how `muse-spark` ended up described with another model's specialty, and nothing caught it. The
 prose is now *generated* from the fields in `models.toml`, so the room and `/models` cannot
 disagree about what a model is for.
 
@@ -158,7 +158,7 @@ def discover() -> list[dict]:
 def align_entries(entries: list[dict], models: dict[str, Model]) -> list[dict]:
     """Reuse the registry's own name for a find that is already a member.
 
-    The eight curated opencode models are called `big-pickle`, `opencode-ultra` and so on in
+    The eight curated opencode models are called `big-pickle`, `nemotron-ultra` and so on in
     models.toml, but a scan of `opencode/big-pickle` slugs to `opencode-big-pickle`. Without this,
     `/found` reports eight already-curated models as unpromoted finds, and `/profile` on one would
     create a second member for a model the room already has. Matched on the provider/model id, which

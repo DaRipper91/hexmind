@@ -18,7 +18,7 @@ description = "Implement a described fix test-first, then adversarially review i
 
 [[stages]]
 name = "fix"
-agent = "opencode-pickle"
+agent = "big-pickle"
 domain = "debugging"
 instructions = """
 Fix the described problem. Work test-first and do not stop at the first green run.
@@ -48,7 +48,7 @@ Report the real output of the commands you ran, not a summary of what you believ
 
 [[stages]]
 name = "audit"
-agent = "opencode-ultra"
+agent = "nemotron-ultra"
 domain = "review"
 instructions = """
 Attack the fix. You are the skeptical senior engineer and you did not write this code, so you

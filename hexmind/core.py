@@ -489,7 +489,7 @@ class TeamError(Exception):
 
 
 class Orchestrator:
-    def __init__(self, backend, members: list[str], lead: str = "opencode-ultra", emit: Emit | None = None,
+    def __init__(self, backend, members: list[str], lead: str = "nemotron-ultra", emit: Emit | None = None,
                  audit: bool = False, stats=None, known: list[str] | None = None):
         self.backend = backend
         # `members` is the AWAKE roster and is mutated in place so every consumer (this
