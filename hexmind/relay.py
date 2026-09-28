@@ -405,6 +405,13 @@ async def _cmd_lead(orch, args: list[str]) -> str:
     from .core import REGISTRY, TeamError
 
     if not args:
+        if orch.lead is None:
+            # A room with no lead yet: this reply used to read "Lead is None." and then offer a
+            # roster of names, which is a dead end — the interactive picker is the way out.
+            rows = [f"- `{m}` — {REGISTRY.get(m).label}: {REGISTRY.get(m).best_at}"
+                    for m in REGISTRY.by_weight(orch.members)]
+            return "**No lead yet.** Type a request and hexmind will ask you to pick one, or open " \
+                   "the roster with `t` and use Lead there.\n\n" + "\n".join(rows)
         rows = [f"- `{m}` — {REGISTRY.get(m).label}: {REGISTRY.get(m).best_at}"
                 for m in REGISTRY.by_weight(orch.members)]
         return f"**Lead is {orch.name(orch.lead)}.** Change it with `/lead NAME`, " \

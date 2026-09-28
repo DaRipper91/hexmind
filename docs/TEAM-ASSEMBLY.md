@@ -263,13 +263,36 @@ it is being used to fix.
 mandatory prompt would break every caller. That is the one place the old default behaviour has
 to survive, as an explicit `--lead` requirement rather than a silent default.
 
+### The other way to do it (Option B, kept for the switch)
+
+**Option A — what shipped.** No lead means a modal picker and nothing else happens. One candidate
+is chosen for you, `Esc` declines, and a request typed after declining re-opens the picker instead
+of running with no lead. Costs one keypress, and it never hands the room to a model you did not
+pick.
+
+**Option B — the alternative, deliberately not built.** The picker is a *non-blocking* notice in
+the chat with the same list, and the first request falls back to the highest-weighted installed
+model that can lead. No modal, nothing to dismiss, `/lead NAME` whenever you like.
+
+The reason A won: with B, the first plan the room produces is written by a model nobody chose, and
+it is the plan the user is most likely to trust, because it is the one that came back first. A
+silent fallback is only honest if it is loud, and making it loud enough to be honest costs the
+same attention as the modal. B is still the right call for a room that is *watched* rather than
+used — a second window, a phone mirror of a session already running — where a modal would be an
+obstruction and the fallback is only ever a convenience.
+
+To switch: replace `HexmindApp.ask_lead` with a `self.say` that names the fallback model, and let
+`on_input_submitted` call `set_lead(first)` before `handle`. Nothing else in the room knows how the
+lead was chosen, because `set_lead` is the only door — which is the reason both options cost the
+same to swap.
+
 ---
 
 ## 7. Risks
 
 | risk | mitigation |
 | :--- | :--- |
-| the startup picker blocks a TUI user who just wants to type | make it one keypress (`Enter` takes the first, `l` picks another) and never a modal that must be answered before the chat is usable |
+| the startup picker blocks a TUI user who just wants to type | shipped: one candidate is chosen automatically, declining is one `Esc` and re-asks on the next request, and every command still answers while there is no lead. If it still gets in the way, Option B above is the documented switch |
 | a two-call plan doubles latency on the first request | the recommend call is cheap and tool-free; `/go` is where the real work starts |
 | the lead plans for a roster that changed under it | the review call receives both rosters and the diff, and `/go` is the only thing that starts work |
 | `skills: create` becomes a backdoor | never executed silently; always proposed with path and intent |

@@ -3,6 +3,7 @@ import json
 
 from textual.widgets import Button, Static
 
+from hexmind import tui
 from hexmind.core import REGISTRY, Task
 from hexmind.tui import HELP, HexmindApp
 from tests.test_core import FakeBackend
@@ -441,4 +442,168 @@ def test_changing_the_lead_updates_everything_that_names_the_leader():
             app.refresh_team()
             team = str(app.query_one("#team", Static).render())
             assert "agy" in team and "(lead)" in team
+    asyncio.run(go())
+
+
+def _said(app) -> str:
+    """What the room has actually shown, as text. `app.history` holds Markdown objects, so asking
+    them for a str gives a repr; the chat log holds the rendered lines."""
+    from textual.widgets import RichLog
+    return "\n".join(line.plain if hasattr(line, "plain") else str(line)
+                     for line in app.room.query_one("#chat", RichLog).lines)
+
+
+# ---------- the startup lead picker (Option A: block until the room has a lead) ----------
+def test_a_room_started_without_a_lead_blocks_on_the_picker_and_the_choice_takes_effect(monkeypatch):
+    """Without a lead the first request went into the backend as DIRECT_CMDS[None] and raised
+    KeyError out of the message loop. The room must not be usable until the user has picked."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude", "agy"])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude", "agy"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            assert type(app.screen).__name__ == "LeadPicker"
+            assert app.orch.lead is None, "the request path must be blocked, not merely discouraged"
+            assert app.round == 0, "nothing may be sent to the backend before there is a lead"
+
+            await pilot.press("j")  # walk to the second model
+            await pilot.click("#pick-agy")
+            await pilot.pause()
+            assert app.orch.lead == "agy"
+            assert type(app.screen).__name__ == "Screen", "the picker closes once there is a lead"
+            assert "lead: agy" in app.sub_title
+
+    asyncio.run(go())
+
+
+def test_declining_the_picker_re_asks_on_the_next_request_instead_of_running_it(monkeypatch):
+    """Escape is allowed — the user may want to look around first. But a request typed afterwards
+    goes back to them as a question, not to a backend that has no model to answer with."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude", "agy"])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude", "agy"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.orch.lead is None
+            assert type(app.screen).__name__ == "Screen", "declining leaves the room, without a lead"
+            assert app.focused.id == "input", "the room is usable again, so the cursor goes back to it"
+
+            await pilot.click("#input")
+            await pilot.press(*"build me a thing", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert type(app.screen).__name__ == "LeadPicker", "the request re-asks instead of running"
+            assert app.orch.lead is None
+
+    asyncio.run(go())
+
+
+def test_commands_still_work_in_a_room_with_no_lead(monkeypatch):
+    """A room with no lead is stuck, not broken: /help and /lead must still answer, because the
+    user needs a way to find out what to do next."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude", "agy"])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude", "agy"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+            await pilot.click("#input")
+            await pilot.press(*"/lead", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert type(app.screen).__name__ == "Screen", "a command must not re-open the picker"
+            said = _said(app)
+            assert "No lead yet" in said
+            assert "Lead is None" not in said
+
+    asyncio.run(go())
+
+
+def test_one_candidate_is_chosen_without_asking(monkeypatch):
+    """A question with one answer is a delay, not a decision. The model is still set through
+    set_lead, so the same validation and the same chat record apply."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude"])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            assert app.orch.lead == "claude"
+            assert type(app.screen).__name__ == "Screen"
+
+    asyncio.run(go())
+
+
+def test_a_room_where_nothing_can_lead_says_so_instead_of_showing_an_empty_picker(monkeypatch):
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: [])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            assert type(app.screen).__name__ == "Screen", "an empty picker would be a dead end"
+            assert app.orch.lead is None
+            said = _said(app)
+            assert "No model can lead" in said
+
+    asyncio.run(go())
+
+
+def test_only_one_picker_at_a_time(monkeypatch):
+    """Two stacked views of the same question, and the second one's dismissal would land after the
+    first has already set a lead."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude", "agy"])
+
+    async def go():
+        app = HexmindApp(FakeBackend(json.dumps({"reply": "ok", "tasks": []})),
+                         ["claude", "agy"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            app.ask_lead()
+            await pilot.pause()
+            assert sum(isinstance(s, tui.LeadPicker) for s in app.screen_stack) == 1
+
+    asyncio.run(go())
+
+
+def test_candidates_are_the_models_that_can_actually_lead(monkeypatch):
+    """set_lead refuses text-only models and unwoken-but-uninstalled ones, so offering them is a
+    choice that cannot be taken. In-room models come first; the rest follow registry weight."""
+    from hexmind.core import TEXT_ONLY, Orchestrator
+    text_only = next(m for m in TEXT_ONLY if m in REGISTRY.models)
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", text_only, "agy"])
+    orch = Orchestrator(FakeBackend("{}"), ["claude", text_only], "claude")
+
+    candidates = tui.lead_candidates(orch)
+
+    assert candidates[0] == "claude", "whoever is in the room leads the list"
+    assert text_only not in candidates
+    assert set(candidates) == {"claude", "agy"}, "installed, leadable, in weight order"
+
+
+def test_a_typed_lead_command_still_goes_through_set_lead(monkeypatch):
+    """The picker must not become a second way to change the lead that skips the orchestrator."""
+    monkeypatch.setattr(tui, "lead_candidates", lambda orch: ["claude", "agy"])
+    backend = FakeBackend(json.dumps({"reply": "ok", "tasks": []}))
+
+    async def go():
+        app = HexmindApp(backend, ["claude", "agy"], None, "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            await pilot.pause()
+            await pilot.click("#pick-claude")
+            await pilot.pause()
+            said = _said(app)
+            assert "is the lead now" in said, "the same record /lead NAME writes"
+
     asyncio.run(go())

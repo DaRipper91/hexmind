@@ -613,7 +613,7 @@ timeline
         Isolation : workspace map in prompts, breach detection
         Headless : --serve REST + WebSocket, --timeout, --once reports reasons
     section Next
-        Startup picker : the one gap to a usable interactive session
+        Startup picker : done — the room blocks until you pick a lead
         Sessions : per-model memory keyed (model, directory)
         Live output : visible work instead of 30 silent minutes
         Assembly : leader recommends, you edit, /go plans
@@ -622,7 +622,7 @@ timeline
 ```
 
 Shipped is proven by the suite; next is ordered by dependency. The full map lives in
-[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md), which names the one gap standing between this code and a usable interactive session. What follows is the short version.
+[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map. What follows is the short version.
 
 **Shipped**
 
@@ -640,12 +640,11 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **hcom backend:** persistent headless agents, one thread per request
 - [x] **Headless server:** `--serve` with REST + WebSocket for a phone or web client
 - [x] **Jules**, **nicknames**, **mobile/touch layout**, **`--timeout`**
+- [x] **Startup leader picker** — a session with no lead blocks until you pick one
 
 **Next** — see [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map and
 [`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) for the design work
 
-- [ ] **Startup leader picker.** *The one gap between the current code and a usable interactive
-      session* — `--lead` is required headless and the TUI has no way to choose yet
 - [ ] **Per-model sessions.** Every model keeps its own conversation across turns, keyed
       `(model, directory)` — opencode sessions are directory-bound and *hang* rather than error
 - [ ] **Live output.** A model should be visibly working instead of silent for up to 30 minutes

@@ -337,6 +337,123 @@ class TeamScreen(ModalScreen):
             self.notify(text, severity="warning", timeout=8)
 
 
+class LeadPicker(ModalScreen):
+    """Who leads. The room cannot do anything without a lead — the first message went straight into
+    the backend as `DIRECT_CMDS[None]` — so a session started without one is blocked here until a
+    model is chosen, rather than failing on the user's first request.
+
+    Blocking is the point: the alternative (a non-blocking notice plus a silent fallback to whoever
+    is awake) hands the room to a model nobody picked, and the plan it writes is the one the user
+    ends up trusting. Escape is allowed, but the picker re-arms on the next request instead of
+    letting the request through.
+
+    Candidates are the models that can actually lead: in the room or installed, never text-only.
+    One candidate is chosen for the user, because a question with one answer is a delay."""
+
+    CSS = """
+    LeadPicker { align: center middle; }
+    #pick { width: 92; max-width: 100%; height: auto; max-height: 100%; border: solid $primary; background: $surface; }
+    #pick > Vertical { height: 1; layout: horizontal; }
+    #pick .who { width: auto; }
+    /* one cell of padding per column: side by side, the name, the state and the strengths touch
+       without it and read as one run-on word */
+    #pick .state { width: 1fr; min-width: 0; padding: 0 1; overflow: hidden; text-overflow: ellipsis; }
+    #pick .domains { width: 1fr; min-width: 0; padding: 0 1; overflow: hidden; text-overflow: ellipsis; text-style: dim; }
+    #pick Button { width: auto; min-width: 0; height: 1; margin-left: 1; }
+    #pick-note { padding: 0 1; text-style: dim; }
+    """
+    BINDINGS = [("escape", "no_lead", "Not now"),
+                Binding("j,down", "cursor(1)", "Next model", show=False),
+                Binding("k,up", "cursor(-1)", "Previous model", show=False)]
+
+    PICK_NOTE = ("Pick the lead. It reads your request, splits it into tasks, and writes the answer "
+                 "you see; the rest of the room does the work. Change it any time with /lead.")
+
+    def __init__(self, candidates: list[str]) -> None:
+        super().__init__()
+        self.candidates = candidates
+        self.rows: list[str] = []
+
+    @property
+    def orch(self) -> Orchestrator:
+        return self.app.orch
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="pick"):
+            yield from self.widgets()
+
+    def widgets(self) -> list[Widget]:
+        self.rows = list(self.candidates)
+        return [*(self.row(name) for name in self.rows),
+                Static(self.PICK_NOTE, id="pick-note"),
+                Button("Not now", id="no-lead", compact=True,
+                       tooltip="Leave the room without a lead — ask again when you type a request")]
+
+    def row(self, name: str) -> Vertical:
+        model = REGISTRY.get(name)
+        label = Text(self.orch.name(name), style=AGENT_COLOR.get(name, "white"))
+        if name in self.orch.nicknames:  # the nickname is what the user calls it, so keep the model name too
+            label.append(f" ({name})", style="dim")
+        state = "in the room" if name in self.orch.members else "installed, not in the room"
+        return Vertical(
+            labelled(label, f"{name}: {model.description}", classes="who"),
+            labelled(Text(state, style="dim"), f"{name} is {state}", classes="state"),
+            Static(f"best at {model.best_at} · not for {', '.join(model.avoid_for) or 'nothing in particular'}",
+                   classes="domains"),
+            Button("Make lead", id=f"pick-{name}", compact=True, tooltip=f"Make {name} the lead"),
+            id=f"pick-row-{name}",
+        )
+
+    def on_mount(self) -> None:
+        if len(self.candidates) == 1:
+            # nothing to ask: one model can lead, so the room starts rather than waiting on a keypress
+            self.choose(self.candidates[0])
+        elif self.rows:
+            self.query_one(f"#pick-{self.rows[0]}", Button).focus()
+        else:
+            self.query_one("#no-lead", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ""
+        if button_id == "no-lead":
+            self.dismiss(None)
+        elif model := button_id.removeprefix("pick-"):
+            self.choose(model)
+
+    def choose(self, model: str) -> None:
+        self.dismiss(model)
+
+    def action_no_lead(self) -> None:
+        self.dismiss(None)
+
+    # ---------- keyboard ----------
+    def focused_model(self) -> str | None:
+        widget = self.focused
+        while widget is not None and widget is not self:
+            if widget.id and widget.id.startswith("pick-row-"):
+                return widget.id[len("pick-row-"):]
+            widget = widget.parent
+        return None
+
+    def action_cursor(self, step: int) -> None:
+        if not self.rows:
+            return
+        here = self.focused_model() or self.rows[0]
+        index = max(0, min(len(self.rows) - 1, self.rows.index(here) + step))  # stop at the ends, don't wrap
+        self.query_one(f"#pick-{self.rows[index]}", Button).focus()
+
+
+def lead_candidates(orch: Orchestrator) -> list[str]:
+    """Everyone who could lead, awake first and in registry weight order: the models already in the
+    room, then the installed ones (leading a session implies waking it, which set_lead does for us).
+    Text-only models are left out because set_lead refuses them — offering a choice that cannot be
+    taken is worse than not offering it."""
+    installed = REGISTRY.available()
+    candidates = [m for m in orch.members if m not in TEXT_ONLY]
+    candidates += [m for m in REGISTRY.by_weight(installed) if m not in TEXT_ONLY and m not in candidates]
+    return candidates
+
+
 class TaskTable(DataTable):
     def _on_click(self, event) -> None:
         # DataTable only selects a row that is already highlighted, so on a phone every task would take two taps.
@@ -377,6 +494,14 @@ class HexmindApp(App):
     .narrow #roster .domains { display: none; }
     .narrow #roster .who { width: 1fr; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .narrow #roster Button { margin-left: 0; }
+    /* The picker stacks instead of cramming three columns into a phone width, and the "best at"
+       line is the first thing to go: a choice this important needs the name, the state and a
+       reachable button. */
+    .narrow #pick > Vertical { height: auto; layout: vertical; }
+    .narrow #pick .domains { display: none; }
+    .narrow #pick .who { width: 1fr; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .narrow #pick .state { width: 1fr; }
+    .narrow #pick Button { margin-left: 0; }
     """
     BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat"),
                 # single-key alternatives for soft keyboards; Input consumes printable keys, so these only fire when it is blurred
@@ -432,7 +557,43 @@ class HexmindApp(App):
         self.set_class(True, "view-chat")
         self.apply_size(self.size.width, self.size.height)
         self.refresh_team()
-        self.say("Hexmind", f"Team ready: {', '.join(self.members)}. Type a request; the lead splits it up.")
+        self.say("Hexmind", f"Team ready: {', '.join(self.members)}.")
+        if self.orch.lead is None:
+            self.say("Hexmind", "No lead yet — the room needs one before it can answer anything.")
+            self.ask_lead()
+        else:
+            self.say("Hexmind", "Type a request; the lead splits it up.")
+        self.query_one("#input").focus()
+
+    def ask_lead(self, callback=None) -> None:
+        """Put the picker up and hand back the model chosen, or None if the user declined. One
+        picker at a time: a second would stack two views of the same question."""
+        if any(isinstance(s, LeadPicker) for s in self.screen_stack):
+            return
+        candidates = lead_candidates(self.orch)
+        if not candidates:
+            self.say("Hexmind", "**No model can lead.** Nothing that hexmind knows about is installed "
+                                "and able to lead. Check `hexmind --list`, then /lead NAME from /team.")
+            if callback:
+                callback(None)
+            return
+        self.push_screen(LeadPicker(candidates), callback or self.chosen_lead)
+
+    def chosen_lead(self, model: str | None) -> None:
+        """`set_lead` is still the only way the lead changes, so the picker's choice is validated
+        exactly like a typed `/lead NAME`: it can refuse, and it wakes a model that wasn't in the room."""
+        if model is None:
+            self.say("Hexmind", "Still no lead. Type a request and I will ask again, or pick one from "
+                                "the team roster with `t`.")
+            self.query_one("#input").focus()  # the room is usable, it just has no lead yet
+            return
+        try:
+            self.say("Hexmind", self.orch.set_lead(model))
+        except TeamError as e:
+            self.say("Hexmind", f"**{e}**")
+            return
+        self.sub_title = f"{self.backend_name} backend · lead: {self.orch.lead} · audit: {'on' if self.audit else 'off'}"
+        self.refresh_team()
         self.query_one("#input").focus()
 
     # ---------- responsive layout ----------
@@ -558,9 +719,21 @@ class HexmindApp(App):
         if not text:
             return
         self.say("you", text)
+        if self.orch.lead is None and not self.is_slash(text):
+            # the startup picker was declined. The request is not lost and not run: the user asked
+            # a question, so it goes back to them as a question, rather than reaching the backend
+            # as `DIRECT_CMDS[None]`.
+            self.ask_lead()
+            return
         if self.turn.locked():
             self.say("Hexmind", "_Team is busy — queued, will start when the current request finishes._")
         self.handle(text)
+
+    @staticmethod
+    def is_slash(text: str) -> bool:
+        """Commands are how you change the room without asking it anything (/lead, /team, /sleep,
+        /help, /quit), so a room with no lead can still answer them — that is the way out."""
+        return text.startswith("/")
 
     @work(group="turns")
     async def handle(self, text: str) -> None:

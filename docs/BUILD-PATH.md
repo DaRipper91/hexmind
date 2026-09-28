@@ -20,7 +20,7 @@ proceed until something else lands.
 | P1 | WS-2 team management | **PART** | `/sleep` `/wake` `/add` `/remove` work; `backends.available()` and `Registry.available()` still overlap |
 | P1 | WS-7 descriptions | **PART** | `/models` `/model NAME` cards exist; no browsable modal |
 | P1 | WS-10 `/team` surface | **DONE** | `TeamScreen` built by the `opencode-team` chain, INVARIANT S-1 in the UI |
-| P2 | WS-3 leader control | **PART** | `set_lead` + `/lead` + `/lead recommend` land; **startup picker absent** |
+| P2 | WS-3 leader control | **DONE** | `set_lead` + `/lead` + `/lead recommend` + the startup `LeadPicker` modal all land |
 | P3 | WS-4 sessions | **TODO** | feasibility proven (`-s`, `sessionID`, cwd hazard); nothing built |
 | P4 | WS-5 preference weighting | **PART** | `weight` + `by_weight()` exist; `fallback()` and relay rotation still ignore them |
 | P5 | WS-6 local models | **PART** | registry supports `verify = "ollama"`; **none of the report's 6 added**; `think` unwired |
@@ -82,10 +82,10 @@ Steps 2–7 **TODO**.
 **WS-2** `backends.available()` and `Registry.available()` are two functions with overlapping jobs.
 Harmless while unused, a bug the moment `/add` needs one of them. *Gap: delete one.*
 
-**WS-3** `/lead recommend` exists and works, but there is **no startup picker** — so the TUI
-currently starts with `lead = None` and nothing ever sets it. This is the **one gap that makes the
-app unusable as shipped**: `--once` and `--serve` demand `--lead`, and the TUI has no way to choose.
-*Gap: the modal, and it must not block the chat.*
+**WS-3** **Done.** `set_lead`, `/lead`, `/lead recommend` and the startup `LeadPicker` modal all
+land. A session opened without a lead blocks on the picker until one is chosen (one candidate is
+chosen for you, and declining re-asks on your next request rather than letting it through with no
+lead). The residual gap is only the duplicate `available()` under WS-2.
 
 **WS-5** `weight` is data with no consumer. `fallback()` sorts by Laplace score alone; relay
 rotation is still plain round-robin. *Gap: use it in both.*
@@ -108,7 +108,7 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 
 | # | operation | blocked by | why now |
 | :--- | :--- | :--- | :--- |
-| 1 | **startup leader picker** | nothing | the app cannot pick its own lead today |
+| 1 | ~~startup leader picker~~ | — | **done**: `LeadPicker` in `tui.py`; `/lead` with no lead says so |
 | 2 | per-stage isolation check | in-flight chain | a breach is reported after the damage |
 | 3 | `Assembly` + `/go` `/cancel` `/recommend` | 1 | the user's core flow |
 | 4 | `/scan` + discovered-vs-curated + `/profile` | nothing | independent; the user asked for it |
