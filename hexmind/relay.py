@@ -485,6 +485,10 @@ async def command(orch, text: str) -> str:
         reply = table if table.startswith("|") else "No audit results yet. Turn on `/audit on` and give the team work."
     elif cmd == "/relay":
         args = [f"-n{a[1:]}" if a.lower().startswith("x") and a[1:].isdigit() else a for a in args]
+        if args and args[0] == "clean":
+            # a subcommand, not a chain name — intercept before the lead would try to design
+            # a chain called "clean"
+            return _relay_clean(orch, args[1:])
         try:
             ns = _parse_relay(args)
         except (argparse.ArgumentError, SystemExit) as e:
@@ -498,6 +502,97 @@ async def command(orch, text: str) -> str:
                 reply = f"Relay failed: {e}"
     else:
         reply = HELP
+    orch.emit("message", {"from": "hexmind", "text": reply})
+    return reply
+
+
+def _run_candidates(root: str) -> list:
+    """Every worktree/branch pair under .hexmind, named the way make_workspaces names them.
+
+    Built here rather than in reaping.py so the layout knowledge stays beside the code that
+    creates it — if the naming changes, this changes with it instead of quietly finding nothing.
+    """
+    from .reaping import Candidate
+
+    found = []
+    worktrees = Path(root) / ".hexmind" / "worktrees"
+    for wt in sorted(worktrees.glob("*")) if worktrees.is_dir() else []:
+        name = wt.name
+        if "-" not in name:
+            continue
+        run, _, label = name.rpartition("-")
+        found.append(Candidate(run=run, label=label, worktree=wt, branch=f"hexmind/{name}"))
+    return found
+
+
+def _active_runs(root: str) -> set[str]:
+    """Runs currently executing, per the marker run_relay writes. A process check would be
+    fragile: a chain can sit between stages, and a killed run leaves no process but a
+    live-looking worktree."""
+    marker = Path(root) / ".hexmind" / "active"
+    try:
+        return {line.strip() for line in marker.read_text().splitlines() if line.strip()}
+    except OSError:
+        return set()
+
+
+def _relay_clean(orch, args: list[str]) -> str:
+    """`/relay clean` lists; `/relay clean --force` removes what is safe and refuses the rest."""
+    from .reaping import ACTIVE, DIRTY, MISSING, SAFE, UNMERGED, classify, remove_one
+
+    force = "--force" in args
+    with_notes = "--all" in args
+    root = orch.backend.cwd
+    try:
+        report = classify(root, _run_candidates(root), active_runs=_active_runs(root))
+    except Exception as e:  # a folder that is not a git repo at all
+        return f"**Cannot inspect relay runs in `{root}`**: {e}"
+
+    by = {c.run: c for c in report.candidates}
+    lines = ["**Relay runs**", ""]
+    if not report.candidates:
+        lines.append("No relay worktrees found. Nothing to clean.")
+    for c in sorted(report.candidates, key=lambda c: (c.verdict != SAFE, c.run, c.label)):
+        mark = {"safe": "**safe**", "dirty": "⚠️ dirty", "unmerged": "⚠️ unmerged",
+                "active": "⏳ active", "missing": "gone"}[c.verdict]
+        line = f"- `{c.run}` chain {c.label} — {mark}"
+        if c.reason:
+            line += f": {c.reason}"
+        lines.append(line)
+
+    safe = [c for c in report.candidates if c.verdict == SAFE]
+    if not force:
+        held = [c for c in report.candidates if c.verdict in (DIRTY, UNMERGED, ACTIVE)]
+        lines += ["", f"**{len(safe)}** run(s) could be removed. `/relay clean --force` to do it."]
+        if held:
+            lines.append(f"**{len(held)}** will be kept, and the reason is above — the dirty ones "
+                         f"hold work that exists nowhere else.")
+        return "\n".join(lines)
+
+    for c in safe:
+        problem = remove_one(root, c)
+        if problem:
+            report.problems.append(problem)
+        else:
+            report.removed.append(c)
+    lines.append("")
+    if report.removed:
+        lines.append(f"Removed {len(report.removed)} worktree(s) and branch(es): "
+                     + ", ".join(f"`{c.run}`" for c in report.removed))
+    else:
+        lines.append("Nothing was safe to remove.")
+    if with_notes:
+        for c in report.removed:
+            run_dir = Path(root) / ".hexmind" / "runs" / c.run
+            if run_dir.is_dir():
+                for f in run_dir.glob("chain-*.md"):
+                    f.unlink()
+        lines.append("Stage reports deleted (`--all`).")
+    else:
+        lines.append("Stage reports kept — `/relay clean --all` removes those too.")
+    for p in report.problems:
+        lines.append(f"⚠️ {p}")
+    reply = "\n".join(lines)
     orch.emit("message", {"from": "hexmind", "text": reply})
     return reply
 
@@ -547,49 +642,61 @@ async def run_relay(orch, ns) -> str:
     run = time.strftime("%Y%m%d-%H%M%S")
     cwds, notes = make_workspaces(root, run, n, workspace)
     tasks = build_tasks(chain, grid, goal, cwds, notes)
+    marker = Path(root) / ".hexmind" / "active"
+    try:
+        marker.write_text(run + "\n")  # /relay clean must not reap a run that is still going
+    except OSError:
+        pass
 
-    table = "| chain | " + " | ".join(s.name for s in chain.stages) + " |\n|" + "---|" * (len(chain.stages) + 1) + "\n"
-    table += "\n".join(f"| {LABELS[k]} | " + " | ".join(orch.name(a) for a in row) + " |" for k, row in enumerate(grid))
-    say(f"**Relay `{chain.name}`**: {n} chain(s) × {len(chain.stages)} stages · assign={ns.assign} · "
-        f"workspace={workspace}\n\n{table}\n\nNotes: `{Path(notes[0]).parent}`")
+    try:
+        table = "| chain | " + " | ".join(s.name for s in chain.stages) + " |\n|" + "---|" * (len(chain.stages) + 1) + "\n"
+        table += "\n".join(f"| {LABELS[k]} | " + " | ".join(orch.name(a) for a in row) + " |" for k, row in enumerate(grid))
+        say(f"**Relay `{chain.name}`**: {n} chain(s) × {len(chain.stages)} stages · assign={ns.assign} · "
+            f"workspace={workspace}\n\n{table}\n\nNotes: `{Path(notes[0]).parent}`")
 
-    orch.emit("plan", {"tasks": tasks})
-    # Isolation is checked, not trusted. The task prompt names each stage's own directory, but a
-    # prompt is a soft control: an agent that follows a path out of the shared notes file writes to
-    # the main checkout and the chain still reports success. So the main folder's dirty state is
-    # compared across the run, and anything that appeared is reported as a leak.
-    # Only check when workspace="worktree"; shared mode legitimately writes to the main folder.
-    before = dirty_paths(root) if workspace == "worktree" else set()
-    await orch.run_tasks(goal, tasks)
-    leaked = sorted((dirty_paths(root) if workspace == "worktree" else set()) - before)
-    if leaked:
-        listing = "\n".join(f"- `{p}`" for p in leaked)
-        say(f"**ESCALATION: a relay stage wrote outside its own worktree.**\n\n"
-            f"`--workspace {workspace}` was supposed to keep this run's changes inside its "
-            f"worktree, but these paths changed in the main folder `{root}`:\n{listing}\n\n"
-            f"The stage prompt now names each stage's directory, and this check reports it either "
-            f"way — but an agent that ignored both still put its work somewhere the chain did not "
-            f"intend. Inspect before committing anything.")
-    per_chain = [tasks[k * len(chain.stages):(k + 1) * len(chain.stages)] for k in range(n)]
-    status = "\n".join(f"- chain {LABELS[k]}: " + ", ".join(f"{t.id} {t.status}" for t in ts)
-                       for k, ts in enumerate(per_chain))
-    if leaked:  # in the status block too, so the final summary cannot present the run as clean
-        status += f"\n- **isolation breach:** {len(leaked)} path(s) written outside the worktree"
-    if ns.end == "list":
-        final = f"**Relay finished.**\n{status}\n\nFull reports: `{Path(notes[0]).parent}`"
-        say(final)
+        orch.emit("plan", {"tasks": tasks})
+        # Isolation is checked, not trusted. The task prompt names each stage's own directory, but a
+        # prompt is a soft control: an agent that follows a path out of the shared notes file writes to
+        # the main checkout and the chain still reports success. So the main folder's dirty state is
+        # compared across the run, and anything that appeared is reported as a leak.
+        # Only check when workspace="worktree"; shared mode legitimately writes to the main folder.
+        before = dirty_paths(root) if workspace == "worktree" else set()
+        await orch.run_tasks(goal, tasks)
+        leaked = sorted((dirty_paths(root) if workspace == "worktree" else set()) - before)
+        if leaked:
+            listing = "\n".join(f"- `{p}`" for p in leaked)
+            say(f"**ESCALATION: a relay stage wrote outside its own worktree.**\n\n"
+                f"`--workspace {workspace}` was supposed to keep this run's changes inside its "
+                f"worktree, but these paths changed in the main folder `{root}`:\n{listing}\n\n"
+                f"The stage prompt now names each stage's directory, and this check reports it either "
+                f"way — but an agent that ignored both still put its work somewhere the chain did not "
+                f"intend. Inspect before committing anything.")
+        per_chain = [tasks[k * len(chain.stages):(k + 1) * len(chain.stages)] for k in range(n)]
+        status = "\n".join(f"- chain {LABELS[k]}: " + ", ".join(f"{t.id} {t.status}" for t in ts)
+                           for k, ts in enumerate(per_chain))
+        if leaked:  # in the status block too, so the final summary cannot present the run as clean
+            status += f"\n- **isolation breach:** {len(leaked)} path(s) written outside the worktree"
+        if ns.end == "list":
+            final = f"**Relay finished.**\n{status}\n\nFull reports: `{Path(notes[0]).parent}`"
+            say(final)
+            return final
+
+        finals = "\n\n".join(f"Chain {LABELS[k]}: " + next((f"{t.title} ({t.agent}):\n{clip(t.output, 3000)}"
+                                                             for t in reversed(ts) if t.status == "done"), "no stage finished")
+                             for k, ts in enumerate(per_chain))
+        orch.emit("status", {"agent": orch.lead, "state": f"{ns.end} results"})
+        # `finals` is only the last stage that finished, so a stage that was gated off is invisible in
+        # it. The statuses go in too, or the summary can call a failed stage a success.
+        final = await orch.ask(orch.lead, END_WRAPPER.format(
+            n=n, chain=chain.name, goal=goal, notes=", ".join(notes), cwds=", ".join(dict.fromkeys(cwds)),
+            statuses=status, finals=finals, instruction=END_PROMPTS[ns.end]))
+        orch.emit("status", {"agent": orch.lead, "state": "idle"})
+        final = f"{final.strip()}\n\n{status}"
+        orch.emit("message", {"from": orch.lead, "text": final})
         return final
 
-    finals = "\n\n".join(f"Chain {LABELS[k]}: " + next((f"{t.title} ({t.agent}):\n{clip(t.output, 3000)}"
-                                                         for t in reversed(ts) if t.status == "done"), "no stage finished")
-                         for k, ts in enumerate(per_chain))
-    orch.emit("status", {"agent": orch.lead, "state": f"{ns.end} results"})
-    # `finals` is only the last stage that finished, so a stage that was gated off is invisible in
-    # it. The statuses go in too, or the summary can call a failed stage a success.
-    final = await orch.ask(orch.lead, END_WRAPPER.format(
-        n=n, chain=chain.name, goal=goal, notes=", ".join(notes), cwds=", ".join(dict.fromkeys(cwds)),
-        statuses=status, finals=finals, instruction=END_PROMPTS[ns.end]))
-    orch.emit("status", {"agent": orch.lead, "state": "idle"})
-    final = f"{final.strip()}\n\n{status}"
-    orch.emit("message", {"from": orch.lead, "text": final})
-    return final
+    finally:
+        try:  # a crashed run must not look live forever, or /relay clean would skip it
+            marker.unlink()
+        except OSError:
+            pass
