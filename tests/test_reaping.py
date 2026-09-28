@@ -7,6 +7,7 @@ The two properties that matter, both learned from a near-miss in this repo:
 - git's own guards are used, never overridden: no `--force`, no `-D`
 """
 import subprocess as sp
+import sys
 
 import pytest
 
@@ -265,8 +266,9 @@ def test_the_active_marker_is_read_and_absent_is_fine(tmp_path):
     root = make_repo(tmp_path)
     assert _active_runs(str(root)) == set(), "no marker means nothing is running"
 
-    (root / ".hexmind" / "active").write_text("run1\nrun2\n\n")
-    assert _active_runs(str(root)) == {"run1", "run2"}
+    import os
+    (root / ".hexmind" / "active").write_text(f"run1\n{os.getpid()}\n")
+    assert _active_runs(str(root)) == {"run1"}
 
 
 def test_a_missing_marker_never_raises(tmp_path):
@@ -339,3 +341,38 @@ def test_clean_outside_a_git_repo_refuses_rather_than_guessing(tmp_path):
     assert ".git link is broken" in reply
     assert "run1" in reply
     assert "0** run(s) could be removed" in reply
+
+
+# ---------- the active marker expires by itself ----------
+
+def test_the_marker_carries_the_pid_and_goes_stale_when_it_dies(tmp_path):
+    """A `finally` was the obvious way to clear this and is wrong: it does not run on SIGKILL, and
+    backends.py kills process groups. A killed run would stay marked active forever and /relay
+    clean would skip it permanently. The pid check makes the marker self-expiring."""
+    import os
+
+    from hexmind.relay import _active_runs
+
+    root = make_repo(tmp_path)
+    (root / ".hexmind" / "active").write_text(f"run1\n{os.getpid()}\n")
+    assert _active_runs(str(root)) == {"run1"}, "our own pid is alive, so the run is active"
+
+    # a pid that is genuinely gone. Not pid 0: os.kill(0, 0) signals the caller's own process
+    # group and succeeds, so it would read as alive.
+    proc = sp.Popen([sys.executable, "-c", "pass"])
+    dead = proc.pid
+    proc.wait()  # exited and reaped, so this pid is genuinely gone
+    (root / ".hexmind" / "active").write_text(f"run1\n{dead}\n")
+    assert _active_runs(str(root)) == set(), "a dead pid must go stale on its own"
+
+    (root / ".hexmind" / "active").write_text("run1\nnot-a-pid\n")
+    assert _active_runs(str(root)) == set(), "an unreadable marker is treated as no active run"
+
+
+def test_a_marker_with_only_a_run_id_is_not_enough(tmp_path):
+    """Written before the pid was added; must not read as active, or a stale file reaps nothing."""
+    from hexmind.relay import _active_runs
+
+    root = make_repo(tmp_path)
+    (root / ".hexmind" / "active").write_text("run1\n")
+    assert _active_runs(str(root)) == set()

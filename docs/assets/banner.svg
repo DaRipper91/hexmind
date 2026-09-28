@@ -51,9 +51,15 @@
     }
     .orbit-1 { transform-origin: 120px 120px; animation: orbitNode 8s linear infinite; }
     .orbit-2 { transform-origin: 120px 120px; animation: orbitNode 12s linear infinite reverse; }
+    .orbit-3 { transform-origin: 120px 120px; animation: orbitNode 16s linear infinite; }
+    .tierGlow { animation: tierPulse 5s ease-in-out infinite; transform-origin: 590px 189px; }
+    @keyframes tierPulse {
+      0%, 100% { opacity: 0.92; }
+      50% { opacity: 1; filter: drop-shadow(0 0 8px #a855f7); }
+    }
     .scan-bar { animation: scanLine 4s ease-in-out infinite; }
     @media (prefers-reduced-motion: reduce) {
-      .hex-core, .orbit-1, .orbit-2, .scan-bar { animation: none !important; }
+      .hex-core, .orbit-1, .orbit-2, .orbit-3, .tierGlow, .scan-bar { animation: none !important; }
     }
   </style>
 
@@ -90,6 +96,9 @@
   <g class="orbit-2">
     <circle cx="120" cy="120" r="4.5" fill="#38bdf8" filter="url(#softGlow)"/>
   </g>
+  <g class="orbit-3">
+    <circle cx="120" cy="120" r="3.5" fill="#ec4899" filter="url(#softGlow)"/>
+  </g>
 
   <!-- Typography & Wordmark -->
   <g transform="translate(230, 0)">
@@ -109,30 +118,48 @@
     <!-- Tagline -->
     <text x="2" y="152" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
           font-weight="500" font-size="19" letter-spacing="1.5" fill="#94a3b8">
-      Many models. <tspan fill="#38bdf8">One mind.</tspan>
+      Many models. <tspan fill="#38bdf8">One room.</tspan> One <tspan fill="#c084fc">lead</tspan> you pick.
     </text>
 
-    <!-- Model Mesh Pills -->
-    <g transform="translate(2, 178)">
+    <!-- Model Mesh Pills: the vendor CLIs, then the free opencode tier as one pill -->
+    <g transform="translate(2, 176)">
       <!-- Claude -->
-      <rect x="0" y="0" width="102" height="26" rx="13" fill="#2e1065" stroke="#a855f7" stroke-width="1"/>
+      <rect x="0" y="0" width="86" height="26" rx="13" fill="#2e1065" stroke="#a855f7" stroke-width="1"/>
       <circle cx="14" cy="13" r="4" fill="#c084fc"/>
       <text x="26" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#e9d5ff">Claude</text>
 
       <!-- Gemini (agy) -->
-      <rect x="114" y="0" width="128" height="26" rx="13" fill="#082f49" stroke="#0ea5e9" stroke-width="1"/>
-      <circle cx="128" cy="13" r="4" fill="#38bdf8"/>
-      <text x="140" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#bae6fd">Gemini (agy)</text>
+      <rect x="92" y="0" width="116" height="26" rx="13" fill="#082f49" stroke="#0ea5e9" stroke-width="1"/>
+      <circle cx="106" cy="13" r="4" fill="#38bdf8"/>
+      <text x="118" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#bae6fd">Gemini</text>
 
       <!-- Codex -->
-      <rect x="254" y="0" width="102" height="26" rx="13" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
-      <circle cx="268" cy="13" r="4" fill="#34d399"/>
-      <text x="280" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#a7f3d0">Codex</text>
+      <rect x="214" y="0" width="86" height="26" rx="13" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+      <circle cx="228" cy="13" r="4" fill="#34d399"/>
+      <text x="240" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#a7f3d0">Codex</text>
 
-      <!-- Jules -->
-      <rect x="368" y="0" width="94" height="26" rx="13" fill="#500724" stroke="#f43f5e" stroke-width="1"/>
-      <circle cx="382" cy="13" r="4" fill="#fb7185"/>
-      <text x="394" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#fecdd3">Jules</text>
+      <!-- Copilot -->
+      <rect x="306" y="0" width="98" height="26" rx="13" fill="#111827" stroke="#6b7280" stroke-width="1"/>
+      <circle cx="320" cy="13" r="4" fill="#9ca3af"/>
+      <text x="332" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#e5e7eb">Copilot</text>
+
+      <!-- Kimi -->
+      <rect x="410" y="0" width="80" height="26" rx="13" fill="#450a0a" stroke="#ef4444" stroke-width="1"/>
+      <circle cx="424" cy="13" r="4" fill="#f87171"/>
+      <text x="436" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="600" fill="#fecaca">Kimi</text>
+
+      <!-- the free opencode tier, as one pill with its own glow -->
+      <g class="tierGlow">
+        <rect x="496" y="0" width="188" height="26" rx="13" fill="#0c0a1f" stroke="url(#hexGrad)" stroke-width="1.2"/>
+        <circle cx="510" cy="13" r="4" fill="#a855f7"/>
+        <circle cx="519" cy="13" r="3" fill="#38bdf8"/>
+        <text x="530" y="17" font-family="ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#e9d5ff">8 free opencode models</text>
+      </g>
+
+      <!-- local, opt-in -->
+      <rect x="690" y="0" width="128" height="26" rx="13" fill="#1c1917" stroke="#78716c" stroke-width="1" stroke-dasharray="3 2"/>
+      <circle cx="704" cy="13" r="4" fill="#a8a29e"/>
+      <text x="716" y="17" font-family="ui-monospace, monospace" font-size="11" font-weight="600" fill="#d6d3d1">local Ollama</text>
     </g>
   </g>
 

@@ -58,7 +58,7 @@
     HEXMIND RELAY CHAINS
   </text>
   <text x="40" y="66" font-family="system-ui, sans-serif" font-size="13" fill="#64748b">
-    Parallel N-way execution with cyclic model rotation &amp; unified artifact convergence
+    Parallel N-way execution · rotate, best or pinned · each chain in its own worktree · merged or compared
   </text>
 
   <!-- Legend Badges -->
@@ -74,6 +74,11 @@
     <rect x="218" y="0" width="94" height="22" rx="11" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
     <circle cx="230" cy="11" r="4" fill="#34d399"/>
     <text x="242" y="15" font-family="ui-monospace, monospace" font-size="11" font-weight="600" fill="#a7f3d0">Codex</text>
+
+    <rect x="318" y="0" width="146" height="22" rx="11" fill="#0c0a1f" stroke="#a855f7" stroke-width="1.1"/>
+    <circle cx="330" cy="11" r="3.4" fill="#c084fc"/>
+    <circle cx="338" cy="11" r="2.6" fill="#38bdf8"/>
+    <text x="348" y="15" font-family="ui-monospace, monospace" font-size="10.5" font-weight="600" fill="#e9d5ff">+ 8 free opencode</text>
   </g>
 
   <!-- Flow Paths / Connector Wires (Passing Through All Stages into Synthesis) -->
@@ -164,7 +169,10 @@
   <circle class="token-3" r="5" fill="#34d399" filter="url(#glow2)"/>
 
   <!-- Footer Tag -->
-  <text x="40" y="324" font-family="ui-monospace, monospace" font-size="11" fill="#475569">
-    .hexmind/runs/&lt;run_id&gt;/chain-*.md (isolated worktrees per branch)
+  <text x="40" y="318" font-family="ui-monospace, monospace" font-size="11" fill="#475569">
+    .hexmind/runs/&lt;run_id&gt;/chain-*.md · one worktree and branch per chain
+  </text>
+  <text x="40" y="336" font-family="ui-monospace, monospace" font-size="10.5" fill="#334155">
+    /relay clean reaps finished runs and refuses any with uncommitted work
   </text>
 </svg>

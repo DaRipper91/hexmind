@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" width="100%" height="100%">
+  <defs>
+    <linearGradient id="teamBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0d16"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+    <linearGradient id="tierGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <filter id="tGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feComposite in="SourceGraphic" in2="b" operator="over"/>
+    </filter>
+  </defs>
+
+  <style>
+    @keyframes awakeBreath {
+      0%, 100% { opacity: 0.95; }
+      50% { opacity: 1; filter: drop-shadow(0 0 6px currentColor); }
+    }
+    @keyframes busySpin {
+      0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }
+    }
+    @keyframes leadHalo {
+      0%, 100% { opacity: 0.35; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(1.06); }
+    }
+    @keyframes s1Sweep {
+      0% { offset-distance: 0%; opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { offset-distance: 100%; opacity: 0; }
+    }
+    @keyframes refuseFlash {
+      0%, 70%, 100% { fill: #1c1408; stroke: #fbbf24; }
+      80%, 90% { fill: #451a03; stroke: #fde68a; }
+    }
+    .awake { animation: awakeBreath 3.4s ease-in-out infinite; }
+    .lead-halo { animation: leadHalo 3s ease-in-out infinite; transform-origin: 232px 196px; }
+    .busy-ring { animation: busySpin 2.2s linear infinite; transform-origin: 232px 196px; }
+    .refuse { animation: refuseFlash 4s ease-in-out infinite; }
+    .sweep-1 { offset-path: path("M 96 372 L 300 372 L 470 300 L 640 300"); animation: s1Sweep 6s linear infinite; }
+    .sweep-2 { offset-path: path("M 96 412 L 340 412 L 500 340 L 640 340"); animation: s1Sweep 6s linear infinite 2s; }
+    @media (prefers-reduced-motion: reduce) {
+      .awake, .lead-halo, .busy-ring, .refuse, .sweep-1, .sweep-2 { animation: none !important; }
+    }
+  </style>
+
+  <rect width="960" height="470" rx="14" fill="url(#teamBg)" stroke="#1e293b" stroke-width="1.5"/>
+
+  <text x="40" y="42" font-family="system-ui, sans-serif" font-weight="800" font-size="20" fill="#f8fafc" letter-spacing="1">
+    THE TEAM, AND WHO IS AWAKE
+  </text>
+  <text x="40" y="64" font-family="system-ui, sans-serif" font-size="13" fill="#64748b">
+    Every model stays registered. Sleeping is a state, not a deletion — history, stats and journal all survive it.
+  </text>
+
+  <!-- LEFT: the /team roster -->
+  <g transform="translate(60, 96)">
+    <rect width="360" height="252" rx="10" fill="#0b1220" stroke="#334155" stroke-width="1.4"/>
+    <text x="16" y="26" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#e2e8f0">/team</text>
+    <line x1="12" y1="36" x2="348" y2="36" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- lead row, highlighted, with a halo behind it -->
+    <circle class="lead-halo" cx="172" cy="100" r="26" fill="#a855f7" opacity="0.4"/>
+    <g class="awake" style="color:#c084fc">
+      <rect x="12" y="46" width="336" height="34" rx="6" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+      <circle cx="28" cy="63" r="5" fill="#c084fc"/>
+      <text x="42" y="60" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#e9d5ff">opencode-ultra</text>
+      <text x="42" y="73" font-family="ui-monospace, monospace" font-size="9" fill="#a855f7">LEAD · architecture, review</text>
+      <rect x="292" y="54" width="46" height="18" rx="9" fill="#2e1065" stroke="#a855f7" stroke-width="1"/>
+      <text x="315" y="67" font-family="ui-monospace, monospace" font-size="8.5" fill="#e9d5ff" text-anchor="middle">LEAD</text>
+    </g>
+
+    <!-- awake, working: the ring is the "cannot sleep yet" state -->
+    <g class="awake" style="color:#34d399">
+      <rect x="12" y="86" width="336" height="34" rx="6" fill="#052e1f" stroke="#10b981" stroke-width="1.5"/>
+      <circle cx="28" cy="103" r="5" fill="#34d399"/>
+      <text x="42" y="100" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#a7f3d0">opencode-pickle</text>
+      <text x="42" y="113" font-family="ui-monospace, monospace" font-size="9" fill="#34d399">working A2 tdd-build</text>
+      <g class="busy-ring">
+        <circle cx="315" cy="103" r="9" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="5 4"/>
+      </g>
+      <rect x="286" y="94" width="58" height="18" rx="9" fill="#1c1408" stroke="#fbbf24" stroke-width="1"/>
+      <text x="315" y="107" font-family="ui-monospace, monospace" font-size="8.5" fill="#fde68a" text-anchor="middle">LOCKED</text>
+    </g>
+
+    <!-- awake, idle -->
+    <g class="awake" style="color:#38bdf8">
+      <rect x="12" y="126" width="336" height="32" rx="6" fill="#082f49" stroke="#0ea5e9" stroke-width="1.4"/>
+      <circle cx="28" cy="142" r="5" fill="#38bdf8"/>
+      <text x="42" y="140" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#bae6fd">opencode-mimo</text>
+      <text x="42" y="152" font-family="ui-monospace, monospace" font-size="9" fill="#38bdf8">ui specialist · idle</text>
+      <rect x="294" y="133" width="50" height="18" rx="9" fill="#082f49" stroke="#0ea5e9" stroke-width="1"/>
+      <text x="319" y="146" font-family="ui-monospace, monospace" font-size="8.5" fill="#bae6fd" text-anchor="middle">AWAKE</text>
+    </g>
+
+    <!-- asleep: still registered, still has its record -->
+    <g opacity="0.62">
+      <rect x="12" y="164" width="336" height="32" rx="6" fill="#111827" stroke="#374151" stroke-width="1.3" stroke-dasharray="4 3"/>
+      <circle cx="28" cy="180" r="4.5" fill="none" stroke="#6b7280" stroke-width="1.4"/>
+      <text x="42" y="178" font-family="ui-monospace, monospace" font-size="10.5" fill="#9ca3af">opencode-ling</text>
+      <text x="42" y="190" font-family="ui-monospace, monospace" font-size="9" fill="#6b7280">asleep · journal + stats kept</text>
+      <rect x="290" y="171" width="54" height="18" rx="9" fill="#111827" stroke="#4b5563" stroke-width="1"/>
+      <text x="317" y="184" font-family="ui-monospace, monospace" font-size="8.5" fill="#9ca3af" text-anchor="middle">ASLEEP</text>
+    </g>
+
+    <!-- not installed -->
+    <g opacity="0.45">
+      <rect x="12" y="202" width="336" height="30" rx="6" fill="#0b0f19" stroke="#1f2937" stroke-width="1.2"/>
+      <circle cx="28" cy="217" r="4" fill="#374151"/>
+      <text x="42" y="216" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">qwen-large</text>
+      <text x="42" y="227" font-family="ui-monospace, monospace" font-size="8.5" fill="#4b5563">not installed · opt-in</text>
+      <rect x="286" y="207" width="58" height="18" rx="9" fill="#0b0f19" stroke="#374151" stroke-width="1"/>
+      <text x="315" y="220" font-family="ui-monospace, monospace" font-size="8" fill="#6b7280" text-anchor="middle">ABSENT</text>
+    </g>
+  </g>
+
+  <!-- Wires from roster to the rule -->
+  <g stroke="#334155" stroke-width="1.6" fill="none" stroke-dasharray="4 3">
+    <path d="M 420 196 L 470 196"/>
+    <path d="M 420 300 L 500 330"/>
+  </g>
+  <circle class="sweep-1" r="4" fill="#38bdf8"/>
+  <circle class="sweep-2" r="4" fill="#a855f7"/>
+
+  <!-- RIGHT: INVARIANT S-1 -->
+  <g transform="translate(470, 120)">
+    <rect width="430" height="128" rx="10" fill="#150f04" stroke="#fbbf24" stroke-width="1.8"/>
+    <rect x="14" y="14" width="126" height="20" rx="10" fill="#451a03" stroke="#fde68a" stroke-width="1"/>
+    <text x="77" y="28" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#fde68a" text-anchor="middle">INVARIANT S-1</text>
+    <text x="20" y="60" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#fef3c7">
+      A working model cannot be put to sleep.
+    </text>
+    <text x="20" y="80" font-family="system-ui, sans-serif" font-size="11" fill="#fcd34d">
+      Enforced in the orchestrator, not the UI. No override, no queue.
+    </text>
+    <text x="20" y="98" font-family="ui-monospace, monospace" font-size="10" fill="#d97706">
+      A model mid-edit is writing real files. A half-written file</text>
+    <text x="20" y="113" font-family="ui-monospace, monospace" font-size="10" fill="#d97706">
+      is never worth the memory it would reclaim.
+    </text>
+  </g>
+
+  <!-- the refusal -->
+  <g transform="translate(470, 264)">
+    <rect width="430" height="84" rx="10" fill="#0b1220" stroke="#334155" stroke-width="1.4"/>
+    <rect x="0" y="0" width="430" height="84" rx="10" class="refuse" opacity="0.9"/>
+    <text x="20" y="28" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#fde68a">/sleep opencode-pickle</text>
+    <text x="20" y="48" font-family="ui-monospace, monospace" font-size="10.5" fill="#fbbf24">Not now. opencode-pickle is working on A2 tdd-build —</text>
+    <text x="20" y="64" font-family="ui-monospace, monospace" font-size="10.5" fill="#fbbf24">it can sleep once that finishes.</text>
+    <text x="284" y="28" font-family="ui-monospace, monospace" font-size="9.5" fill="#94a3b8">the button is disabled,</text>
+    <text x="284" y="42" font-family="ui-monospace, monospace" font-size="9.5" fill="#94a3b8">and the tooltip names</text>
+    <text x="284" y="56" font-family="ui-monospace, monospace" font-size="9.5" fill="#94a3b8">the blocking task</text>
+  </g>
+
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="11" fill="#64748b">
+    /team · /models · /model NAME · /sleep NAME · /wake NAME · /lead [NAME|recommend] · /ranks
+  </text>
+  <text x="60" y="404" font-family="ui-monospace, monospace" font-size="10.5" fill="#475569">
+    /model NAME is the anti-misuse card: best_at, avoid_for, domains, and that model's live audit record.
+  </text>
+  <text x="60" y="428" font-family="ui-monospace, monospace" font-size="10.5" fill="#475569">
+    Waking re-checks that the CLI is actually installed, so a model whose tool was removed cannot be
+  </text>
+  <text x="60" y="444" font-family="ui-monospace, monospace" font-size="10.5" fill="#475569">
+    woken into tasks that are certain to fail.
+  </text>
+</svg>
