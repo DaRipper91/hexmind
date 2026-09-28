@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import pytest
@@ -198,6 +199,75 @@ async def test_jules_run_session_failure(tmp_path, monkeypatch):
     with patch("hexmind.jules._request", side_effect=mock_request_str):
         with pytest.raises(RuntimeError, match="Jules session session-fail-2 failed: Direct string error from API"):
             await run("Prompt", cwd=str(repo_dir))
+
+
+@pytest.mark.parametrize("state", [
+    "AWAITING_USER_FEEDBACK",   # the value the live API actually sends
+    "AWAITING",                # the short form
+    "AWAITING_USER_INPUT",
+    "PAUSED",
+    "NEEDS_INPUT",
+])
+@pytest.mark.anyio
+async def test_every_awaiting_variant_is_recognised_and_stops(state, tmp_path, monkeypatch):
+    """The audit called the old `"AWAITING" in state` substring test fragile and it was, but the
+    first fix — an exact `== "AWAITING"` — was worse: it no longer matched the real API's
+    `AWAITING_USER_FEEDBACK`, so a session blocked on a human was polled silently to the timeout
+    and reported as a generic failure. This test is the reason that regression cannot come back:
+    every spelling the enum has plausibly used must terminate the poll immediately, not spin.
+    """
+    repo_dir = tmp_path / "mock_repo"
+    repo_dir.mkdir()
+    subprocess.run(["git", "-C", str(repo_dir), "init", "-b", "main"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "remote", "add", "origin", "https://github.com/DaRipper91/hexmind.git"],
+        check=True, capture_output=True,
+    )
+    monkeypatch.setenv("JULES_API_KEY", "test-key")
+
+    def mock_request(method, path, api_key, params=None, body=None, timeout=30):
+        if method == "POST" and path == "sessions":
+            return {"id": "s1"}, None
+        if method == "GET" and path == "sessions/s1":
+            return {"id": "s1", "state": state}, None
+        return {}, None
+
+    with patch("hexmind.jules._request", side_effect=mock_request):
+        with pytest.raises(RuntimeError, match="is waiting for your input"):
+            await asyncio.wait_for(run("Prompt", cwd=str(repo_dir)), timeout=20)
+
+
+@pytest.mark.anyio
+async def test_an_unrecognised_state_is_logged_but_still_polled(tmp_path, monkeypatch, caplog):
+    """An unknown state must not be mistaken for a blocked session (which would fail the turn) nor
+    silently swallowed (which is how a renamed enum turns into a 1800s timeout with no clue why).
+    It keeps polling and says so."""
+    repo_dir = tmp_path / "mock_repo"
+    repo_dir.mkdir()
+    subprocess.run(["git", "-C", str(repo_dir), "init", "-b", "main"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "remote", "add", "origin", "https://github.com/DaRipper91/hexmind.git"],
+        check=True, capture_output=True,
+    )
+    monkeypatch.setenv("JULES_API_KEY", "test-key")
+    calls = {"n": 0}
+
+    def mock_request(method, path, api_key, params=None, body=None, timeout=30):
+        if method == "POST" and path == "sessions":
+            return {"id": "s2"}, None
+        if method == "GET" and path == "sessions/s2":
+            calls["n"] += 1
+            # an unknown state, then COMPLETED, so the run ends promptly
+            return ({"id": "s2", "state": "SOME_NEW_STATE"} if calls["n"] < 2
+                    else {"id": "s2", "state": "COMPLETED"}), None
+        return {}, None
+
+    with caplog.at_level("WARNING", logger="hexmind.jules"):
+        with patch("hexmind.jules._request", side_effect=mock_request):
+            out = await asyncio.wait_for(run("Prompt", cwd=str(repo_dir)), timeout=30)
+
+    assert "SOME_NEW_STATE" in caplog.text, "an unknown state must be logged, not swallowed"
+    assert "completed" in out.lower()
 
 
 @pytest.mark.anyio

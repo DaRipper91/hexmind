@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import subprocess
@@ -18,7 +19,24 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 API_BASE = "https://jules.googleapis.com/v1alpha"
+
+# Session states, as exact case-normalised values. The audit flagged the previous
+# `"AWAITING" in state` substring test as fragile, and it was — but replacing it with a literal
+# `== "AWAITING"` was worse, because the real API sends `AWAITING_USER_FEEDBACK`, so the poll loop
+# no longer recognised a blocked session and spun to the timeout. A substring test cannot be
+# trusted to cover an enum; an exact set can, and it is checkable when the API changes.
+_TERMINAL_STATES = frozenset({"COMPLETED", "COMPLETE", "DONE", "SUCCEEDED", "SUCCESS"})
+_AWAITING_INPUT_STATES = frozenset({
+    "AWAITING", "AWAITING_INPUT", "AWAITING_USER_FEEDBACK", "AWAITING_USER_INPUT",
+    "PAUSED", "NEEDS_INPUT", "NEEDS_ACTION",
+})
+#: States we know mean "still working, keep polling".
+_IN_PROGRESS_STATES = frozenset({
+    "IN_PROGRESS", "INPROGRESS", "RUNNING", "QUEUED", "PENDING", "CREATED", "ACTIVE", "STARTING",
+})
 
 
 def parse_github_repo(url: str | None) -> str | None:
@@ -67,49 +85,48 @@ def get_starting_branch(cwd: str) -> str:
     try:
         proc = subprocess.run(
             ["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
+            capture_output=True, text=True, check=False,
         )
         if proc.returncode == 0:
             current = proc.stdout.strip()
             if current and current != "HEAD":
                 check_pushed = subprocess.run(
                     ["git", "-C", cwd, "ls-remote", "--heads", "origin", current],
-                    capture_output=True,
-                    text=True,
-                    check=False,
+                    capture_output=True, text=True, check=False,
                 )
-                if check_pushed.returncode == 0 and current in check_pushed.stdout:
+                # Exact branch-name match: ls-remote --heads lists one ref per line
+                pushed_heads = {
+                    line.split("/")[-1].strip()
+                    for line in check_pushed.stdout.splitlines()
+                    if line.strip()
+                }
+                if current in pushed_heads:
                     return current
 
                 check_local = subprocess.run(
                     ["git", "-C", cwd, "rev-parse", "--verify", f"origin/{current}"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
+                    capture_output=True, text=True, check=False,
                 )
                 if check_local.returncode == 0:
                     return current
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("get_starting_branch: rev-parse failed: %s", e)
 
     # 2. Fall back to origin default branch via ls-remote --symref origin HEAD
     try:
         proc = subprocess.run(
             ["git", "-C", cwd, "ls-remote", "--symref", "origin", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
+            capture_output=True, text=True, check=False,
         )
         if proc.returncode == 0:
             m = re.search(r"ref:\s*refs/heads/([^\s]+)\s+HEAD", proc.stdout)
             if m:
                 return m.group(1).strip()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("get_starting_branch: ls-remote --symref failed: %s", e)
 
     # 3. Last resort
+    logger.warning("get_starting_branch: could not detect branch; defaulting to 'main'")
     return "main"
 
 
@@ -183,7 +200,11 @@ def fetch_activities(api_key: str, session_id: str, page_size: int = 50) -> list
         if page_token:
             params["pageToken"] = page_token
         data, err = _request("GET", f"sessions/{session_id}/activities", api_key, params=params)
-        if err or not data:
+        if err:
+            logger.warning("fetch_activities: error fetching page: %s", err)
+            break
+        if not data:
+            logger.warning("fetch_activities: empty response, stopping pagination")
             break
         activities.extend(data.get("activities", []))
         page_token = data.get("nextPageToken")
@@ -262,7 +283,8 @@ def parse_activity(activity: dict[str, Any]) -> dict[str, Any]:
             "content": content,
         }
 
-    if "awaiting" in kind.lower():
+    _AWAITING_KINDS = {"userInputNeeded", "userPromptNeeded", "awaitingInput", "awaiting_prompt"}
+    if kind.lower() in _AWAITING_KINDS:
         return {
             "timestamp": created,
             "speaker": speaker,
@@ -338,9 +360,9 @@ async def run(prompt: str, cwd: str | None = None, timeout: int = 14400) -> str:
 
         consecutive_poll_errors = 0
         session_data = res or {}
-        state = session_data.get("state", "").upper()
+        state = str(session_data.get("state", "")).strip().upper()
 
-        if state == "COMPLETED":
+        if state in _TERMINAL_STATES:
             break
         elif state == "FAILED":
             err_obj = session_data.get("error")
@@ -351,10 +373,18 @@ async def run(prompt: str, cwd: str | None = None, timeout: int = 14400) -> str:
             else:
                 err_msg = "unknown failure"
             raise RuntimeError(f"Jules session {session_id} failed: {err_msg}")
-        elif "AWAITING" in state or "PAUSED" in state:
+        elif state in _AWAITING_INPUT_STATES:
+            # A session blocked on a human will never finish on its own, so say so immediately with
+            # the link, rather than polling to the timeout and reporting a generic failure.
             raise RuntimeError(
                 f"jules session {session_id} is waiting for your input: https://jules.google.com/session/{session_id}"
             )
+        elif state not in _IN_PROGRESS_STATES:
+            # An unrecognised state used to be polled silently to the timeout, which reads as
+            # "Jules is slow" when it actually means the API renamed a state and this build has
+            # never heard of it. Keep polling (a new state may still be in flight) but say so.
+            logger.warning("jules session %s: unrecognised state %r; still polling",
+                           session_id, session_data.get("state"))
 
         await asyncio.sleep(poll_interval)
         poll_interval = min(poll_interval * 1.5, 15.0)
