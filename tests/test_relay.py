@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import json
 import subprocess
@@ -7,7 +6,7 @@ from pathlib import Path
 from hexmind.core import Orchestrator
 import pytest
 
-from hexmind.relay import Chain, Stage, assign, read_agent_file, run_relay
+from hexmind.relay import Chain, Stage, assign, read_agent_file
 
 
 class RelayFake:
@@ -219,6 +218,22 @@ def test_an_empty_goal_is_rejected_rather_than_silently_dropped():
         _parse_relay(["f", "--assign", "pinned", "--goal"])
 
 
+def test_an_empty_goal_replies_like_the_other_bad_arguments(tmp_path):
+    """`_parse_relay` raises a plain ValueError and `command` only caught argparse's, so typing
+    `/relay fix-review --goal` took the TUI's message handler down with a traceback instead of
+    printing the line the user just typed. Every other bad argument already answers."""
+    said = []
+    orch = Orchestrator(RelayFake(str(tmp_path)), ["claude"], "claude",
+                        emit=lambda k, d: said.append(d.get("text", "")) if k == "message" else None)
+
+    reply = run(orch, "/relay fix-review --assign pinned --goal")
+
+    assert reply.startswith("Bad /relay arguments")
+    assert "--goal needs some text after it" in reply
+    assert "Commands" in reply  # the help, as for any other bad /relay arguments
+    assert said == [reply]  # it is reported in the room, not raised into the message loop
+
+
 def test_no_goal_is_still_none():
     from hexmind.relay import _parse_relay
 
@@ -226,6 +241,15 @@ def test_no_goal_is_still_none():
 
 
 # ---------- worktree isolation: told where to work, and checked afterwards ----------
+
+def _repo(root: Path) -> Path:
+    """A git repo with a commit, so the isolation check has something to compare against."""
+    (root / "hexmind").mkdir(parents=True)
+    (root / "hexmind" / "x.py").write_text("x = 1\n")
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"]):
+        subprocess.run(["git", "-C", str(root), *cmd], check=True, capture_output=True)
+    return root
+
 
 def test_dirty_paths_reports_worktree_changes_but_not_ignored_run_files(tmp_path):
     """The isolation check is only usable if `.hexmind/` is invisible: the notes files and the
@@ -249,48 +273,158 @@ def test_dirty_paths_reports_worktree_changes_but_not_ignored_run_files(tmp_path
     assert dirty_paths(str(root)) == {"hexmind/x.py"}, "a real edit must be reported"
 
 
-def test_dirty_paths_is_empty_outside_a_git_repo(tmp_path):
-    """`--cwd` can be any folder, and a non-git folder has no isolation to check. Returning empty
-    rather than raising keeps the check from breaking a shared-workspace relay."""
+def test_dirty_paths_says_it_could_not_tell_instead_of_reporting_clean(tmp_path):
+    """An empty set means "clean". A folder that is not a git repo, a git error and a timeout all
+    used to produce one, so a check that could not answer was indistinguishable from a check that
+    passed — and a broken git made every relay report a clean run. The caller needs the difference."""
     from hexmind.relay import dirty_paths
 
-    assert dirty_paths(str(tmp_path)) == set()
+    assert dirty_paths(str(tmp_path)) is None
 
 
-def test_a_stage_that_writes_to_the_main_folder_is_reported_as_a_breach(tmp_path, monkeypatch):
+def test_a_git_that_times_out_is_not_a_clean_folder(tmp_path, monkeypatch):
+    import hexmind.relay as relay
+
+    def never_returns(*a, **k):
+        raise subprocess.TimeoutExpired("git status", 20)
+
+    monkeypatch.setattr(relay.subprocess, "run", never_returns)
+
+    assert relay.dirty_paths(str(tmp_path)) is None
+
+
+def test_a_non_ascii_path_comes_back_as_written(tmp_path):
+    """git quotes a path that isn't plain ASCII — `naïve.py` arrives as `"na\\303\\257ve.py"` —
+    so `line[3:]` reported the leak under a path that does not exist, quotes and octal escapes
+    included. `-z` prints paths NUL-separated and unmunged, which is what makes the check point at
+    a file a person can open."""
+    from hexmind.relay import dirty_paths
+
+    root = _repo(tmp_path / "repo")
+    (root / "naïve.py").write_text("x = 2\n")
+
+    assert dirty_paths(str(root)) == {"naïve.py"}
+
+
+def test_a_renamed_path_is_reported_as_its_destination(tmp_path):
+    """`-z` puts a rename's two paths in separate NUL fields, destination first, so the source has
+    to be skipped: a file that was moved away is not a leak. The old `" -> "` split was a guess at
+    the same pair, and it also split any filename that happened to contain an arrow."""
+    from hexmind.relay import dirty_paths
+
+    root = _repo(tmp_path / "repo")
+    (root / "old name.py").write_text("y = 1\n")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "y"],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(root), "mv", "old name.py", "new name.py"], check=True, capture_output=True)
+
+    assert dirty_paths(str(root)) == {"new name.py"}
+
+
+# ---------- the check itself: one comparison per stage, attributed to that stage ----------
+
+class LeakyStage(RelayFake):
+    """A chain whose middle stage ignores its worktree and edits the main checkout.
+
+    `timeline` records every stage as it starts and every message hexmind sends, so a test can tell
+    *when* the breach was reported and not just that it was.
+    """
+
+    def __init__(self, root: Path, leak_in: str | None, timeline: list):
+        super().__init__(str(root))
+        self.root, self.leak_in, self.timeline = root, leak_in, timeline
+
+    async def run(self, agent, prompt, cwd=None):
+        if "Your task (" in prompt:
+            tid = prompt.split("Your task (")[1].split(":")[0].strip()
+            self.timeline.append(("run", tid))
+            if tid == self.leak_in:  # the breach, made while this stage is the one running
+                (self.root / "hexmind" / "x.py").write_text("x = 99\n")
+        return await super().run(agent, prompt, cwd)
+
+
+def _relay_in(root: Path, timeline: list, leak_in: str | None = "A2", workspace: str = "worktree") -> str:
+    """Run the 3-stage chain RelayFake's lead designs, in real worktrees, and collect the messages.
+
+    Real `git worktree add` rather than a stubbed folder, so the check sees the layout it would in
+    life: the worktree under `.hexmind/`, invisible to the main folder's status, and the notes file
+    beside it.
+    """
+    orch = Orchestrator(LeakyStage(root, leak_in, timeline), ["claude", "agy"], "claude",
+                        emit=lambda k, d: timeline.append(("say", d.get("text", ""))) if k == "message" else None)
+    return run(orch, f"/relay fix the parser --workspace {workspace} --end list")
+
+
+def test_a_stage_that_writes_to_the_main_folder_is_reported_as_a_breach(tmp_path):
     """The prompt tells a stage which directory is its own, but a prompt is a soft control. This is
     the hard one: the chain must notice and say so, instead of reporting a clean run over changes
     that landed in the wrong place. It happened once, silently."""
-    import subprocess as sp
-    root = tmp_path / "repo"
-    (root / "hexmind").mkdir(parents=True)
-    (root / "hexmind" / "x.py").write_text("x = 1\n")
-    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"]):
-        sp.run(["git", "-C", str(root), *cmd], capture_output=True, check=True)
-    chain = tmp_path / "c.toml"
-    chain.write_text('name = "c"\ndescription = "d"\n[[stages]]\nname = "s"\n'
-                     'instructions = "do it"\nagent = "claude"\n')
+    root = _repo(tmp_path / "repo")
+    timeline: list = []
+    final = _relay_in(root, timeline)
+    said = "\n".join(text for kind, text in timeline if kind == "say")
 
-    said = []
-    backend = RelayFake(str(root))
-    orch = Orchestrator(backend, ["claude"], "claude",
-                        emit=lambda k, d: said.append(d.get("text", "")) if k == "message" else None)
-    orch.backend.cwd = str(root)
-    monkeypatch.setattr("hexmind.relay.load_chain", lambda p: Chain("c", "d", [Stage("s", "do it", "claude")]))
-    monkeypatch.setattr("hexmind.relay.make_workspaces",
-                        lambda r, run, n, mode: ([str(root / "fake-wt")], [str(root / "n.md")]))
+    assert "wrote outside its own worktree" in said
+    assert "hexmind/x.py" in said
+    assert "isolation breach" in final  # the summary cannot present the run as clean either
 
-    async def leak(*a, **k):
-        # a stage that ignores its worktree and edits the main checkout
-        (root / "hexmind" / "x.py").write_text("x = 99\n")
-        return ""
 
-    monkeypatch.setattr(orch, "run_tasks", leak)
+def test_a_breach_names_the_stage_that_caused_it_and_lands_before_the_next_stage_runs(tmp_path):
+    """The comparison used to run once, after the whole chain, so the only thing the report could
+    name was the last stage — which is exactly the stage that did nothing wrong. And a breach the
+    user hears about three stages later is a breach they have already reacted to."""
+    root = _repo(tmp_path / "repo")
+    timeline: list = []
+    _relay_in(root, timeline, leak_in="A2")
 
-    ns = argparse.Namespace(target=["c"], chains=1, assign="pinned", workspace="worktree",
-                            end="list", goal=None)
-    asyncio.run(run_relay(orch, ns))
+    escalated = [i for i, (kind, text) in enumerate(timeline) if kind == "say" and "outside its own worktree" in text]
+    assert len(escalated) == 1, timeline
+    at = escalated[0]
+    third_stage = next(i for i, (kind, what) in enumerate(timeline) if (kind, what) == ("run", "A3"))
+    assert at < third_stage, "the breach was only reported after the chain had finished"
+    assert "A2" in timeline[at][1], timeline[at][1]  # blamed on the stage that made it, not on A3
 
-    joined = "\n".join(said)
-    assert "wrote outside its own worktree" in joined
-    assert "hexmind/x.py" in joined
+
+def test_a_run_where_git_could_not_tell_reports_the_check_as_unavailable(tmp_path, monkeypatch):
+    """The check that cannot answer must not read as the check that passed. `None` from git used to
+    be an empty set, so a broken or slow git made every worktree relay claim it had verified
+    isolation when it had verified nothing."""
+    root = _repo(tmp_path / "repo")
+    monkeypatch.setattr("hexmind.relay.dirty_paths", lambda r: None)
+    timeline: list = []
+    final = _relay_in(root, timeline, leak_in=None)
+    said = "\n".join(text for kind, text in timeline if kind == "say")
+
+    assert "isolation check unavailable" in said
+    assert "isolation check unavailable" in final  # the status block too, so the summary cannot hide it
+    assert "isolation breach" not in final  # unverifiable is not a breach, and not a clean run either
+
+
+def test_a_check_that_could_not_tell_never_reports_a_breach_it_invented(tmp_path, monkeypatch):
+    """A folder can be dirty for reasons that have nothing to do with the run. If the baseline is
+    missing, the first answer git does give is a baseline, not a diff — reporting it as fresh would
+    blame the chain for the user's own uncommitted work."""
+    from hexmind.relay import dirty_paths
+
+    root = _repo(tmp_path / "repo")
+    (root / "hexmind" / "x.py").write_text("x = 7\n")  # dirty before the relay starts
+    calls = []
+    monkeypatch.setattr("hexmind.relay.dirty_paths",
+                        lambda r: calls.append(r) or (None if len(calls) == 1 else dirty_paths(r)))
+    timeline: list = []
+    final = _relay_in(root, timeline, leak_in=None)
+
+    assert "isolation breach" not in final
+    assert "isolation check unavailable" in final
+
+
+def test_a_shared_workspace_run_is_not_reported_as_a_breach(tmp_path):
+    """In shared mode the main folder is where the work is supposed to land, so the check stays off
+    and a shared run must not claim it verified anything."""
+    root = _repo(tmp_path / "repo")
+    timeline: list = []
+    _relay_in(root, timeline, leak_in="A2", workspace="shared")
+    said = "\n".join(text for kind, text in timeline if kind == "say")
+
+    assert "isolation" not in said.lower()

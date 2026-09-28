@@ -222,27 +222,81 @@ Final stage report of each chain:
 Be concise; point to files rather than repeating them."""
 
 
-def dirty_paths(root: str) -> set[str]:
+def dirty_paths(root: str) -> set[str] | None:
     """Tracked-or-untracked paths that differ from HEAD in `root`, as git reports them.
 
     `.hexmind/` carries its own `.gitignore` of `*`, so the notes files and the per-chain worktrees
     are invisible here — which is exactly what makes this usable as an isolation check: anything
     that shows up was written outside the chain's own folder.
+
+    `None` means "could not tell": a folder that is not a git repo, a git error, or a timeout. An
+    empty set means clean, and the two must never look alike — this returning an empty set on any
+    failure made a check that could not answer report the same thing as a check that passed.
+
+    `-z` is not optional here. The default porcelain quoting turns a file called `naïve.py` into
+    `"na\\303\\257ve.py"`, so the leak was reported under a path that does not exist, and a rename
+    came back as one line holding two quoted paths. `-z` prints them NUL-separated and unmunged.
     """
     try:
-        out = subprocess.run(["git", "-C", root, "status", "--porcelain"],
-                             capture_output=True, text=True, timeout=20)
+        out = subprocess.run(["git", "-C", root, "status", "--porcelain", "-z"],
+                             capture_output=True, text=True, encoding="utf-8",
+                             errors="surrogateescape", timeout=20)
     except (OSError, subprocess.SubprocessError):
-        return set()
-    if out.returncode != 0:  # not a git repo: no isolation to check
-        return set()
-    paths = set()
-    for line in out.stdout.splitlines():
-        if len(line) < 4:
+        return None
+    if out.returncode != 0:  # not a git repo, or git could not read the tree
+        return None
+    paths, skip = set(), False
+    for field in out.stdout.split("\0"):
+        if skip:  # a rename/copy's source path, in a field of its own; the destination is the one taken
+            skip = False
             continue
-        # "XY path", and "XY old -> new" for a rename; the new path is the one that matters
-        paths.add(line[3:].strip().split(" -> ")[-1])
+        if len(field) < 4:  # "XY path", and the empty field after the final NUL
+            continue
+        status = field[:2]
+        skip = "R" in status or "C" in status  # -z puts the source path in the next field
+        paths.add(field[3:])
     return paths
+
+
+class Isolation:
+    """Watch the main folder's git state across a run, one stage at a time.
+
+    Telling a stage which directory is its own is a soft control, so the state is compared rather
+    than trusted. One comparison for the whole chain was no good: a breach is then only reported
+    once the last stage is done, and the only stage the report could name is the one that did
+    nothing wrong. So the comparison runs at every stage boundary, and whatever appeared is
+    escalated while the stage it appeared under is still the one the room is waiting on.
+
+    A snapshot git cannot produce is remembered as unknown. `unavailable` means the run could not
+    compare the folder's whole state, which is not the same claim as "isolation held".
+    """
+
+    def __init__(self, root: str, say):
+        self.root, self.say = root, say
+        self.seen: set[str] | None = dirty_paths(root)  # the baseline, or None if git could not say
+        self.unavailable = self.seen is None
+        self.breaches: list[tuple[Task, list[str]]] = []  # (the stage, the paths it was caught by)
+
+    def stage_finished(self, t: Task) -> None:
+        now = dirty_paths(self.root)
+        if now is None:
+            self.unavailable = True
+            return
+        # With no baseline the first answer git does give is a baseline, not a diff: the folder may
+        # have been dirty before the relay started, and that is not this stage's doing.
+        fresh = sorted(now - self.seen) if self.seen is not None else []
+        self.seen = now
+        if not fresh:
+            return
+        self.breaches.append((t, fresh))
+        listing = "\n".join(f"- `{p}`" for p in fresh)
+        self.say(f"**ESCALATION: relay stage {t.id} ({t.title}, by {t.agent}) wrote outside its own "
+                 f"worktree.**\n\n`--workspace worktree` was supposed to keep this run's changes "
+                 f"inside its worktree, but these paths changed in the main folder `{self.root}` "
+                 f"while {t.id} was the stage running:\n{listing}\n\nThe stage prompt names each "
+                 f"stage's directory, and this check reports it either way — but an agent that "
+                 f"ignored both still put its work somewhere the chain did not intend. Inspect "
+                 f"before committing anything.")
 
 
 # ---------- /commands ----------
@@ -487,7 +541,9 @@ async def command(orch, text: str) -> str:
         args = [f"-n{a[1:]}" if a.lower().startswith("x") and a[1:].isdigit() else a for a in args]
         try:
             ns = _parse_relay(args)
-        except (argparse.ArgumentError, SystemExit) as e:
+        except (argparse.ArgumentError, SystemExit, ValueError) as e:
+            # ValueError too: an empty --goal is a ValueError, and it used to escape as a crash
+            # instead of being reported like every other bad argument on this line.
             reply = f"Bad /relay arguments: {e}\n\n{HELP}"
         else:
             try:
@@ -557,24 +613,26 @@ async def run_relay(orch, ns) -> str:
     # Isolation is checked, not trusted. The task prompt names each stage's own directory, but a
     # prompt is a soft control: an agent that follows a path out of the shared notes file writes to
     # the main checkout and the chain still reports success. So the main folder's dirty state is
-    # compared across the run, and anything that appeared is reported as a leak.
+    # compared at every stage boundary — comparing it once at the end reported a breach only after
+    # the last stage, attributed to whichever stage happened to be last.
     # Only check when workspace="worktree"; shared mode legitimately writes to the main folder.
-    before = dirty_paths(root) if workspace == "worktree" else set()
-    await orch.run_tasks(goal, tasks)
-    leaked = sorted((dirty_paths(root) if workspace == "worktree" else set()) - before)
-    if leaked:
-        listing = "\n".join(f"- `{p}`" for p in leaked)
-        say(f"**ESCALATION: a relay stage wrote outside its own worktree.**\n\n"
-            f"`--workspace {workspace}` was supposed to keep this run's changes inside its "
-            f"worktree, but these paths changed in the main folder `{root}`:\n{listing}\n\n"
-            f"The stage prompt now names each stage's directory, and this check reports it either "
-            f"way — but an agent that ignored both still put its work somewhere the chain did not "
-            f"intend. Inspect before committing anything.")
+    check = Isolation(root, say) if workspace == "worktree" else None
+    await orch.run_tasks(goal, tasks, on_finish=check.stage_finished if check else None)
+    if check and check.unavailable:
+        say(f"**Isolation check unavailable.** `git status` could not report the state of the main "
+            f"folder `{root}` at least once during this run, so it cannot claim isolation held — "
+            f"treat that as unchecked, not clean. (A folder that is not a git repo, a git error and "
+            f"a timeout all look like this.)")
+    breaches = check.breaches if check else []
+    leaked = sorted({p for _, paths in breaches for p in paths})
     per_chain = [tasks[k * len(chain.stages):(k + 1) * len(chain.stages)] for k in range(n)]
     status = "\n".join(f"- chain {LABELS[k]}: " + ", ".join(f"{t.id} {t.status}" for t in ts)
                        for k, ts in enumerate(per_chain))
     if leaked:  # in the status block too, so the final summary cannot present the run as clean
-        status += f"\n- **isolation breach:** {len(leaked)} path(s) written outside the worktree"
+        blamed = ", ".join(t.id for t, _ in breaches)
+        status += f"\n- **isolation breach:** {len(leaked)} path(s) written outside the worktree, by {blamed}"
+    if check and check.unavailable:
+        status += f"\n- **isolation check unavailable:** git could not read `{root}`; isolation unverified"
     if ns.end == "list":
         final = f"**Relay finished.**\n{status}\n\nFull reports: `{Path(notes[0]).parent}`"
         say(final)
