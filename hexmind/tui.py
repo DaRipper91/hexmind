@@ -385,7 +385,7 @@ class HexmindApp(App):
 
     def __init__(self, backend, members: list[str], lead: str, backend_name: str, audit: bool = False, stats=None):
         super().__init__()
-        self.members, self.lead = members, lead
+        self.members = members
         self.backend_name, self.audit = backend_name, audit
         self.sub_title = f"{backend_name} backend · lead: {lead} · audit: {'on' if audit else 'off'}"
         self.orch = Orchestrator(backend, members, lead, emit=self.on_team_event, audit=audit, stats=stats)
@@ -396,6 +396,13 @@ class HexmindApp(App):
         self.view = "chat"  # which pane shows in narrow (tabbed) mode
         self.table_width = 0  # terminal width the narrow task table's fixed columns were sized for
         self.history: list = []  # chat renderables, replayed to re-wrap when a narrow terminal changes width
+
+    @property
+    def lead(self) -> str:
+        """The leader, always. A separate self.lead went stale the first time /lead ran: the
+        subtitle, the (lead) marker and the busy line all read it while set_lead() changed
+        orch.lead, so the room kept showing the old leader. A property cannot diverge."""
+        return self.orch.lead
 
     def compose(self) -> ComposeResult:
         yield Header()

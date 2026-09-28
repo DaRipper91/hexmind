@@ -420,3 +420,25 @@ def test_the_roster_fits_a_tiny_terminal_by_scrolling():
 def test_the_team_key_is_reachable_and_listed():
     assert any(getattr(b, "key", "") == "t" and b.action == "team" for b in HexmindApp.BINDINGS)
     assert "team" in HELP and "[b]t[/b]" in HELP
+
+
+def test_changing_the_lead_updates_everything_that_names_the_leader():
+    """app.lead used to be a separate copy of orch.lead and went stale on the first /lead, so the
+    subtitle, the (lead) marker and the busy line kept showing the old leader while the room
+    obeyed the new one."""
+    async def go():
+        app = HexmindApp(FakeBackend(json.dumps({"reply": "ok", "tasks": []})),
+                         ["claude", "agy"], "claude", "test")
+        async with app.run_test(size=(100, 28)) as pilot:
+            assert app.lead == "claude"
+            await pilot.click("#input")
+            await pilot.press(*"/lead agy", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause(0.5)
+            assert app.orch.lead == "agy"
+            assert app.lead == "agy", "app.lead must follow orch.lead, not a stale copy"
+            assert "lead: agy" in app.sub_title
+            app.refresh_team()
+            team = str(app.query_one("#team", Static).render())
+            assert "agy" in team and "(lead)" in team
+    asyncio.run(go())

@@ -40,6 +40,7 @@ a track record that decides who gets trusted with what.
 
 - [🚀 Quickstart](#-quickstart)
 - [💬 The room](#-the-room)
+- [🏗 Architecture](#-architecture)
 - [🔀 How a request flows](#-how-a-request-flows)
 - [🔁 Relay chains](#-relay-chains)
 - [🔍 Peer audit](#-peer-audit)
@@ -132,6 +133,61 @@ If you send a request while the team is busy, it queues and starts when the curr
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
+<p align="center">
+  <img src="docs/assets/demo-room.gif" alt="Demo: a request becomes a plan, tasks run in parallel, the lead summarizes" width="90%">
+  <br><em>Captured from the real Textual room running a scripted harness — no API calls, no staging.</em>
+</p>
+
+<p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
+
+## 🏗 Architecture
+
+```mermaid
+flowchart TB
+    subgraph ENTRY["entry — __main__.py"]
+        FLAGS["--lead · --backend direct|hcom · --cwd · --audit · --once · --serve · --timeout"]
+    end
+    subgraph REG["roster — models.toml + models.py"]
+        TOML["models.toml<br/>best_at · avoid_for · domains · weight"]
+        GEN["Registry.roster()<br/>generated prose, never hand-edited"]
+        DETECT["available() · detect()<br/>opencode models + ollama tags"]
+        TOML --> GEN
+        TOML --> DETECT
+    end
+    subgraph ORCH["orchestrator — core.py"]
+        HANDLE["handle()"]
+        PARSE["parse_plan()<br/>agents · deps · cycles"]
+        GRAPH["run_tasks()<br/>dependency graph, fan-out"]
+        S1["INVARIANT S-1<br/>busy set from task state"]
+        HANDLE --> PARSE --> GRAPH
+        GRAPH -.-> S1
+    end
+    subgraph EXEC["execution — backends.py"]
+        DIRECT["DirectBackend<br/>one CLI process per turn, stdin prompt"]
+        HCOM["HcomBackend<br/>persistent agents, one thread per request"]
+        OLLAMA["Ollama locals<br/>text-only, one slot"]
+    end
+    AUD["auditor.py<br/>audited_run() · 2-round revise · Stats"]
+    RELAY["relay.py<br/>chains · worktrees · /commands · isolation check"]
+    REAP["reaping.py<br/>/relay clean"]
+    TUI["tui.py<br/>Textual room · TeamScreen"]
+    SRV["server.py<br/>REST + WebSocket"]
+
+    FLAGS --> HANDLE
+    GEN --> HANDLE
+    DETECT --> HANDLE
+    HANDLE --> DIRECT
+    HANDLE --> HCOM
+    HANDLE --> OLLAMA
+    GRAPH --> AUD
+    HANDLE --> RELAY
+    RELAY --> REAP
+    HANDLE --> TUI
+    HANDLE --> SRV
+```
+
+The registry is the only source of truth. Everything the lead reads, every argv the backends run, every colour the TUI shows and the hcom exclusion are all generated from `models.toml` — so a model cannot be described one way in the room and another way in the docs.
+
 ## 🔀 How a request flows
 
 <p align="center"><img src="docs/assets/flow.svg" alt="Request flow: lead plans, tasks run as a graph, peer audit, lead summarizes" width="90%"></p>
@@ -148,6 +204,22 @@ If you send a request while the team is busy, it queues and starts when the curr
 4. **Audit** (if on). See [Peer audit](#-peer-audit).
 5. **Summarize.** The lead reads every result and writes you one answer covering what was
    done, what failed, and what needs your decision.
+
+```mermaid
+flowchart LR
+    U["you type a request"] --> L["lead plans<br/>LEAD_PROMPT + roster + stats"]
+    L --> V{"parse_plan() valid?"}
+    V -- "no: prose" --> ANS["prose is the answer"]
+    V -- "yes" --> P["plan event<br/>task board fills"]
+    P --> G["run_tasks()<br/>deps met → run in parallel"]
+    G --> R["each task:<br/>_run_one()"]
+    R --> A{"audit on?"}
+    A -- "no" --> OUT["output recorded"]
+    A -- "yes" --> AU["audited_run()<br/>runner-up checks real files"]
+    AU --> OUT
+    OUT --> S["lead synthesizes<br/>SYNTH_PROMPT + statuses"]
+    S --> DONE["one answer"]
+```
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -218,6 +290,28 @@ for what is *wrong*, one for what is *missing*).
 If the name isn't a saved chain, the whole text becomes a goal and the lead designs a
 3–7 stage chain for it.
 
+```mermaid
+flowchart TB
+    SRC["chain file · or lead designs 3-7 stages"]
+    ASN["assign(): rotate | best | pinned"]
+    WS["make_workspaces()<br/>one git worktree + branch per chain<br/>notes in .hexmind/runs/"]
+    RUN["run_tasks() — stages chained by depends_on"]
+    NOTE["record_note()<br/>success AND failure both recorded"]
+    ISO["isolation check<br/>main-folder diff before vs after"]
+    END{"--end"}
+    MERGE["merge: one combined result"]
+    CMP["compare: side by side"]
+    LIST["list: status only"]
+    CLN["/relay clean<br/>reap finished runs, refuse dirty ones"]
+
+    SRC --> ASN --> WS --> RUN --> NOTE --> ISO --> END
+    END --> MERGE
+    END --> CMP
+    END --> LIST
+    MERGE --> CLN
+    CMP --> CLN
+```
+
 <details>
 <summary><b>All <code>/relay</code> options</b></summary>
 
@@ -256,15 +350,31 @@ the one that did it:
      logic, migrations and security) fail instead, so the tasks that depend on them are
      skipped rather than built on disputed work.
 
+<p align="center"><img src="docs/assets/audit.svg" alt="Peer audit: runner-up checks real files, bounded revise loop, gate or escalation" width="90%"></p>
+
 ```mermaid
-flowchart LR
-    P[primary does task] --> A{runner-up audits<br/>real files}
-    A -- PASS --> OK([pass / fixed])
-    A -- FAIL --> R{rounds left?}
-    R -- yes --> V["primary revises<br/>with auditor's issues"] --> A
-    R -- no --> G{gate?}
-    G -- yes --> F([task fails<br/>dependents skipped])
-    G -- no --> E([ESCALATION<br/>to you])
+sequenceDiagram
+    participant P as primary
+    participant A as runner-up auditor
+    participant S as Stats
+    P->>P: do the task
+    P->>A: report + real files
+    A->>A: inspect the worktree
+    alt VERDICT: PASS (round 0)
+        A->>S: record pass
+        A->>P: pass
+    else VERDICT: FAIL
+        A->>S: record fail (first verdict only)
+        A->>P: issues list
+        P->>P: revise with the issues
+        A->>A: check again (max 2 rounds)
+        alt passes now
+            A->>P: fixed
+        else still failing
+            A->>P: disputed
+        end
+    end
+    Note over P,A: gate=true + unresolved → task fails, dependents skipped.<br/>otherwise → ESCALATION with both sides.
 ```
 
 A reply with no verdict line counts as a `FAIL`. With a single member there's no one to
@@ -402,6 +512,22 @@ until you run `/lead NAME`.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
+```mermaid
+flowchart LR
+    T["models.toml<br/>curated profiles"] --> R["Registry.load()<br/>bundled, then ~/.config override"]
+    U["~/.config/hexmind/models.toml<br/>your overrides"] --> R
+    R --> AV["available()<br/>preference-ordered"]
+    AV --> M["members: the awake roster"]
+    M --> OP["/sleep · /wake · /lead<br/>INVARIANT S-1 enforced here"]
+    OP --> RP["roster prose into LEAD_PROMPT"]
+    SC["/scan — planned<br/>opencode models + ollama tags"] -.-> D["discovered members<br/>no profile, marked as such"]
+```
+
+<p align="center">
+  <img src="docs/assets/demo-team.gif" alt="Demo: /team, /sleep, /lead and /model in the live room" width="90%">
+  <br><em>Same harness: every frame is the app itself, driven like a user would drive it.</em>
+</p>
+
 ## 📡 Headless server
 
 `hexmind --serve --lead claude` runs the same room with no TUI, for a phone or a web client.
@@ -473,6 +599,30 @@ Every backend has the same interface: `await backend.run(agent, prompt, cwd) -> 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
 ## 🧭 Roadmap
+
+<p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
+
+```mermaid
+timeline
+    title Hexmind build path
+    section Shipped
+        Registry + 8 free models : generated roster, argv, colours from models.toml
+        Live team : sleep, wake, TeamScreen, S-1 enforced in code
+        Leader control : /lead, /lead recommend, no default leader
+        Pipelines : opencode-team, fix-review, audit chains
+        Isolation : workspace map in prompts, breach detection
+        Headless : --serve REST + WebSocket, --timeout, --once reports reasons
+    section Next
+        Startup picker : the one gap to a usable interactive session
+        Sessions : per-model memory keyed (model, directory)
+        Live output : visible work instead of 30 silent minutes
+        Assembly : leader recommends, you edit, /go plans
+        Journals : per-model record that survives sleeping
+        Local models : the six Ollama engines, per-model think flag
+```
+
+Shipped is proven by the suite; next is ordered by dependency. The full map lives in
+[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md), which names the one gap standing between this code and a usable interactive session. What follows is the short version.
 
 **Shipped**
 
