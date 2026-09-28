@@ -154,6 +154,11 @@ def allowed_origins(host: str, port: int) -> List[str]:
     return origins
 
 
+def ws_auth_disabled() -> bool:
+    """Opt-out kill switch for WS origin/token checks (on by default)."""
+    return os.environ.get("HEXMIND_WS_AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def authorize_ws(
     websocket: WebSocket,
     expected_token: str,
@@ -249,7 +254,7 @@ class HexmindServer:
             loop = asyncio.get_running_loop()
             loop.create_task(self._emit_async(kind, data))
         except RuntimeError:
-            pass
+            logger.warning("_emit_sync called with no running event loop; %s event dropped", kind)
 
     async def _emit_async(self, kind: str, data: dict) -> None:
         timestamp = time.time()
@@ -345,13 +350,15 @@ class HexmindServer:
         if not self.orch.pending:
             raise HTTPException(status_code=400, detail="No pending plan to approve")
         req, tasks = self.orch.pending
+        # Forward directives (chains, skills) to execute(), mirroring relay.py:714-727
+        directives, self.orch.pending_directives = self.orch.pending_directives, None
         self.orch.pending = None
         await self.manager.broadcast({"kind": "pending_cleared"})
-        
+
         self.is_busy = True
         await self.manager.broadcast({"kind": "busy_state", "is_busy": True})
         try:
-            return await self.orch.execute(req, tasks)
+            return await self.orch.execute(req, tasks, directives)
         finally:
             self.is_busy = False
             await self.manager.broadcast({"kind": "busy_state", "is_busy": False})
@@ -359,6 +366,8 @@ class HexmindServer:
     def discard_pending(self) -> bool:
         if not self.orch.pending:
             return False
+        # Clear pending_directives too, mirroring relay.py:718
+        self.orch.pending_directives = None
         self.orch.pending = None
         self.orch.emit("message", {"from": "hexmind", "text": "Plan discarded."})
         return True
@@ -466,6 +475,9 @@ def create_app(server: HexmindServer, token: str | None = None) -> FastAPI:
             server._token or "",
             allowed_origins(server._host or "127.0.0.1", server._port or 8765),
         )
+        if rejection and ws_auth_disabled():
+            logger.warning("HEXMIND_WS_AUTH_DISABLED set: accepting WS despite (%s)", rejection[1])
+            rejection = None
         if rejection:
             code, reason = rejection
             logger.warning("WS rejected (%s) origin=%r", reason, websocket.headers.get("origin", ""))
@@ -493,10 +505,18 @@ def create_app(server: HexmindServer, token: str | None = None) -> FastAPI:
                         else:
                             audit_val = data.get("audit")
                             approve_val = data.get("approve_plans")
-                            asyncio.create_task(server.handle_prompt(text, audit_val, approve_val))
+                            task = asyncio.create_task(server.handle_prompt(text, audit_val, approve_val))
+                            task.add_done_callback(
+                                lambda t: websocket.send_json({"kind": "error", "message": f"Task failed: {t.exception()}"})
+                                if t.exception() else None
+                            )
                 elif action == "approve":
                     if server.orch.pending and not server.is_busy:
-                        asyncio.create_task(server.approve_pending())
+                        task = asyncio.create_task(server.approve_pending())
+                        task.add_done_callback(
+                            lambda t: websocket.send_json({"kind": "error", "message": f"Approval failed: {t.exception()}"})
+                            if t.exception() else None
+                        )
                     else:
                         await websocket.send_json({"kind": "error", "message": "Cannot approve: no pending plan or busy"})
                 elif action == "discard":
