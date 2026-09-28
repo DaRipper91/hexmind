@@ -283,6 +283,8 @@ Also fixed a duplicated phrase found on the way through: "The full map lives in
 ### Build / Test Status
 
 - Build: ✅ `python3 -m hexmind --help` works; a wheel builds and contains `hexmind/qt/`
-- Lint: ⚠️ 139 — 138 pre-existing, plus 1 (`BLE001` in the widget's turn handler, the identical
-  pattern `tui.py` and `core.py` already use for "a turn error is a line, not a crash")
-- Tests: ✅ 363 passed — in `/usr/bin/python3` and in the project's own `.venv` with `.[qt,server,dev]`
+- Lint: ⚠️ 137 findings, all pre-existing; no new finding has landed in several turns. This sat at 138
+  for most of this work and drifted as files came and went — the number above is measured, not a
+  carried-forward figure, which is the failure mode this project's own build path warns about
+- Tests: ✅ 364 passed — in `/usr/bin/python3` and in the project's own `.venv` with
+  `.[qt,server,dev]`. Stated in the README badge too, rather than left to rot there
