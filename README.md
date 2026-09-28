@@ -49,6 +49,7 @@ a track record that decides who gets trusted with what.
 - [🧰 Commands](#-commands)
 - [🧠 The team, and who is awake](#-the-team-and-who-is-awake)
 - [📡 Headless server](#-headless-server)
+- [🪟 Qt front-end](#-qt-front-end)
 - [📜 Chain files](#-chain-files)
 - [🔌 Backends](#-backends)
 - [🧭 Roadmap](#-roadmap)
@@ -550,7 +551,9 @@ flowchart LR
 
 ## 📡 Headless server
 
-`hexmind --serve --lead claude` runs the same room with no TUI, for a phone or a web client.
+`hexmind --serve --lead claude` runs the same room with no TUI, for a phone or a web client. It needs
+the `server` extra — `pip install -e ".[server]"` — and says so if it is missing rather than failing
+with a `ModuleNotFoundError`.
 
 | endpoint | what it does |
 |---|---|
@@ -568,6 +571,29 @@ flowchart LR
 > agents behind it run with edits auto-accepted. Anyone who can reach the port can drive agents
 > that write files. Keep it on a trusted network, or put it behind a proxy that authenticates.
 > Closing this is tracked in [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md).
+
+<p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
+
+## 🪟 Qt front-end
+
+The same room as a widget, for embedding in any Qt app. PySide6 is opt-in (`pip install -e ".[qt]"`,
+~240 MB) and nothing above changes without it.
+
+```python
+from hexmind.qt import HexmindWidget
+
+room = HexmindWidget()                 # or HexmindWidget(parent) when embedding
+room.openFileRequested.connect(editor.open)   # optional: a path double-clicked in a task title
+stack.addWidget(room)
+```
+
+One brain, not a second implementation: a turn goes through the same orchestrator the TUI drives, so
+sleep, lead, the busy set and the audit behave identically whichever front-end asked. A turn runs on
+a worker thread with its own event loop, because a model can think for thirty minutes and the GUI
+must not. The lead combo is the picker — with no lead chosen, sending says so and sends nothing.
+
+It embeds into [Aether](docs/AETHER-INTERFACE.md) (one-way: Hexmind never imports Aether), and runs
+standalone too.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -678,12 +704,9 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
       `(model, directory)` — opencode sessions are directory-bound and *hang* rather than error
 - [ ] **Live output.** A model should be visibly working instead of silent for up to 30 minutes
 - [ ] **Per-model journals** and the leader's over-provisioning advisor
-- [ ] **Chains and skills from a plan:** `ASSEMBLY_SCHEMA`, so a lead can ask for a relay chain
 - [ ] **The local Ollama models** from the model report, with a per-model `think` flag
 - [ ] **Preference weighting** so the free opencode models are actually favoured
 - [ ] **hcom split-terminal mode:** watch each model work in its own pane
-- [ ] **`hexmind.qt.HexmindWidget`**: an embeddable Qt room, hosted by the rebuilt Aether
-      (Hexmind never imports Aether)
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 

@@ -20,18 +20,33 @@ for the roadmap.
 | `auditor.py` | domains, verdict parsing, the bounded revise loop, `Stats` rankings |
 | `backends.py` | `DirectBackend`, `HcomBackend`, Ollama local models, process-group cleanup |
 | `tui.py` | the Textual room: responsive layout, task board, modals |
-| `server.py` | headless FastAPI + WebSocket daemon (`--serve`) |
+| `server.py` | headless FastAPI + WebSocket daemon (`--serve`, needs the `server` extra) |
 | `jules.py` | the Google Jules cloud member (works on the GitHub copy, not your tree) |
+| `reaping.py` | classifying a relay run's worktree as safe / dirty / unmerged / active, for `/relay clean` |
+| `qt/widget.py` | the same room as a `QWidget` (`hexmind.qt.HexmindWidget`, needs the `qt` extra). One brain with the TUI — a turn goes through the same `Orchestrator` |
 
 ## Commands
 
 ```sh
-python3 -m pytest tests -q          # full suite, ~40-85s. Run this, not just the file you touched.
+python3 -m pytest tests -q          # full suite, ~2 min. Run this, not just the file you touched.
 python3 -m pytest tests/test_x.py -q # one file
 ```
 
-There is no committed lint config despite a `.ruff_cache` existing. Match surrounding style;
-do not add a formatter config without being asked.
+A fresh `.venv` cannot run the suite until the extras are installed — `test_server.py` needs
+`fastapi`/`httpx2` and `test_qt.py` needs PySide6:
+
+```sh
+uv pip install --python .venv/bin/python -e ".[qt,server,dev]"
+QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m pytest tests -q
+```
+
+**363 tests pass.** The 14 Qt tests `importorskip` when PySide6 is absent, so the suite is green
+either way — but that also means a green run can mean "the widget was never exercised".
+
+There is no committed lint config despite a `.ruff_cache` existing, and ~139 findings are
+pre-existing and tolerated. Match surrounding style; do not add a formatter config without being
+asked. What matters is the **delta**: `python3 -m ruff check .` before and after, and land no new
+findings.
 
 ## Invariants — breaking these breaks the product
 
@@ -53,8 +68,23 @@ wedges a model awake forever or interrupts a live edit. `BUSY_STATUSES` is the s
 `auditing`/`revising` there, never inline.
 
 **`members` is the awake roster; `known` is every model.** `members` is mutated in place because
-the TUI and the server share that list object. A sleeping model must stay in `known` or it loses
-its registry entry, its stats and its journal.
+the TUI, the server and the Qt widget share that list object. A sleeping model must stay in `known`
+or it loses its registry entry, its stats and its journal. `/remove` is the one verb that drops a
+model from `known` — so anything that puts a model back into `members` (notably `set_lead`) must
+restore `known` too, or the room is led by a model `/team` cannot see.
+
+**A registry change at runtime must go through `models.publish()`.** `REGISTRY`, `ROSTER`,
+`TEXT_ONLY`, `OPT_IN`, `DIRECT_CMDS`, `LOCAL_MODELS` and `AGENT_COLOR` are all computed **once, at
+import**, and four modules hold them by name (`from .core import ROSTER`). `models.publish()`
+reloads and mutates every one **in place**, which is the only thing that works: rebinding a global
+would leave the importers holding the old value. A member that is in the registry but missing from
+those snapshots is *worse* than one that is absent — it appears in `/models`, has no line in the
+lead's roster, and raises `KeyError: DIRECT_CMDS[name]` the first time a task routes to it. This is
+what `/profile` uses.
+
+**There is one roster.** `/add` `/remove` `/sleep` `/wake` edit `orchestrator.members` directly. The
+team-assembly flow keeps only a snapshot to diff against — never a second copy of the team to drift
+from the live one.
 
 ## opencode traps
 

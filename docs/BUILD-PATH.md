@@ -1,12 +1,16 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `b18412f` plus this turn's work
-(**pushed**), **363 tests passing** (14 of them Qt, skipped without the `qt` extra). Every row below was re-checked against the
-code, not carried forward on trust — which is how the previous version came to claim `/add` and
-`/remove` work when neither command exists.
+Where every planned operation actually stands. Re-derived 2026-09-28 against `main` at `ddaf390`
+(**pushed**), **363 tests passing** (14 of them Qt, skipped without the `qt` extra; a fresh `.venv`
+needs `.[qt,server,dev]` before the whole suite can run).
 
-Derived from the commit history and the code, not from intention. Where a workstream is partly
-built, it says which half.
+Derived from the commit history and the code, not from intention, and **re-checked rather than
+carried forward** — which is how the previous version came to claim `/add` and `/remove` worked when
+neither command existed. Where a workstream is partly built, it says which half.
+
+The design documents are [`OPENCODE-TEAM-PLAN.md`](OPENCODE-TEAM-PLAN.md) (the original R1–R11
+requirements) and [`TEAM-ASSEMBLY.md`](TEAM-ASSEMBLY.md) (the pre-flight flow). This file is the
+state; those are the reason.
 
 Legend: **DONE** shipped · **PART** part built, gap named · **TODO** not started · **BLOCKED** cannot
 proceed until something else lands.
@@ -19,7 +23,7 @@ proceed until something else lands.
 | :--- | :--- | :--- | :--- |
 | P0 | WS-1 registry | **DONE** | `models.toml` + `models.py`; `ROSTER` generated; D2/D4/D6 closed |
 | P0 | verify stdin | **DONE** | stdin confirmed, no arg ceiling |
-| P1 | WS-2 team management | **DONE** | `/sleep` `/wake` `/add` `/remove` all work; the two `available()` functions are the only thing left |
+| P1 | WS-2 team management | **PART** | all four verbs work; only the duplicate `backends.available()` / `Registry.available()` is left |
 | P1 | WS-7 descriptions | **PART** | `/models` `/model NAME` cards exist; no browsable modal |
 | P1 | WS-10 `/team` surface | **DONE** | `TeamScreen` built by the `opencode-team` chain, INVARIANT S-1 in the UI |
 | P2 | WS-3 leader control | **DONE** | `set_lead` + `/lead` + `/lead recommend` + the startup `LeadPicker` modal all land |
@@ -29,12 +33,14 @@ proceed until something else lands.
 | P6 | WS-8 plan audit | **PART** | the `audit` chain shipped; the **traceability matrix and `/audit-plan` did not** |
 | P7 | WS-9 roster advisor | **TODO** | `/lead recommend` is adjacent but is not the over-provisioning advisor |
 | P8 | WS-11 journals | **TODO** | nothing built |
-| P10 | Qt front-end (`hexmind.qt`) | **DONE** | `HexmindWidget`; one brain with the TUI, worker-threaded; unblocks Aether's last roadmap item |
 | P9 | WS-12 `/relay clean` | **DONE** | `reaping.py`; pushed, and used for real: it reaped the merged chain's worktree and kept the stage reports |
+| P10 | Qt front-end (`hexmind.qt`) | **DONE** | `HexmindWidget`; one brain with the TUI, worker-threaded; unblocks Aether's last roadmap item. Aether still has to flip its own extra — see Risks |
 
-Team Assembly steps 1–7 in `TEAM-ASSEMBLY.md`: **steps 1 and 3 DONE** (no default lead, mount-safe
-emits, and the startup `LeadPicker` modal). Step 2 — the `Assembly` flow itself — is the next thing
-to build and is blocked by nothing. Steps 4–7 **TODO**.
+Team Assembly steps 1–7 in `TEAM-ASSEMBLY.md`: **steps 1–5 DONE** — no default lead, mount-safe
+emits, the startup `LeadPicker`, the `Assembly` flow (`/recommend` → edit the room → `/go` →
+`/cancel`), and `/scan` `/found` `/profile` as the catalogue the roster is edited from. **Step 6**
+(the `hexmind-lead` skill) is **TODO** and is the next thing; step 7 (`/relay clean`, which the plan
+listed as part of this flow) shipped separately as WS-12.
 
 ---
 
@@ -73,14 +79,29 @@ to build and is blocked by nothing. Steps 4–7 **TODO**.
 | `app.lead` cannot go stale (one source of truth) | `tui.py` | `877ded4` |
 | README visual system: 6 Mermaid diagrams, animated audit, 2 real demo GIFs, style board | `README.md` `docs/` | `877ded4` |
 | **startup `LeadPicker`** — a room with no lead blocks until one is chosen | `tui.py` | `7c71fd2` |
+| `--serve` honours `--timeout` (it was accepted and ignored) | `server.py` `__main__.py` | `ddb2085` |
+| `/add` and `/remove` — the roster changes at runtime | `core.py` `relay.py` | `ddb2085` |
+| **team assembly** — `/recommend` → edit the live room → `/go`, `/cancel` | `core.py` `relay.py` | `ddb2085` |
+| `/scan` catalogues what is installed; `/found` browses it | `models.py` `relay.py` | `8d9ffe9` |
+| `/profile` promotes one find to a member, `best_at` required | `models.py` `relay.py` | `8d9ffe9` |
+| **Qt front-end** — `hexmind.qt.HexmindWidget`, embeddable, worker-threaded | `hexmind/qt/` | `f60566c` |
+| the documented smoke line works standalone (app + thread teardown) | `hexmind/qt/widget.py` | `4d7aae6` |
+| **`server` extra** — a clean install no longer has a broken `--serve` | `pyproject.toml` | `b18412f` |
+| **`dev` extra** — a fresh `.venv` can finally run the whole suite | `pyproject.toml` | `b18412f` |
+| `ASSEMBLY_SCHEMA` — chains become real `/relay` runs; `use` injects a skill, `create`/`edit` are proposed and never written | `core.py` `relay.py` | `ddaf390` |
+| chain provenance recorded in the chain notes | `relay.py` | `ddaf390` |
+| tests can no longer write the real `~/.config` (session-wide redirect) | `tests/conftest.py` | `f60566c` |
+| the `Registry.available` instance-shadow trap is closed | `tests/conftest.py` | `f60566c` |
 
 ---
 
 ## IN PROGRESS
 
-**Nothing.** The `fix-review` chain that was in flight is merged (`79a57ce`, merged `9bb93f9`) and
-its worktree has been reaped. All six dispatched defects are closed; the two honest findings the
-chain left behind are recorded under Risks below rather than left in a queue.
+**Nothing.** The `fix-review` chain is merged (`79a57ce` → `9bb93f9`) and its worktree reaped. No
+chain is running and no workstream is mid-edit.
+
+Three sessions' worth of work landed since the last re-derivation: the assembly flow and
+`ASSEMBLY_SCHEMA`, the scan/profile catalogue, and the Qt front-end. All of it is in DONE below.
 
 ## PART — the named gap in each
 
@@ -134,19 +155,24 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 | 3a | ~~`/add` `/remove` — change the roster at runtime~~ | — | **done**: `Orchestrator.add`/`remove`; a model with no registry entry is refused and pointed at `/scan` `/profile` |
 | 4 | ~~`/scan` + discovered-vs-curated + `/profile`~~ | — | **done**: a scan writes a catalogue and no registry entry; `/profile` promotes one find, `best_at` required |
 | 5 | ~~`ASSEMBLY_SCHEMA` with chains + skills~~ | — | **done**: chains become real `/relay` runs with a provenance line; `use` injects a skill path, `create`/`edit` are proposed and never written; findings are reported |
-| 6 | `hexmind-lead` skill (`opencode-muse` authors, `opencode-ultra` reviews) | 3 | last on purpose: describe a lead that exists |
+| 6 | `hexmind-lead` skill (`opencode-muse` authors, `opencode-ultra` reviews) | nothing | **next.** A document, not code: the lead exists now, so describing the role is no longer premature |
 | 7 | reconcile the two `available()` functions | — | `/scan` and `/profile` both read `Registry.available()`; make the registry's the real one and delete the duplicate |
-| 8 | WS-9 roster advisor | 3, WS-8 | needs a coverage check to be safe |
-| 9 | WS-11 journals | P1 | makes sleeping safe *and* records the work |
+| 8 | WS-9 roster advisor | WS-8 | needs the coverage check (TODO 8b) to be safe |
+| 9 | WS-11 journals | P1 (done) | unblocked; makes sleeping safe *and* records the work |
 | 10 | WS-4 sessions — the big one | nothing | 3–4 h of concurrency and event parsing; the cwd hazard needs its guard on day one |
-| 11 | WS-6 remainder: 6 local models, `think`, normalisation | nothing | independent |
-| 12 | WS-5 remainder: weight in `fallback()` and rotation | 4 | independent |
+| 11 | WS-6 remainder: 6 local models, `think`, normalisation | nothing | independent. `/scan` now surfaces the 21 Ollama tags the registry never described, so this has visible input |
+| 12 | WS-5 remainder: weight in `fallback()` and rotation | nothing | independent; `/profile` sets a weight below the curated floor, so the field has a new producer |
+| 8b | WS-8 remainder: the traceability matrix and `/audit-plan` | P1, P2 (done) | unblocked, and it is the gate on TODO 8 |
+| 13 | Aether: flip `room = ["hexmind"]` → `["hexmind[qt]"]` | **not ours** | Aether's own two lines. The widget ships; this is the last step to remove its placeholder |
 
-**3a, 3, 4 and the `--serve --timeout` bug are all closed.** The lead proposes a roster, the user
-edits the live one with `/add` `/remove` `/sleep` `/wake`, and `/go` makes the leader plan against
-the room the user actually settled on — told what it dropped and what that costs. What is left of
-this area is closed: `/recommend` → edit the room → `/go`, and `ASSEMBLY_SCHEMA` for chains and
-skills. What is left of it is the `hexmind-lead` skill (design §5), which is a document, not code.
+**The pre-flight area is closed.** The lead proposes a roster, you edit the live one with
+`/add` `/remove` `/sleep` `/wake`, and `/go` makes the leader plan against the room you actually
+settled on — told what it dropped and what that costs. `/scan` and `/profile` are how a model this
+session has never heard of becomes one, deliberately. `ASSEMBLY_SCHEMA` lets the lead ask for a
+chain (run for real) or a skill (injected), while `create`/`edit` come back to you as proposals.
+
+What is left of it is one document: the **`hexmind-lead` skill** (design §5), which describes a lead
+that now exists.
 
 ---
 
@@ -159,5 +185,9 @@ skills. What is left of it is the `hexmind-lead` skill (design §5), which is a 
 | `--serve --timeout N` was silently ignored | **fixed.** `run_server` and `HexmindServer` take the timeout and hand it to the backend; the test covers argv → main → run_server → backend with only uvicorn stopped |
 | `/add` and `/remove` did not exist | **fixed.** Both built, so the roster changes at runtime and `/scan` has something to add to |
 | shared-mode relays get **zero** isolation verification | unresolved trade-off; the current gate is a blunt disable |
+| a test wrote the developer's real `~/.config/hexmind/models.toml` and broke a test in another file | **fixed structurally.** Every writable user path is redirected at a temp dir for the whole session. Both this and the next row now have tests that fail with the fix removed |
+| `monkeypatch.setattr(REGISTRY, "available", …)` leaves an instance shadow that silently defeats later class-level patches | **fixed.** An autouse fixture clears it around every test; `available_models` is the supported way to pin availability |
+| **two sessions editing this repo at once** | happened once: another session rewrote `AGENT_REPORT.md` and added `docs/AETHER-INTERFACE.md` mid-turn. Its file was committed, its report edits left alone, and the report section appended rather than merged. Worth reconciling before the next commit that touches it |
+| Aether's placeholder is still up until Aether installs the extra | open, and **not ours to fix** — `Aether/pyproject.toml:16` still says `room = ["hexmind"]` |
 | `Stats` is one or two samples deep | `opencode-ultra` is 0/2 on architecture. The rankings are a prior, not evidence yet |
 | audit chain ignored "read-only" and edited `main` | prompt-level control is worthless; only the after-the-fact check caught it |

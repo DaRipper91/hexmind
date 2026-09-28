@@ -99,9 +99,10 @@ lowest curated entry (so `by_weight` cannot prefer a find over a hand-chosen mem
 ## 3. The flow
 
 ```
-launch ──> pick the leader            (mandatory, interactive; no default)
+launch ──> pick the leader              (mandatory, interactive; no default)
+       ──> /scan, if you want models this session has not heard of   (optional)
        ──> you type a request
-       ──> leader RECOMMENDS a roster  (nothing runs)
+       ──> leader RECOMMENDS a roster    (nothing runs)
        ──> you edit it: /add /remove /sleep /wake /model
        ──> you send it back: /go
        ──> leader REVIEWS your roster against its recommendation
@@ -135,13 +136,17 @@ because this touches eleven files; the plan below is narrower as a result."
 
 | command | effect |
 | :--- | :--- |
-| `/lead` / `/lead NAME` | pick or show the leader (unchanged, plus the startup prompt) |
-| `/scan` | full enumeration, adds discovered members, reports what appeared |
-| `/profile NAME k=v …` | promote a discovered model to curated in the user config |
-| `/recommend` | (re)ask the leader who it wants, for the current request |
+| `/lead` / `/lead NAME` | pick or show the leader (unchanged, plus the startup picker) |
+| `/scan` | full enumeration into a **catalogue** — reports what appeared, adds no member (§2) |
+| `/found [PROVIDER\|TEXT]` | browse that catalogue; narrow 100+ finds to the ones you meant |
+| `/profile NAME best_at="…" …` | promote one find to a member. `best_at` is **required** |
+| `/recommend [REQUEST]` | (re)ask the leader who it wants, for this request |
 | `/team` | the roster: awake, asleep, busy, and each model's card (WS-10) |
-| `/go` | hand the roster to the leader; it reviews and then plans |
+| `/go` | hand the roster to the leader; it reviews the disagreement and then plans |
 | `/cancel` | abandon the assembly; the next request starts fresh |
+
+`/add`, `/remove`, `/sleep`, `/wake` and `/model` edit the **live roster** and have no second copy to
+drift: the assembly keeps only a snapshot, to diff against.
 
 `/add`, `/remove`, `/sleep`, `/wake` and `/model` already exist and now also edit the
 proposal's live roster, so there is no second copy of the team to drift.
@@ -336,15 +341,18 @@ same to swap.
 
 | step | depends on | delivers |
 | :--- | :--- | :--- |
-| 1 | — | mount-safe `set_lead`; drop the default lead; `--lead` required for `--once` |
+| 1 | — | mount-safe `set_lead`; drop the default lead; `--lead` required for `--once` — **done** |
 | 2 | 1 | `Assembly` + `/go`, `/cancel`, `/recommend`, recommend/review calls — **done** |
 | 3 | 1 | `set_lead` never crashes; startup picker modal — **done** |
-| 4 | — | `/scan` + discovered/curated split + `/profile` |
-| 5 | 2 | `ASSEMBLY_SCHEMA` with `chains` and `skills`; chain + skill directives |
-| 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `opencode-muse`, reviewed by `opencode-ultra` |
-| 7 | — | `/relay clean` (WS-12), so the chains this flow requests do not accumulate worktrees forever |
+| 4 | — | `/scan` catalogue + `/found` + `/profile` promotion — **done** (as a catalogue, not a roster — see §2) |
+| 5 | 2 | `ASSEMBLY_SCHEMA` with `chains` and `skills`; chain + skill directives — **done** |
+| 6 | — | `.claude/skills/hexmind-lead/SKILL.md`, authored by `opencode-muse`, reviewed by `opencode-ultra` — **next** |
+| 7 | — | `/relay clean` (WS-12), so the chains this flow requests do not accumulate worktrees forever — **done, separately** |
 
-Steps 2, 4 and 6 are independent of each other. Step 3 must not land before step 1.
+**Steps 1–5 and 7 are done. Step 6 — the `hexmind-lead` skill — is the only thing left**, and it is
+a document rather than code: the lead exists now, so describing the role is no longer premature.
+
+Steps 2, 4 and 6 were independent of each other. Step 3 had to wait for step 1.
 
 **Steps 2 and 3 are built** (the `--serve --timeout` fix and `/add` `/remove` came with them).
 Step 4 (`/scan`, `/profile`) is the next piece and is what makes `/add` useful for a model
@@ -357,8 +365,8 @@ recommended-minus-room; `added` is room-minus-*that snapshot*, not room-minus-re
 otherwise every member that was already awake would be reported to the lead as something the user
 chose, which is noise on the one call that has to be read carefully.
 
-`ASSEMBLY_SCHEMA` (chains + skills, §4) is not built. `/go` uses `PLAN_SCHEMA` unchanged: the
-lead reviews the roster and plans, and a lead that wants a chain says so in its reply.
+`ASSEMBLY_SCHEMA` (chains + skills) is **built** — see §4. `/go` and the ordinary plan path both use
+it, so a lead can ask for a relay chain or a skill on either route, not only through the assembly.
 
 Step 6 is deliberately last: the skill should describe a lead that exists, not one that is
 planned.

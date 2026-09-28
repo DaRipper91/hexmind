@@ -1,9 +1,23 @@
 # Hexmind — Opencode Team Plan
 
-Planning document. Written 2026-09-27 against commit `0897b1c` + the
-`docs/model-updates.md` rename.
+**This is the requirements and design document. It is not the status map.**
 
-**Baseline:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
+It was written 2026-09-27 against commit `0897b1c` (baseline `107 passed, 1 skipped`) and its
+R1–R11 requirements are still the reason any of this exists. For *what is actually built*, read
+[`BUILD-PATH.md`](BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
+state. Where the two disagree, this file describes intent and BUILD-PATH describes reality.
+
+**Baseline when written:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
+**Now:** `363 passed` on `main` at `ddaf390`, Python 3.14.
+
+Two places below are known to be superseded, and are marked as such where they appear:
+
+- **There is no default lead.** WS-3's original "P4 · default lead `opencode-ultra`" is wrong and
+  was reversed; the interactive room has no default at all, and `--lead` is required for the
+  headless surfaces that have nobody to ask.
+- **`/scan` does not add members.** WS-2 planned discovery to *join* the roster. It writes a
+  catalogue instead, and `/profile` is the deliberate act that promotes one — see
+  [`TEAM-ASSEMBLY.md`](TEAM-ASSEMBLY.md) §2 for the measurement that changed this.
 
 ## Goal
 
@@ -727,10 +741,10 @@ nothing runs.
 | Phase | Workstream | Delivers | Depends on |
 | :--- | :--- | :--- | :--- |
 | **P0** | ~~verify stdin~~ ✅ · WS-1 | registry; D2, D4, D6 fixed | — |
-| **P1** | WS-7 + WS-2 + WS-10 | `/team` control surface, `/models`, `/model`, sleep/wake, `/add`, `/remove`, `/pull` (R2, R7, R9) | P0 |
-| **P2** | WS-3 | `/lead`, live leader switch, `/lead recommend` (R3, R4) | P0 |
+| **P1** | WS-7 + WS-2 + WS-10 | `/team` control surface, `/models`, `/model`, sleep/wake, `/add`, `/remove`, `/pull` (R2, R7, R9) — **shipped** except `/pull` | P0 |
+| **P2** | WS-3 | `/lead`, live leader switch, `/lead recommend`, startup picker (R3, R4) — **shipped** | P0 |
 | **P3** | WS-4 | sessions keyed `(model, dir)`, live output, hcom fix (R1) | P0 |
-| **P4** | WS-5 | preference weighting, default lead `opencode-ultra` (R5) | P1, P2 |
+| **P4** | WS-5 | preference weighting (R5). ~~default lead `opencode-ultra`~~ — **reversed**: a default lead is the bug WS-3 §1 describes, not a feature | P1, P2 |
 | **P5** | WS-6 | local models, `think` flag (R6) | P0 |
 | **P6** | WS-8 | plan-audit chain, `/audit-plan`, phase-gate matrix (R8) | P1, P2 |
 | **P7** | WS-9 | leader's over-provisioning advisor (R9) | P3, P6 |
