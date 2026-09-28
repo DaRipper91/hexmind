@@ -223,10 +223,48 @@ Verified end to end: `uv pip install -e ".[qt,server,dev]"` then **340 passed in
 `.venv`**, and the built wheel's metadata shows base install is still only `textual>=0.80` with
 `qt` / `server` / `dev` correctly gated behind their extras.
 
+### ASSEMBLY_SCHEMA — built (design §4)
+
+`PLAN_SCHEMA` grew two optional fields, `chains` and `skills`. `reply` and `tasks` are the *same*
+schema object, so a lead that ignores them produces the plan it always did and nothing else in the
+project has to change. Both plan-producing calls use it: the ordinary `handle()` path and the `/go`
+review.
+
+- **`chains` → real `/relay` runs.** One `run_relay` call per goal, reusing the existing machinery.
+  `run_relay` gained a `provenance` argument written into each chain's notes header, so a
+  lead-requested chain is an ordinary chain that records who asked — `/ranks`, the audit and
+  `/relay clean` need to know nothing. Chains run after the task list and their outcomes go into
+  the lead's synthesis, which is the one thing the user is guaranteed to read. `n` is clamped to
+  1–5; unlimited copies of a chain is a fork-bomb of somebody's machine.
+- **`skills` → `use`** injects the skill's path into the task prompt, after checking it is installed
+  (project before `~/.claude/`). A `use` for a skill nobody has is a *finding*, not a dead path in a
+  prompt the model cannot read.
+- **`skills` → `create`/`edit`** are proposed and **never executed**. A model writing into your skill
+  directory is a privileged action, and a plan that quietly performs one is a plan you would not have
+  approved.
+- **`Directives.findings`** is the point of the parser. A malformed chain, an unknown `assign`, a
+  `task` that is not in the plan, an unusable skill — all reported in the room in the same turn.
+- **Drafts own their directives**: stashed with the plan, previewed before you decide, run by
+  `/approve`, dropped (and counted) by `/discard`. Approving a task list while silently dropping the
+  chain shown next to it would run a different plan than the one on screen.
+
+One deliberate deviation from the design's sketch: **`skill.task` exists.** The prose says a `use`
+injects a path "into the named task's prompt", which needs a task to name; without the field the
+only unambiguous reading is every task in the plan.
+
+Four mutations were confirmed to fail a specific test: `/approve` dropping the directives, a missing
+skill getting a dead path, `create`/`edit` writing to disk, and provenance never reaching the notes.
+An earlier mutation attempt used `git checkout` as a "restore" and silently reverted a day of relay
+work instead of restoring it — the tests caught it immediately, which is the argument for having
+them.
+
+One lint finding added (`BLE001` in `run_chains`): a chain that cannot run becomes a finding rather
+than a dead turn, which is the same deliberate pattern `tui.py` and `relay.py` already use.
+Narrowing it to a known exception list would reintroduce the dead turn for anything unanticipated.
+
 ### Build / Test Status
 
 - Build: ✅ `python3 -m hexmind --help` works; a wheel builds and contains `hexmind/qt/`
 - Lint: ⚠️ 139 — 138 pre-existing, plus 1 (`BLE001` in the widget's turn handler, the identical
   pattern `tui.py` and `core.py` already use for "a turn error is a line, not a crash")
-- Tests: ✅ 340 passed — in the project's own `.venv` with `.[qt,server,dev]`, which is the first
-  time a fresh venv has been able to run the whole suite at all
+- Tests: ✅ 363 passed — in `/usr/bin/python3` and in the project's own `.venv` with `.[qt,server,dev]`

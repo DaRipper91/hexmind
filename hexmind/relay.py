@@ -712,11 +712,19 @@ async def command(orch, text: str) -> str:
             reply = "No draft plan is waiting."
         else:
             request, tasks = orch.pending
+            # the chains and skills belong to the draft, not to the room: approving the task list
+            # while silently dropping the chain the lead asked for would run a different plan than
+            # the one that was shown.
+            directives, orch.pending_directives = orch.pending_directives, None
             orch.pending = None
             if cmd == "/discard":
-                reply = f"Discarded the draft plan ({len(tasks)} tasks). Nothing ran."
+                extra = ""
+                if directives and (directives.chains or directives.skills):
+                    extra = (f" and {len(directives.chains)} chain(s), "
+                             f"{len(directives.skills)} skill request(s)")
+                reply = f"Discarded the draft plan ({len(tasks)} tasks{extra}). Nothing ran."
             else:
-                return await orch.execute(request, tasks)  # execute posts its own messages
+                return await orch.execute(request, tasks, directives)  # execute posts its own messages
     elif cmd == "/audit":
         if args and args[0] in ("on", "off"):
             orch.audit = args[0] == "on"
@@ -837,7 +845,7 @@ def _active_runs(root: str) -> set[str]:
 
 def _relay_clean(orch, args: list[str]) -> str:
     """`/relay clean` lists; `/relay clean --force` removes what is safe and refuses the rest."""
-    from .reaping import ACTIVE, DIRTY, MISSING, SAFE, UNMERGED, classify, remove_one
+    from .reaping import ACTIVE, DIRTY, SAFE, UNMERGED, classify, remove_one
 
     force = "--force" in args
     with_notes = "--all" in args
@@ -896,7 +904,11 @@ def _relay_clean(orch, args: list[str]) -> str:
     return reply
 
 
-async def run_relay(orch, ns) -> str:
+async def run_relay(orch, ns, provenance: str = "") -> str:
+    """`provenance` is written into each chain's notes header when this run was requested by the
+    lead rather than typed by the user. The run is otherwise an ordinary chain, so `/ranks`, the
+    audit and `/relay clean` treat it like any other — but the notes say who asked for it, which is
+    the only record that survives the run."""
     say = lambda text: orch.emit("message", {"from": "hexmind", "text": text})
     root = orch.backend.cwd
     chains = list_chains()
@@ -940,6 +952,12 @@ async def run_relay(orch, ns) -> str:
     workspace = ns.workspace or ("worktree" if n > 1 and (Path(root) / ".git").exists() else "shared")
     run = time.strftime("%Y%m%d-%H%M%S")
     cwds, notes = make_workspaces(root, run, n, workspace)
+    if provenance:
+        # Path.write_text, like make_workspaces a few lines above, rather than open() in an async
+        # function: the file is local, tiny, and the alternative is a lint suppression.
+        for path in notes:
+            existing = Path(path).read_text()
+            Path(path).write_text(f"{existing}\n{provenance}\n")
     tasks = build_tasks(chain, grid, goal, cwds, notes)
     # /relay clean must not reap a run that is still going. The marker records this pid so a
     # run that was killed goes stale on its own: a `finally` would not survive SIGKILL, and

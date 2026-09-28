@@ -180,44 +180,60 @@ should not plan against a roster it did not get.
 
 ---
 
-## 4. The plan contract grows
+## 4. The plan contract grows — **built**
 
-`PLAN_SCHEMA` currently returns `reply` + `tasks`. The lead now needs three more outputs, per
-§3's second call:
+`PLAN_SCHEMA` returned `reply` + `tasks`. `ASSEMBLY_SCHEMA` adds `chains` and `skills`; `reply` and
+`tasks` are the *same* schema object, so a lead that ignores the new fields produces the plan it
+always did, and every existing prompt, model and test keeps working.
 
 ```python
 ASSEMBLY_SCHEMA = {
     "type": "object",
     "properties": {
         "reply": {"type": "string"},
-        "tasks":  {"type": "array", "items": TASK},          # unchanged shape
+        "tasks":  PLAN_SCHEMA["properties"]["tasks"],   # unchanged, the same object
         "chains": {"type": "array", "items": {
-            "goal": {"type": "string"},
-            "n": {"type": "integer"},
-            "assign": {"enum": ["rotate", "best", "pinned"]},
-            "why": {"type": "string"}}},
+            "goal": {"type": "string"}, "n": {"type": "integer"},
+            "assign": {"enum": ["rotate", "best", "pinned"]}, "why": {"type": "string"}}},
         "skills": {"type": "array", "items": {
-            "action": {"enum": ["use", "create", "edit"]},
-            "name": {"type": "string"},
-            "why": {"type": "string"}}},
+            "action": {"enum": ["use", "create", "edit"]}, "name": {"type": "string"},
+            "task": {"type": "string"}, "why": {"type": "string"}}},
     },
     "required": ["reply", "tasks"],
 }
 ```
 
-- **`chains`** become `/relay` invocations, reusing the existing machinery — `run_relay` already
-  takes a namespace. A lead-requested chain is a normal chain with a recorded provenance line
-  ("requested by {lead} for {request}"), so `/ranks` and the audit treat it like any other.
-- **`skills`** become directives, not silent behaviour. `use` injects a skill's path into the
-  named task's prompt. `create` and `edit` are **not** executed silently: they are proposed to
-  the user with the file path and the diff intent, because a model writing skills into your
-  skill directory is a privileged action. That request is where `opencode-muse` earns its
-  registry entry — skill and agent authoring is its documented specialty.
+**One deviation from the sketch above:** `skill.task`. The prose says a `use` directive injects a
+skill's path "into the named task's prompt", which needs a task to name. With no field, the only
+unambiguous reading is *every* task in the plan — occasionally right, usually not. So `task` is
+optional: named, it applies to that one task; omitted, to the whole plan.
 
-Anything the lead asks for that the current team cannot do is reported, not silently dropped:
-"this needs a `ui` specialist and none is awake" is a finding, and the fix is `/wake`.
+Both plan-producing calls use it: the ordinary `handle()` path and the `/go` review.
 
----
+- **`chains`** become `/relay` invocations through the existing `run_relay`, one call per goal, with
+  `n` copies. `run_relay` takes a `provenance` string that is written into each chain's notes
+  header, so a lead-requested chain is an ordinary chain that happens to record who asked for it —
+  `/ranks`, the audit and `/relay clean` need to know nothing about who asked. Chains run *after* the
+  task list, and their outcomes go into the lead's synthesis, because the synthesis is the one thing
+  the user is guaranteed to read.
+- **`skills` → `use`** injects the skill's path into the task prompt, after checking it is actually
+  installed (project `.claude/skills/NAME/SKILL.md` before `~/.claude/skills/`). A `use` for a skill
+  nobody has is a **finding**, not a dead path in a prompt the model cannot read.
+- **`skills` → `create` / `edit`** are **proposed and never executed**. The request comes back with
+  its path and its intent and you decide. A model writing into your skill directory is a privileged
+  action, and a plan that quietly performs one is a plan you would not have approved.
+
+**Findings are the point.** `parse_directives` validates everything up front and returns a
+`Directives` with a `findings` list, so a malformed chain, an unknown `assign`, a task that is not
+in the plan, or a skill that cannot be used is reported in the room in the same turn. A request that
+vanishes is worse than one that is refused, because the lead's summary is what you read.
+
+**Drafts own their directives.** With `/drafts on`, a plan's chains and skills are stashed with it,
+previewed before you decide, and `/approve` runs them. `/discard` drops them and says how many. The
+alternative — approving a task list and silently dropping the chain that was shown next to it — would
+run a different plan than the one on screen.
+
+`n` is clamped to 1–5. Unlimited copies of a chain is a fork-bomb of somebody's machine.
 
 ## 5. The leader role skill
 

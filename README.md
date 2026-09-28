@@ -667,6 +667,9 @@ Shipped is proven by the suite; next is ordered by dependency. The full map live
 - [x] **Qt front-end** — `from hexmind.qt import HexmindWidget`, the same room as a widget, behind
       the opt-in `qt` extra. Embeds in [Aether](docs/AETHER-INTERFACE.md)
 - [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](docs/TEAM-ASSEMBLY.md))
+- [x] **Chains and skills in a plan:** the lead can ask for a relay chain — run for real through
+      `/relay`, with a provenance line in its notes — and for a skill to use. `create` and `edit`
+      come back to you as proposals; nothing is written to your skill directory without your say-so
 
 **Next** — see [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) for the full map and
 [`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) for the design work

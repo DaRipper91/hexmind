@@ -1,7 +1,7 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `8d9ffe9` plus this turn's work
-(**pushed**), **337 tests passing** (13 of them Qt, skipped without the `qt` extra). Every row below was re-checked against the
+Where every planned operation actually stands. Re-derived 2026-09-27 against `main` at `b18412f` plus this turn's work
+(**pushed**), **363 tests passing** (14 of them Qt, skipped without the `qt` extra). Every row below was re-checked against the
 code, not carried forward on trust — which is how the previous version came to claim `/add` and
 `/remove` work when neither command exists.
 
@@ -133,7 +133,7 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 | 3 | ~~`Assembly` + `/go` `/cancel` `/recommend`~~ | — | **done**: the lead proposes, the user edits the live room, `/go` makes it review the disagreement and plan against what it was given |
 | 3a | ~~`/add` `/remove` — change the roster at runtime~~ | — | **done**: `Orchestrator.add`/`remove`; a model with no registry entry is refused and pointed at `/scan` `/profile` |
 | 4 | ~~`/scan` + discovered-vs-curated + `/profile`~~ | — | **done**: a scan writes a catalogue and no registry entry; `/profile` promotes one find, `best_at` required |
-| 5 | `ASSEMBLY_SCHEMA` with chains + skills | 3 | extends the plan contract |
+| 5 | ~~`ASSEMBLY_SCHEMA` with chains + skills~~ | — | **done**: chains become real `/relay` runs with a provenance line; `use` injects a skill path, `create`/`edit` are proposed and never written; findings are reported |
 | 6 | `hexmind-lead` skill (`opencode-muse` authors, `opencode-ultra` reviews) | 3 | last on purpose: describe a lead that exists |
 | 7 | reconcile the two `available()` functions | — | `/scan` and `/profile` both read `Registry.available()`; make the registry's the real one and delete the duplicate |
 | 8 | WS-9 roster advisor | 3, WS-8 | needs a coverage check to be safe |
@@ -145,7 +145,8 @@ does not exist. *Gap: the mechanism, not the reviewers.*
 **3a, 3, 4 and the `--serve --timeout` bug are all closed.** The lead proposes a roster, the user
 edits the live one with `/add` `/remove` `/sleep` `/wake`, and `/go` makes the leader plan against
 the room the user actually settled on — told what it dropped and what that costs. What is left of
-this area: `ASSEMBLY_SCHEMA` (chains and skills, design §4) is what is left.
+this area is closed: `/recommend` → edit the room → `/go`, and `ASSEMBLY_SCHEMA` for chains and
+skills. What is left of it is the `hexmind-lead` skill (design §5), which is a document, not code.
 
 ---
 

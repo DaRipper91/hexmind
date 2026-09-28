@@ -12,8 +12,9 @@ import inspect
 import json
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
+from pathlib import Path
 
 from .models import Registry
 
@@ -33,7 +34,7 @@ OPT_IN = REGISTRY.opt_in()
 
 # A member failure that means "out of quota", not "bad work": hand the task to someone else.
 QUOTA_RE = re.compile(r"usage limit|quota|rate.?limit|\b429\b|exceeded your|credit balance|"
-                      r"subscription does not have access|out of credits", re.I)
+                      r"subscription does not have access|out of credits", re.IGNORECASE)
 
 # Lead plans are forced into this shape on CLIs that support structured output.
 PLAN_SCHEMA = {
@@ -48,6 +49,42 @@ PLAN_SCHEMA = {
     },
     "required": ["reply", "tasks"],
 }
+
+# The plan contract grows. `reply` and `tasks` are exactly PLAN_SCHEMA's, so a lead that ignores the
+# new fields produces the plan it always did; `chains` and `skills` are additive (design §4).
+#
+# `skill.task` is not in the design's sketch. The prose says a `use` directive injects a skill's
+# path "into the named task's prompt", which needs a task to name; without the field the only
+# unambiguous reading is "every task in the plan", which is occasionally right and usually not.
+ASSEMBLY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reply": {"type": "string"},
+        "tasks": PLAN_SCHEMA["properties"]["tasks"],
+        "chains": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string"},
+                "n": {"type": "integer"},
+                "assign": {"enum": ["rotate", "best", "pinned"]},
+                "why": {"type": "string"},
+            },
+            "required": ["goal"]}},
+        "skills": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "action": {"enum": ["use", "create", "edit"]},
+                "name": {"type": "string"},
+                "task": {"type": "string"},
+                "why": {"type": "string"},
+            },
+            "required": ["action", "name"]}},
+    },
+    "required": ["reply", "tasks"],
+}
+
+CHAIN_ASSIGN = ("rotate", "best", "pinned")
+SKILL_ACTIONS = ("use", "create", "edit")
 
 # Control chars (incl. ESC) and bidi overrides, from repohub core/textsafe.py. Keeps \n and \t.
 _UNSAFE = re.compile("[\x00-\x08\x0b\x0c\r\x0e-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069\u200e\u200f]")
@@ -133,7 +170,16 @@ Rules:
 - Split work into phases with depends_on. Independent tasks run at the same time.
 - Tasks that edit the same files must not run in parallel; chain them with depends_on.
 - Set "gate": true only for high-impact tasks whose mistakes would break later work (core logic, migrations, security).
-- For a simple question or chat, answer directly in "reply" and return "tasks": [].
+- For a simple question or chat, answer directly in "reply" and return "tasks": [], "chains": [], "skills": [].
+- Prefer a chain to a long task list when the stages are sequential and each builds on the last.
+  Ask for one in "chains" and hexmind runs it as an ordinary /relay; do not fake sequential work as
+  parallel tasks. "n" is how many independent copies to run (1-5), "assign" is rotate|best|pinned.
+- If you keep re-explaining the same thing to a team member, say so in "skills" rather than
+  repeating it in every task. "use" means an installed skill at .claude/skills/NAME/SKILL.md and you
+  must have seen it referenced; name the task it applies to in "task", or omit it for the whole plan.
+  "create" and "edit" are *proposals*: hexmind shows them to the user and does not write anything.
+- If the work needs something this room cannot do — a model that is not here, a skill nobody has
+  installed — say it in "reply" and keep going with what you can. Never pretend a request was honoured.
 """
 
 RECOMMEND_SCHEMA = {
@@ -201,7 +247,16 @@ Rules:
 - Split work into phases with depends_on. Independent tasks run at the same time.
 - Tasks that edit the same files must not run in parallel; chain them with depends_on.
 - Set "gate": true only for high-impact tasks whose mistakes would break later work.
-- For a simple question or chat, answer directly in "reply" and return "tasks": [].
+- For a simple question or chat, answer directly in "reply" and return "tasks": [], "chains": [], "skills": [].
+- Prefer a chain to a long task list when the stages are sequential and each builds on the last.
+  Ask for one in "chains" and hexmind runs it as an ordinary /relay; do not fake sequential work as
+  parallel tasks. "n" is how many independent copies to run (1-5), "assign" is rotate|best|pinned.
+- If you keep re-explaining the same thing to a team member, say so in "skills" rather than
+  repeating it in every task. "use" means an installed skill at .claude/skills/NAME/SKILL.md and you
+  must have seen it referenced; name the task it applies to in "task", or omit it for the whole plan.
+  "create" and "edit" are *proposals*: hexmind shows them to the user and does not write anything.
+- If the work needs something this room cannot do — a model that is not here, a skill nobody has
+  installed — say it in "reply" and keep going with what you can. Never pretend a request was honoured.
 """
 
 SYNTH_PROMPT = """You are the lead of an AI agent team. The user asked:
@@ -281,6 +336,93 @@ def parse_plan(text: str, members: list[str], lead: str) -> tuple[str, list[Task
     return reply, tasks
 
 
+@dataclass
+class Directives:
+    """What the lead asked for beyond the task list: relay chains to run, skills to use or write,
+    and anything it asked for that this room cannot do.
+
+    `findings` is the point of the whole class. A lead that asks for a skill nobody has installed,
+    or for a chain with no goal, is asking for something the room cannot deliver — and a request
+    that vanishes is worse than one that is refused, because the lead's own summary is the only
+    thing the user is guaranteed to read (design §5, item 8)."""
+
+    chains: list[dict] = field(default_factory=list)
+    skills: list[dict] = field(default_factory=list)
+    findings: list[str] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return bool(self.chains or self.skills or self.findings)
+
+
+def parse_directives(text: str, tasks: list[Task]) -> Directives:
+    """Read `chains` and `skills` out of a plan. A sibling of `parse_plan`, not part of it: that
+    function's `(reply, tasks)` contract is what the TUI, the server, the relay and two dozen tests
+    depend on, and a plan with neither new field must parse exactly as it did before.
+
+    Everything is validated here rather than at the point of use, so a malformed directive is
+    reported once, in the room, instead of throwing from inside a relay run."""
+    out = Directives()
+    try:
+        data = extract_json(text)
+    except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
+        return out  # a prose reply simply has no directives; parse_plan already handled it
+
+    ids = {t.id for t in tasks}
+    for entry in _as_list(data.get("chains")):
+        if not isinstance(entry, dict):
+            out.findings.append(f"dropped a chain request that was not an object: {entry!r}")
+            continue
+        goal = str(entry.get("goal") or "").strip()
+        if not goal:
+            out.findings.append("dropped a chain request with no goal")
+            continue
+        assign = str(entry.get("assign") or "rotate")
+        if assign not in CHAIN_ASSIGN:
+            out.findings.append(f"chain \"{goal[:40]}\": assign={assign!r} is not one of "
+                                f"{', '.join(CHAIN_ASSIGN)}; using rotate")
+            assign = "rotate"
+        try:
+            n = int(entry.get("n") or 1)
+        except (TypeError, ValueError):
+            out.findings.append(f"chain \"{goal[:40]}\": n={entry.get('n')!r} is not a number; using 1")
+            n = 1
+        out.chains.append({"goal": goal, "n": max(1, min(n, 5)), "assign": assign,
+                           "why": str(entry.get("why") or "")})
+
+    for entry in _as_list(data.get("skills")):
+        if not isinstance(entry, dict):
+            out.findings.append(f"dropped a skill request that was not an object: {entry!r}")
+            continue
+        action = str(entry.get("action") or "").strip()
+        name = str(entry.get("name") or "").strip()
+        if action not in SKILL_ACTIONS:
+            out.findings.append(f"dropped a skill request with action={action!r}; expected one of "
+                                f"{', '.join(SKILL_ACTIONS)}")
+            continue
+        if not name:
+            out.findings.append("dropped a skill request with no name")
+            continue
+        task = str(entry.get("task") or "").strip()
+        if task and task not in ids:
+            out.findings.append(f"skill \"{name}\" asked for task {task}, which is not in this plan; "
+                                f"applying it to every task instead")
+            task = ""
+        out.skills.append({"action": action, "name": name, "task": task,
+                           "why": str(entry.get("why") or "")})
+    return out
+
+
+def skill_path(name: str, cwd: str) -> Path | None:
+    """Where a skill lives, if it is installed. Project first, then the user's, matching how a
+    repository-local `.claude/skills/` overrides a global one. Returns None rather than a guessed
+    path, so a `use` for a skill nobody has is reported instead of injected as a dead reference."""
+    for base in (Path(cwd) / ".claude" / "skills", Path.home() / ".claude" / "skills"):
+        candidate = base / name / "SKILL.md"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 Emit = Callable[[str, dict], None]  # (event kind, payload) -> UI
 
 
@@ -312,6 +454,7 @@ class Orchestrator:
         self.approve_plans = False  # True: the lead's plan waits for /approve or /discard
         self.assembly: Assembly | None = None  # pending /recommend \u2192 /go negotiation
         self.pending: tuple[str, list[Task]] | None = None  # (request, tasks) awaiting approval
+        self.pending_directives: Directives | None = None  # the chains/skills that plan asked for
         self.busy: set[str] = set()  # models holding a non-terminal task; enforces INVARIANT S-1
         self.all_tasks: list[Task] = []  # every task this session, for the busy set and /team
 
@@ -560,28 +703,32 @@ class Orchestrator:
                 actual=", ".join(actual),
                 dropped=("\n".join(lines) + "\n") if lines else "",
                 stats=self._track_record(actual), domains=", ".join(DOMAINS)),
-                schema=PLAN_SCHEMA)
+                schema=ASSEMBLY_SCHEMA)
         finally:
             self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
             reply, tasks = parse_plan(raw, actual, self.lead)
         except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
             reply, tasks = raw.strip(), []
+        directives = parse_directives(raw, tasks)
         if dropped or added:
             review = "\n".join(lines)
             reply = f"**Roster adjusted.** {review}\n\n{reply}" if reply else f"**Roster adjusted.** {review}"
         self.emit("message", {"from": self.lead, "text": reply})
-        if not tasks:
+        if not tasks and not directives.chains and not directives.skills:
             self.history.append((request, reply))
             return POSTED
         if self.approve_plans:
             self.pending = (request, tasks)
+            self.pending_directives = directives
             self.emit("message", {"from": "hexmind", "text":
                                   "**Draft plan: nothing runs until you decide.** `/approve` to run it, "
                                   "`/discard` to drop it."})
+            if directives.chains or directives.skills:
+                self.emit("message", {"from": "hexmind", "text": self._directive_preview(directives)})
             self.history.append((request, reply))
             return POSTED
-        return await self.execute(request, tasks)
+        return await self.execute(request, tasks, directives)
 
     def cancel_assembly(self) -> str:
         """Abandon the negotiation. The roster is untouched — it was never a copy — and the next
@@ -602,35 +749,139 @@ class Orchestrator:
         from .auditor import DOMAINS
         raw = await self.ask(self.lead, LEAD_PROMPT.format(
             roster=self._roster(), request=request, history=self._history(), domains=", ".join(DOMAINS)),
-            schema=PLAN_SCHEMA)
+            schema=ASSEMBLY_SCHEMA)
         self.emit("status", {"agent": self.lead, "state": "idle"})
         try:
             reply, tasks = parse_plan(raw, self.members, self.lead)
         except (ValueError, json.JSONDecodeError, AttributeError, TypeError):
             # lead answered in prose instead of JSON: treat it as a direct answer
             reply, tasks = raw.strip(), []
+        directives = parse_directives(raw, tasks)
         self.emit("message", {"from": self.lead, "text": reply})
-        if not tasks:
+        if not tasks and not directives.chains and not directives.skills:
             self.history.append((request, reply))
             return reply
 
         if self.approve_plans:
             self.pending = (request, tasks)
+            self.pending_directives = directives
             lines = [f"- **{t.id}** → {self.name(t.agent)}: {t.title}" +
                      (f" _(after {', '.join(t.depends_on)})_" if t.depends_on else "") for t in tasks]
             note = "**Draft plan: nothing runs until you decide.** `/approve` to run it, `/discard` to drop it."
             self.emit("message", {"from": "hexmind", "text": note + "\n\n" + "\n".join(lines)})
+            if directives.chains or directives.skills:
+                self.emit("message", {"from": "hexmind", "text": self._directive_preview(directives)})
             self.history.append((request, reply))
             return reply
-        return await self.execute(request, tasks)
+        return await self.execute(request, tasks, directives)
 
-    async def execute(self, request: str, tasks: list[Task]) -> str:
-        """Run an (approved) plan, then have the lead summarize."""
+    def _directive_preview(self, directives: Directives) -> str:
+        """What a draft plan would also do, shown before /approve rather than after. A draft whose
+        shape the user cannot see is not a draft, it is a surprise."""
+        lines = []
+        for chain in directives.chains:
+            lines.append(f"- **chain** `{chain['goal'][:70]}` \u00d7{chain['n']} "
+                         f"({chain['assign']})" + (f" \u2014 {chain['why']}" if chain["why"] else ""))
+        for skill in directives.skills:
+            verb = "inject" if skill["action"] == "use" else f"propose `{skill['action']}`"
+            lines.append(f"- **skill** {verb} `{skill['name']}`"
+                         + (f" into {skill['task']}" if skill["task"] else ""))
+        if directives.findings:
+            lines += [f"- _could not do: {f}_" for f in directives.findings]
+        return "**Also in this plan**\n\n" + "\n".join(lines)
+
+    # ---------- lead directives: chains and skills (design §4) ----------
+    def apply_skills(self, tasks: list[Task], skills: list[dict]) -> tuple[list[str], list[str]]:
+        """(proposals, findings) for a plan's `skills`.
+
+        `use` injects the skill's path into the task prompt, which is the whole point of the
+        directive — the lead asked for a specific set of instructions and the task is the only place
+        they can go. `create` and `edit` are **proposed, never executed**: a model writing into your
+        skill directory is a privileged action, so the request comes back to you with its path and
+        its intent and you decide. A `use` for a skill nobody has installed is a finding, not a dead
+        reference in a prompt."""
+        proposals, findings = [], []
+        for skill in skills:
+            name, action = skill["name"], skill["action"]
+            if action == "use":
+                path = skill_path(name, self.backend.cwd)
+                if path is None:
+                    findings.append(f"the lead asked to use skill `{name}`, which is not installed "
+                                    f"here — no path was injected into any task")
+                    continue
+                targets = [t for t in tasks if not skill["task"] or t.id == skill["task"]]
+                note = f"\n\n## Skill: {name}\nRead {path} first and follow it."
+                for t in targets:
+                    if f"## Skill: {name}" not in t.instructions:
+                        t.instructions += note
+                self.emit("message", {"from": "hexmind",
+                                      "text": f"**Skill `{name}`** applied to "
+                                              f"{', '.join(t.id for t in targets) or 'no task'} "
+                                              f"(`{path}`)."})
+            else:
+                proposals.append(f"**`{action}` skill `{name}`** — `{self.backend.cwd}/.claude/skills/"
+                                 f"{name}/SKILL.md`" + (f" — {skill['why']}" if skill["why"] else "")
+                                 + "\n_Not written. A model editing your skill directory is your "
+                                   "call, not the lead's._")
+        return proposals, findings
+
+    async def run_chains(self, request: str, chains: list[dict]) -> str:
+        """Run the chains the lead asked for, one `/relay` per goal, reusing the existing machinery.
+
+        Each becomes an ordinary chain with a provenance line in its notes, so the audit, `/ranks`
+        and `/relay clean` need to know nothing about who asked. `n` chains of the same goal are one
+        `run_relay` call, because that is what `/relay GOAL -n 3` means."""
+        import argparse
+
+        from .relay import run_relay
+        outcomes = []
+        for chain in chains:
+            goal, why = chain["goal"], chain["why"]
+            self.emit("message", {"from": "hexmind",
+                                  "text": f"**The lead asked for a chain** on _{goal}_"
+                                          + (f" — {why}" if why else "")
+                                          + f"\n\n`/relay \"{goal}\" -n{chain['n']} "
+                                            f"--assign {chain['assign']}`"})
+            ns = argparse.Namespace(target=[goal], chains=chain["n"], assign=chain["assign"],
+                                    workspace="", end="merge", goal="")
+            provenance = (f"> Requested by {self.lead} for: {request}"
+                          + (f"\n> Why: {why}" if why else ""))
+            try:
+                report = await run_relay(self, ns, provenance=provenance)
+                outcomes.append(f"- `{goal[:60]}`: {report.splitlines()[0] if report else 'no report'}")
+            except Exception as e:  # a chain that cannot run is a finding, not a dead turn
+                self.emit("message", {"from": "hexmind",
+                                      "text": f"**Chain on _{goal}_ failed:** {e}"})
+                outcomes.append(f"- `{goal[:60]}`: **failed** — {e}")
+        return "\n".join(outcomes)
+
+    async def execute(self, request: str, tasks: list[Task], directives: Directives | None = None) -> str:
+        """Run an (approved) plan, then any chains and skills the lead asked for, then summarize.
+
+        Chains run after the task list, not interleaved: a chain is the lead's own plan for work it
+        could not express as a graph, and the summary has to cover both, so the order has to be
+        predictable rather than clever."""
         self.record(tasks)
+        proposals: list[str] = []
+        chain_report = ""
+        if directives:
+            proposals, findings = self.apply_skills(tasks, directives.skills)
+            directives.findings.extend(findings)
         self.emit("plan", {"tasks": tasks})
         await self.run_tasks(request, tasks)
 
         results = "\n\n".join(f"[{t.id}] {t.title} ({t.agent}, {t.status}):\n{clip(t.output)}" for t in tasks)
+        if directives and directives.chains:
+            chain_report = await self.run_chains(request, directives.chains)
+            results += f"\n\nChains the lead asked for:\n{chain_report}"
+        if proposals:
+            self.emit("message", {"from": "hexmind",
+                                  "text": "**The lead asked to change your skills.**\n\n"
+                                          + "\n".join(proposals)})
+        if directives and directives.findings:
+            self.emit("message", {"from": "hexmind",
+                                  "text": "**Not everything the lead asked for is possible here.**\n\n"
+                                          + "\n".join(f"- {f}" for f in directives.findings)})
         self.emit("status", {"agent": self.lead, "state": "summarizing"})
         final = await self.ask(self.lead, SYNTH_PROMPT.format(request=request, results=results))
         self.emit("status", {"agent": self.lead, "state": "idle"})
