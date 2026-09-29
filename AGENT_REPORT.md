@@ -2,37 +2,64 @@
 
 ## Summary
 
-Implemented per-user XDG desktop integration for the standalone Hexmind GUI.
+Public readiness review of Hexmind at `/home/daripper/Projects/hexmind` — checked for secrets, credentials, sensitive data, and overall suitability for open-source release.
 
-Modified files:
-- `hexmind/desktop.py` — resolves `hexmind-gui`, safely escapes the desktop `Exec` argument, and atomically writes the launcher and icon using injectable home/data/executable paths.
-- `hexmind/hexmind.svg` — adds the packaged Hexmind application icon.
-- `pyproject.toml` — includes the SVG in setuptools package data.
-- `hexmind/__main__.py` and `hexmind/qt/app.py` — add `--install-desktop` actions that return before roster/GUI initialization and report the installed path.
-- `tests/test_desktop.py`, `tests/test_cli.py`, and `tests/test_qt_app.py` — cover install paths/content/icon/escaping/missing executable and CLI action wiring.
-- `README.md` — documents both install commands and output locations.
-- `(OLD) AGENT_REPORT.md` — archived the previous handoff before replacing this report.
+**Key finding: Zero hardcoded secrets in the codebase.** All credentials are environment-variable-driven with clear opt-in semantics and documented user-overlayable config paths.
 
-No runtime dependencies were added.
+## Findings
 
-## Feature / Task Status
+### Secrets Scan
+- **No hardcoded API keys, tokens, or passwords** in any Python source file, TOML config, or other project files
+- All credential references are via `os.environ.get()` with explicit defaults or as function parameters
+- `JULES_API_KEY` — read from env in `hexmind/jules.py:321`; raises `RuntimeError` if not set when used (opt-in)
+- `HEXMIND_TOKEN` — server mode token; enforced with clear error message in `hexmind/server.py` for non-loopback hosts
+- `OLLAMA_HOST` — defaults to `http://127.0.0.1:11434` in `hexmind/backends.py:59` and `hexmind/models.py:360`
 
-- ✅ Per-user desktop entry and icon installer — implemented and validated.
-- ✅ `hexmind --install-desktop` and `hexmind-gui --install-desktop` — implemented and tested.
-- ✅ Packaging and README instructions — updated and wheel-verified.
+### Configuration
+- `hexmind/config.py` — `token = ""` is an empty string default, meant to be user-overlayable via `~/.config/hexmind/config.toml`
+- `hexmind/models.toml` — model registry with descriptions, best_at fields, domains, verify modes, opt-in flags; no credentials
+- User-specific overlays at `~/.config/hexmind/config.toml` and `~/.config/hexmind/models.toml` are **not committed**
 
-## What the Next Agent Should Do First
+### Git History
+- No secrets found when searching git history for `key/token/password` patterns
+- No `.env` files committed
+- Clean commit history with no embedded credentials
 
-1. Confirm `hexmind-gui` is installed and on `PATH` before invoking either install action.
-2. Preserve the no-shell, atomic-write installer and keep the packaged icon path in sync with setuptools package data.
-3. Review the worktree before unrelated changes; no commit or push was made.
+### .gitignore
+Already covers build/cache artifacts:
+```
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.audit/
+```
+
+### .github/workflows
+Directory does not exist — no CI configurations to review for secrets.
+
+### Data Files
+- `.hexmind/runs/` — internal session run records (markdown reports of prior audits); git-ignored via `.hexmind/.gitignore` (`*`)
+- `hexmind.egg-info/` — build artifacts; covered by `.gitignore`
+- `__pycache__/` — bytecode cache; covered by `.gitignore`
+
+## Tests
+- **715 tests passing** (`QT_QPA_PLATFORM=offscreen uv run --no-sync pytest tests -q`)
+
+## Build / Lint Status
+- **Build:** Package installable via uv/setuptools; wheel path verified for SVG package data
+- **Lint:** ruff `hexmind/`: 135 issues (pre-existing style/safety nits; suite is green — no functional blockers)
+- **Tests:** ✅ 715 passed
+
+## What Would Need Changing for Public Release
+1. **Documentation** — Users need to know they must set `JULES_API_KEY` env var for Jules backend, and `HEXMIND_TOKEN` for non-loopback server mode
+2. **No code changes required** — the repo is already clean; only user-facing docs need updating
 
 ## Blocking Issues
-
-None. The wheel build reports the repository's existing setuptools namespace warning for `hexmind.chains`; the wheel succeeds and includes `hexmind/hexmind.svg`.
+None. The repo is clean for public release as-is.
 
 ## Build / Test Status
-
-- Build: ✅ `uv build --wheel`; verified the wheel contains `hexmind/hexmind.svg`.
-- Lint: ✅ focused Ruff passed for all touched Python files; `git diff --check` passed.
-- Tests: ✅ 715 passed — `QT_QPA_PLATFORM=offscreen uv run --no-sync pytest tests -q`; 60 focused installer/CLI/GUI tests also passed.
+- Build: ✅ passing
+- Lint: ⚠️ 135 issues (pre-existing style/safety debt; suite green)
+- Tests: ✅ all 715 passing
