@@ -602,6 +602,7 @@ Run it after installing the `qt` extra; the action does not start the GUI or req
 The standalone application ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py)) provides:
 - **Menu bar & Shortcuts:** File operations, OS-level file opening (`openFileRequested`), team refresh (`F5`), and quick reload.
 - **Command Palette (`Ctrl+K`):** Fast launcher for room commands, agent inspection, and chain triggers via [`CommandPalette`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py).
+- **Settings workspace:** Edit default lead/roster, audit, server, and notification preferences; reload from disk, restore defaults, run agent health checks, and open `config.toml` from the GUI.
 - **Status bar:** Live working directory, active model counts, and turn state.
 - **Theme management:** System dark palette applied globally at the application level via [`theme.py`](file:///home/daripper/Projects/hexmind/hexmind/qt/theme.py).
 
@@ -748,6 +749,12 @@ The Qt desktop interface is actively evolving through the 10-phase Flagship Road
 
 The authoritative phase definitions and implementation ledger are in the
 [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md).
+
+The planned follow-on execution sequence for the next 12 GUI improvements is in the
+[GUI Batch Roadmap — Next 12 Phases](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-29-gui-batch-roadmap.md).
+
+The broader cross-surface plan for shared core work plus TUI and GUI enhancements is in the
+[Workbench Expansion Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-29-workbench-expansion-roadmap.md).
 
 Detailed agent implementation SOPs and preserved hooks architecture are maintained in the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md).
 

@@ -84,6 +84,11 @@ class DirectLine(QWidget):
 
         self.transcript = QTextBrowser(self)
         self.transcript.setAccessibleName("Direct conversation")
+        self.transcript.setHtml(
+            "<b>Direct Line</b><br>"
+            "Ask one model directly without routing through the orchestrator.<br><br>"
+            "Choose a primary model, optionally pick <i>Ask another</i>, then send a prompt."
+        )
         self.prompt = QLineEdit(self)
         self.prompt.setAccessibleName("Direct prompt")
         self.prompt.setPlaceholderText("Ask one model directly…")
@@ -97,10 +102,13 @@ class DirectLine(QWidget):
 
         self.primary_output = QTextBrowser(self)
         self.primary_output.setAccessibleName("Primary model response")
+        self.primary_output.setPlainText("Primary model output will appear here.")
         self.comparison_output = QTextBrowser(self)
         self.comparison_output.setAccessibleName("Comparison model response")
+        self.comparison_output.setPlainText("Choose a different comparison model to enable side-by-side output.")
         self.status = QLabel("", self)
         self.status.setAccessibleName("Direct line status")
+        self.status.setText("Choose a model and send a direct prompt.")
 
         outputs = QHBoxLayout()
         primary_box = QVBoxLayout()
@@ -134,7 +142,8 @@ class DirectLine(QWidget):
         self.status.setText(f"Waiting for {primary}…")
         self.ask_button.setEnabled(False)
         self.primary_output.clear()
-        self.comparison_output.clear()
+        self.comparison_output.setPlainText("Waiting for comparison response…" if comparison else
+                                            "Comparison disabled for this prompt.")
         self._chat_thread = ChatThread(self._chat_runner, primary, comparison, prompt, self)
         self._chat_thread.succeeded.connect(self._show_results)
         self._chat_thread.failed.connect(self._show_error)

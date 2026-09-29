@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtGui import QAction, QIcon, QKeySequence
@@ -74,6 +75,10 @@ class HexmindWindow(QMainWindow):
         self._turn_started_at: float | None = None
         self._notification_defaults = config.get_notification_defaults()
         self.tray_icon: QSystemTrayIcon | None = None
+        self.settings_page.saved.connect(self._on_settings_saved)
+        self.settings_page.dirty_changed.connect(self._on_settings_dirty_changed)
+        self.settings_page.config_file_requested.connect(self.open_path)
+        self.settings_page.config_directory_requested.connect(self.open_path)
         self._setup_notifications()
         open_file_requested = getattr(self.room, "openFileRequested", None)
         connect = getattr(open_file_requested, "connect", None)
@@ -139,6 +144,24 @@ class HexmindWindow(QMainWindow):
         self.stats_action = QAction("Reload &stats", self)
         self.stats_action.triggered.connect(self._reload_stats)
         room_menu.addAction(self.stats_action)
+
+        settings_menu = self.settings_menu = self.menuBar().addMenu("&Settings")
+        self.open_settings_action = QAction("Open &Settings", self)
+        self.open_settings_action.triggered.connect(self._open_settings)
+        settings_menu.addAction(self.open_settings_action)
+        self.reload_settings_action = QAction("&Reload settings", self)
+        self.reload_settings_action.triggered.connect(self._reload_settings)
+        settings_menu.addAction(self.reload_settings_action)
+        self.health_check_action = QAction("Check agent &health", self)
+        self.health_check_action.triggered.connect(self._check_agent_health)
+        settings_menu.addAction(self.health_check_action)
+        settings_menu.addSeparator()
+        self.open_config_action = QAction("Open config.toml…", self)
+        self.open_config_action.triggered.connect(self._open_config_file)
+        settings_menu.addAction(self.open_config_action)
+        self.open_config_dir_action = QAction("Open config &folder", self)
+        self.open_config_dir_action.triggered.connect(self._open_config_directory)
+        settings_menu.addAction(self.open_config_dir_action)
 
         help_menu = self.help_menu = self.menuBar().addMenu("&Help")
         self.about_action = QAction("&About", self)
@@ -234,6 +257,41 @@ class HexmindWindow(QMainWindow):
         reload_ = getattr(stats, "reload", None)
         if callable(reload_):
             reload_()
+
+    def _open_settings(self) -> None:
+        self.bench_rail.set_workspace("Settings")
+
+    def _reload_settings(self) -> None:
+        if not self.settings_page.reload():
+            return
+        self._notification_defaults = config.get_notification_defaults(self.settings_page.config_path)
+        self.statusBar().showMessage(f"Reloaded settings from {self.settings_page.config_path}")
+
+    def _check_agent_health(self) -> None:
+        self._open_settings()
+        self.settings_page.check_health()
+
+    def _open_config_file(self) -> None:
+        self._open_settings()
+        self.open_path(str(self.settings_page.ensure_config_exists()))
+
+    def _open_config_directory(self) -> None:
+        self._open_settings()
+        path = Path(self.settings_page.config_path).parent
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not open config folder", f"{path}\n\n{exc}")
+            return
+        self.open_path(str(path))
+
+    def _on_settings_saved(self) -> None:
+        self._notification_defaults = config.get_notification_defaults(self.settings_page.config_path)
+        self.statusBar().showMessage(f"Saved settings to {self.settings_page.config_path}")
+
+    def _on_settings_dirty_changed(self, dirty: bool) -> None:
+        if dirty:
+            self.statusBar().showMessage("Settings have unsaved changes.")
 
     def _about(self) -> None:
         QMessageBox.about(

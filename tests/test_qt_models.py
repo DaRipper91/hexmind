@@ -26,6 +26,8 @@ def test_calibration_rack_lists_registry_models(qapp):
     assert rack.models.currentItem() is not None
     assert rack.label_value.text()
     assert rack.family_value.text()
+    assert "Select a model and enter a probe prompt" in rack.status.text()
+    assert "run a one-model check here" in rack.probe_output.toPlainText()
     rack.close()
     rack.deleteLater()
 

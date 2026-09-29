@@ -90,8 +90,12 @@ class CalibrationRack(QWidget):
 
         self.probe_output = QTextBrowser(self)
         self.probe_output.setAccessibleName("Model probe output")
+        self.probe_output.setPlainText(
+            "Select a model, enter a short probe prompt, and run a one-model check here."
+        )
         self.status = QLabel("", self)
         self.status.setAccessibleName("Calibration status")
+        self.status.setText("Select a model and enter a probe prompt to test it directly.")
 
         left = QVBoxLayout()
         left.addWidget(QLabel("Registered models", self))

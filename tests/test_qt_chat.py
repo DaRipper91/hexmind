@@ -31,6 +31,10 @@ def test_direct_line_lists_primary_and_comparison_models(qapp):
 
     assert line.primary_model.count() > 0
     assert line.comparison_model.itemText(0) == "None"
+    assert "directly without routing through the orchestrator" in line.transcript.toPlainText()
+    assert "Primary model output will appear here." == line.primary_output.toPlainText()
+    assert "Choose a different comparison model" in line.comparison_output.toPlainText()
+    assert "Choose a model and send a direct prompt." == line.status.text()
     line.close()
     line.deleteLater()
 

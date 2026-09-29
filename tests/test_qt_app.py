@@ -109,7 +109,7 @@ def test_long_turn_uses_saved_phone_notification_without_blocking(qapp, monkeypa
     monkeypatch.setattr(
         A.config,
         "get_notification_defaults",
-        lambda: SimpleNamespace(phone_buzz=True, threshold_seconds=30),
+        lambda path=None: SimpleNamespace(phone_buzz=True, threshold_seconds=30),
     )
     clock = iter((100.0, 135.0))
     monkeypatch.setattr(A.time, "monotonic", lambda: next(clock))
@@ -156,8 +156,8 @@ def _action(window, menu_attr, needle):
 
 def test_the_three_menus_exist(window):
     titles = [getattr(window, attr).title()
-              for attr in ("file_menu", "room_menu", "help_menu")]
-    for expected in ("&File", "&Room", "&Help"):
+              for attr in ("file_menu", "room_menu", "settings_menu", "help_menu")]
+    for expected in ("&File", "&Room", "&Settings", "&Help"):
         assert expected in titles
     # ...and that they are the ones actually on the bar, in order.
     assert [a.menu().title() for a in window.menuBar().actions()] == titles
@@ -172,6 +172,11 @@ def test_every_action_is_reachable_from_the_menu_that_owns_it(window):
         ("room_menu", "refresh_action"),
         ("room_menu", "palette_action"),
         ("room_menu", "stats_action"),
+        ("settings_menu", "open_settings_action"),
+        ("settings_menu", "reload_settings_action"),
+        ("settings_menu", "health_check_action"),
+        ("settings_menu", "open_config_action"),
+        ("settings_menu", "open_config_dir_action"),
         ("help_menu", "about_action"),
     ):
         assert getattr(window, action_attr) in getattr(window, menu_attr).actions()
@@ -212,6 +217,78 @@ def test_palette_action_carries_no_shortcut(window):
     entry = _action(window, "room_menu", "palette")
     assert entry.shortcut().isEmpty(), "Ctrl+K must fire exactly once, from the widget"
     assert entry.toolTip() == "Ctrl+K"
+
+
+def test_open_settings_action_switches_to_the_settings_workspace(window):
+    window.bench_rail.set_workspace("Room")
+    _action(window, "settings_menu", "Settings").trigger()
+    assert window.bench_rail.current_workspace == "Settings"
+
+
+def test_reload_settings_action_reloads_the_page_and_live_notification_defaults(window, monkeypatch):
+    reloaded = []
+    window.settings_page.reload = lambda: (reloaded.append(True) or True)
+    monkeypatch.setattr(
+        A.config,
+        "get_notification_defaults",
+        lambda path=None: SimpleNamespace(phone_buzz=True, threshold_seconds=99),
+    )
+
+    _action(window, "settings_menu", "Reload settings").trigger()
+
+    assert reloaded == [True]
+    assert window._notification_defaults.threshold_seconds == 99
+    assert "Reloaded settings" in window.statusBar().currentMessage()
+
+
+def test_reload_settings_action_respects_cancelled_reload(window):
+    window._notification_defaults = SimpleNamespace(phone_buzz=False, threshold_seconds=30)
+    window.settings_page.reload = lambda: False
+
+    _action(window, "settings_menu", "Reload settings").trigger()
+
+    assert window._notification_defaults.threshold_seconds == 30
+
+
+def test_settings_menu_can_launch_a_health_check(window):
+    checked = []
+    window.settings_page.check_health = lambda: checked.append(True)
+    window.bench_rail.set_workspace("Room")
+
+    _action(window, "settings_menu", "health").trigger()
+
+    assert checked == [True]
+    assert window.bench_rail.current_workspace == "Settings"
+
+
+def test_open_config_action_opens_the_bootstrapped_config_file(window, monkeypatch, tmp_path):
+    opened = []
+    monkeypatch.setattr(A.HexmindWindow, "open_path", lambda self, path: opened.append(path))
+    window.settings_page._config_path = tmp_path / "nested" / "config.toml"
+
+    _action(window, "settings_menu", "config.toml").trigger()
+
+    assert opened == [str(window.settings_page.config_path)]
+    assert window.settings_page.config_path.exists()
+    assert window.bench_rail.current_workspace == "Settings"
+
+
+def test_open_config_folder_action_opens_the_config_directory(window, monkeypatch, tmp_path):
+    opened = []
+    monkeypatch.setattr(A.HexmindWindow, "open_path", lambda self, path: opened.append(path))
+    window.settings_page._config_path = tmp_path / "nested" / "config.toml"
+
+    _action(window, "settings_menu", "folder").trigger()
+
+    assert opened == [str(window.settings_page.config_path.parent)]
+    assert window.settings_page.config_path.parent.is_dir()
+    assert window.bench_rail.current_workspace == "Settings"
+
+
+def test_settings_dirty_state_surfaces_in_the_status_bar(window):
+    window.settings_page.server_host_input.setText("0.0.0.0")
+
+    assert "unsaved changes" in window.statusBar().currentMessage().lower()
 
 
 def test_quit_action_closes_the_window(window):

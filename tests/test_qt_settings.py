@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
 from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from hexmind import config
 from hexmind.qt.settings import SettingsPage
@@ -34,26 +34,38 @@ def page(qapp, config_path):
 
 
 def test_settings_page_loads_schema_defaults(page):
+    assert page.lead_input.text() == config.RoomDefaults().lead
     assert page.members_input.text() == ", ".join(config.RoomDefaults().members)
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
     assert page.theme_selector.currentText() == config.RoomDefaults().theme
+    assert page.server_host_input.text() == config.ServerDefaults().host
+    assert page.server_port_input.value() == config.ServerDefaults().port
+    assert page.server_token_input.text() == config.ServerDefaults().token
     assert page.phone_buzz_checkbox.isChecked() is False
     assert page.threshold_input.value() == 30
+    assert page.save_button.isEnabled() is False
+    assert page.revert_button.isEnabled() is False
 
 
 def test_settings_page_saves_all_configured_preferences(page, config_path):
+    page.lead_input.setText("codex")
     page.members_input.setText("codex, claude")
     page.audit_checkbox.setChecked(False)
+    page.server_host_input.setText("0.0.0.0")
+    page.server_port_input.setValue(9000)
+    page.server_token_input.setText("secret")
     page.phone_buzz_checkbox.setChecked(True)
     page.threshold_input.setValue(90)
 
     assert page.save() is True
     data = config.load_config(config_path)
     assert data["room"] == {
+        "lead": "codex",
         "members": ["codex", "claude"],
         "audit": False,
         "theme": "measured-dark",
     }
+    assert data["server"] == {"host": "0.0.0.0", "port": 9000, "token": "secret"}
     assert data["notifications"] == {"phone_buzz": True, "threshold_seconds": 90}
     assert "Changes apply to new GUI sessions" in page.status.text()
 
@@ -66,10 +78,23 @@ def test_settings_page_rejects_invalid_rosters(page, roster, message):
     assert message in page.status.text()
 
 
+def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
+    page.lead_input.setText("qwen")
+    page.members_input.setText("codex, claude")
+
+    assert page.save() is False
+    assert "Default lead must be included" in page.status.text()
+
+
 def test_settings_page_loads_saved_values(qapp, config_path):
     config.save_section(
         "room",
-        {"members": ["kimi"], "audit": False, "theme": "measured-dark"},
+        {"lead": "kimi", "members": ["kimi"], "audit": False, "theme": "measured-dark"},
+        config_path,
+    )
+    config.save_section(
+        "server",
+        {"host": "192.168.1.5", "port": 8888, "token": "tok123"},
         config_path,
     )
     config.save_section(
@@ -80,8 +105,12 @@ def test_settings_page_loads_saved_values(qapp, config_path):
 
     page = SettingsPage(config_path)
 
+    assert page.lead_input.text() == "kimi"
     assert page.members_input.text() == "kimi"
     assert page.audit_checkbox.isChecked() is False
+    assert page.server_host_input.text() == "192.168.1.5"
+    assert page.server_port_input.value() == 8888
+    assert page.server_token_input.text() == "tok123"
     assert page.phone_buzz_checkbox.isChecked() is True
     assert page.threshold_input.value() == 45
     page.close()
@@ -104,3 +133,75 @@ def test_settings_page_reports_agent_health(page, monkeypatch):
     loop.exec()
 
     assert "agents ready" in page.health_status.text()
+
+
+def test_settings_page_can_restore_defaults_without_saving(page):
+    page.lead_input.setText("codex")
+    page.members_input.setText("codex, claude")
+    page.audit_checkbox.setChecked(False)
+    page.server_host_input.setText("0.0.0.0")
+    page.server_port_input.setValue(9000)
+    page.server_token_input.setText("secret")
+    page.phone_buzz_checkbox.setChecked(True)
+    page.threshold_input.setValue(90)
+
+    page.reset_to_defaults()
+
+    assert page.lead_input.text() == config.RoomDefaults().lead
+    assert page.members_input.text() == ", ".join(config.RoomDefaults().members)
+    assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
+    assert page.server_host_input.text() == config.ServerDefaults().host
+    assert page.server_port_input.value() == config.ServerDefaults().port
+    assert page.server_token_input.text() == config.ServerDefaults().token
+    assert page.phone_buzz_checkbox.isChecked() is config.NotificationDefaults().phone_buzz
+    assert page.threshold_input.value() == config.NotificationDefaults().threshold_seconds
+    assert "Restored defaults" in page.status.text()
+    assert page.save_button.isEnabled() is False
+    assert page.revert_button.isEnabled() is False
+
+
+def test_settings_page_marks_dirty_and_can_revert_unsaved_changes(page):
+    page.server_host_input.setText("0.0.0.0")
+
+    assert page.is_dirty is True
+    assert page.save_button.isEnabled() is True
+    assert page.revert_button.isEnabled() is True
+
+    page.revert()
+
+    assert page.server_host_input.text() == config.ServerDefaults().host
+    assert page.is_dirty is False
+    assert page.save_button.isEnabled() is False
+    assert page.revert_button.isEnabled() is False
+    assert "Reverted unsaved changes" in page.status.text()
+
+
+def test_settings_page_can_cancel_reload_when_dirty(page, monkeypatch):
+    page.server_host_input.setText("0.0.0.0")
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
+    )
+
+    assert page.reload() is False
+    assert page.server_host_input.text() == "0.0.0.0"
+    assert page.is_dirty is True
+    assert "Keeping unsaved changes" in page.status.text()
+
+
+def test_settings_page_requests_config_paths_and_bootstraps_missing_file(qapp, config_path):
+    page = SettingsPage(config_path)
+    opened = []
+    opened_dirs = []
+    page.config_file_requested.connect(opened.append)
+    page.config_directory_requested.connect(opened_dirs.append)
+
+    page.request_open_config_file()
+    page.request_open_config_directory()
+
+    assert opened == [str(config_path)]
+    assert config_path.exists()
+    assert opened_dirs == [str(config_path.parent)]
+    page.close()
+    page.deleteLater()
