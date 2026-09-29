@@ -342,6 +342,16 @@ class HexmindServer:
         try:
             result = await self.orch.handle(text)
             return result
+        except asyncio.CancelledError:
+            cancel_msg = {
+                "id": f"msg-{len(self.messages) + 1}",
+                "from": "hexmind",
+                "text": "⏹️ Turn cancelled.",
+                "timestamp": time.time(),
+            }
+            self.messages.append(cancel_msg)
+            await self.manager.broadcast({"kind": "message", **cancel_msg})
+            raise
         finally:
             self.is_busy = False
             await self.manager.broadcast({"kind": "busy_state", "is_busy": False})
@@ -359,9 +369,26 @@ class HexmindServer:
         await self.manager.broadcast({"kind": "busy_state", "is_busy": True})
         try:
             return await self.orch.execute(req, tasks, directives)
+        except asyncio.CancelledError:
+            cancel_msg = {
+                "id": f"msg-{len(self.messages) + 1}",
+                "from": "hexmind",
+                "text": "⏹️ Turn cancelled.",
+                "timestamp": time.time(),
+            }
+            self.messages.append(cancel_msg)
+            await self.manager.broadcast({"kind": "message", **cancel_msg})
+            raise
         finally:
             self.is_busy = False
             await self.manager.broadcast({"kind": "busy_state", "is_busy": False})
+
+    def cancel_current_turn(self) -> bool:
+        """Cancel in-flight task if any."""
+        if self.current_run_task and not self.current_run_task.done():
+            self.current_run_task.cancel()
+            return True
+        return False
 
     def discard_pending(self) -> bool:
         if not self.orch.pending:
@@ -435,6 +462,13 @@ def create_app(server: HexmindServer, token: str | None = None) -> FastAPI:
         if not discarded:
             raise HTTPException(status_code=400, detail="No pending plan to discard")
         return {"status": "discarded"}
+
+    @app.post("/api/turn/cancel")
+    async def post_turn_cancel():
+        if not server.is_busy or server.current_run_task is None or server.current_run_task.done():
+            raise HTTPException(status_code=400, detail="No active turn to cancel")
+        server.current_run_task.cancel()
+        return {"status": "cancelling"}
 
     @app.get("/api/chains")
     async def get_chains():
@@ -547,7 +581,14 @@ def run_server(
 ) -> None:
     import uvicorn
 
-    token = token or os.environ.get("HEXMIND_TOKEN", "")
+    from . import config
+
+    srv_cfg = config.get_server_defaults()
+    if host == "127.0.0.1" and srv_cfg.host != "127.0.0.1":
+        host = srv_cfg.host
+    if port == 8765 and srv_cfg.port != 8765:
+        port = srv_cfg.port
+    token = token or os.environ.get("HEXMIND_TOKEN", "") or srv_cfg.token
     # Off loopback, anyone who can reach the port can drive agents that write files, so a token
     # is a precondition rather than a warning that scrolls past.
     if host not in ("127.0.0.1", "localhost", "::1") and not token:

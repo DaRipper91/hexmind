@@ -117,6 +117,7 @@ class Task:
     gate: bool = False        # high-impact: an unresolved audit failure blocks dependents
     audit: str = ""           # "" | pass | fixed | disputed
     auditor: str = ""
+    audit_history: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass

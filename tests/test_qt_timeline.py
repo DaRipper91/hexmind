@@ -98,6 +98,19 @@ def test_a_clean_pass_and_a_dispute_both_name_the_auditor():
     assert timeline.verdict_detail(make_task("t1", audit="disputed", auditor="gpt-5")) == "disputed vs gpt-5"
 
 
+def test_audit_history_preserves_each_round_for_the_courtroom():
+    task = make_task("t1", audit="fixed", auditor="gpt-5")
+    task.audit_history = [
+        {"round": 1, "auditor": "gpt-5", "verdict": "FAIL", "issues": "missing test"},
+        {"round": 2, "auditor": "gpt-5", "verdict": "PASS", "issues": ""},
+    ]
+
+    assert timeline.history_detail(task) == (
+        "Round 1: FAIL by gpt-5 — missing test\n"
+        "Round 2: PASS by gpt-5"
+    )
+
+
 def test_an_unjudged_task_has_nothing_to_say():
     assert timeline.verdict_detail(make_task("t1", audit="")) == ""
     assert timeline.verdict_detail(make_task("t1", audit="pass")) == "cleared"

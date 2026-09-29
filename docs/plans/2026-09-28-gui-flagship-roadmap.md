@@ -123,7 +123,11 @@ Centralized configuration engine at `~/.config/hexmind/config.toml`.
 
 ### Phase 5 — Agent Health & First Light (D3)
 * **Component:** `hexmind/qt/health.py`
-* Diagnostic scanner detecting CLI presence in `$PATH`, execution latency, and credential validity.
+* Diagnostic scanner detecting CLI presence in `$PATH`, execution latency, declared credential readiness,
+  and safe provider auth status where the installed CLI documents a read-only command.
+* Auth checks are explicitly allowlisted (`claude auth status`, `codex login status`, and
+  `opencode auth list`); unsupported providers are reported as **not checked** rather than invoking
+  login, help, or model-inference commands.
 
 ---
 
@@ -184,13 +188,13 @@ Centralized configuration engine at `~/.config/hexmind/config.toml`.
 
 | Phase | Milestone Name | Key Files | Primary Deliverable | Status |
 | :---: | :--- | :--- | :--- | :---: |
-| **0** | Honest Instruments | `qt/widget.py`, `qt/theme.py` | Fix P1, P2, P3, P11 baseline UI bugs | ⏳ Ready |
-| **1** | Shared Config | `config.py`, `__main__.py` | Centralized TOML settings engine | ⏳ Planned |
-| **2** | Live Wire & Hand Brake | `backends.py`, `qt/widget.py` | Turn meter & process group kill | ⏳ Planned |
-| **3** | Bench Rail | `qt/app.py`, `qt/rail.py` | Multi-view navigation shell | ⏳ Planned |
-| **4** | Settings Page | `qt/settings.py` | Visual configuration manager | ⏳ Planned |
-| **5** | Agent Health | `qt/health.py` | Binary diagnostic scanner | ⏳ Planned |
-| **6** | Calibration Rack | `qt/models.py` | Model inspector & test probe | ⏳ Planned |
-| **7** | Direct Line | `qt/chat.py` | 1:1 chat & Ask-Another arena | ⏳ Planned |
-| **8** | Polish & Finishing | `qt/palette.py`, `qt/graph.py` | Wire `set_commands`, `select_task`, `fit` | ⏳ Planned |
-| **9** | Flagship Backlog | `notify.py`, `qt/live.py` | Come-back pings & Live Tap streaming | ⏳ Planned |
+| **0** | Honest Instruments | `qt/widget.py`, `qt/theme.py` | Fix P1, P2, P3, P11 baseline UI bugs | ✅ Complete |
+| **1** | Shared Config | `config.py`, `__main__.py` | Centralized TOML settings engine | ✅ Complete |
+| **2** | Live Wire & Hand Brake | `backends.py`, `qt/widget.py` | Turn meter & process group kill | ✅ Complete |
+| **3** | Bench Rail | `qt/app.py`, `qt/rail.py` | Multi-view navigation shell | ✅ Complete |
+| **4** | Settings Page | `qt/settings.py` | Visual configuration manager | ✅ Complete |
+| **5** | Agent Health | `qt/health.py` | Binary, credential, latency, and allowlisted auth diagnostics | ✅ Complete |
+| **6** | Calibration Rack | `qt/models.py` | Model inspector & test probe | ✅ Complete |
+| **7** | Direct Line | `qt/chat.py` | 1:1 chat & Ask-Another arena | ✅ Complete |
+| **8** | Polish & Finishing | `qt/palette.py`, `qt/graph.py` | Wire `set_commands`, `select_task`, `fit` | ✅ Complete |
+| **9** | Flagship Backlog | `notify.py`, `qt/live.py`, `qt/timeline.py` | Come-back pings, Live Tap streaming, audit history | ✅ Complete |

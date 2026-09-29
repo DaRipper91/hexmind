@@ -18,10 +18,15 @@ import pytest
 
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from hexmind.qt import app as A
 from hexmind.qt import theme
+from hexmind.qt.chat import DirectLine
+from hexmind.qt.models import CalibrationRack
+from hexmind.qt.rail import BenchRail
+from hexmind.qt.settings import SettingsPage
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +53,14 @@ class StubRoom(QWidget):
         self.reloaded += 1
 
 
+class FileRoom(StubRoom):
+    openFileRequested = Signal(str)
+
+
+class NotificationRoom(StubRoom):
+    turnState = Signal(bool)
+
+
 @pytest.fixture
 def room(qapp):
     r = StubRoom()
@@ -68,8 +81,17 @@ def window(qapp, room):
 # ---------- construction ----------
 
 
-def test_window_adopts_the_injected_room(window, room):
-    assert window.centralWidget() is room
+def test_window_wraps_the_injected_room_in_a_bench_rail(window, room):
+    assert isinstance(window.centralWidget(), BenchRail)
+    assert window.room is room
+    assert window.centralWidget().stack.currentWidget() is room
+    assert window.centralWidget().stack.widget(0) is room
+    assert isinstance(window.settings_page, SettingsPage)
+    assert window.centralWidget().pages["Settings"] is window.settings_page
+    assert isinstance(window.calibration_rack, CalibrationRack)
+    assert window.centralWidget().pages["Calibration Rack"] is window.calibration_rack
+    assert isinstance(window.direct_line, DirectLine)
+    assert window.centralWidget().pages["Direct Line"] is window.direct_line
 
 
 def test_window_titles_and_sizes_itself(window):
@@ -79,6 +101,35 @@ def test_window_titles_and_sizes_itself(window):
 
 def test_status_bar_reports_the_rooms_cwd(window, room):
     assert room.cwd in window.statusBar().currentMessage()
+
+
+def test_long_turn_uses_saved_phone_notification_without_blocking(qapp, monkeypatch):
+    room = NotificationRoom()
+    monkeypatch.setattr(A.QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: False))
+    monkeypatch.setattr(
+        A.config,
+        "get_notification_defaults",
+        lambda: SimpleNamespace(phone_buzz=True, threshold_seconds=30),
+    )
+    clock = iter((100.0, 135.0))
+    monkeypatch.setattr(A.time, "monotonic", lambda: next(clock))
+    sent = []
+
+    def fake_thread(*, target, args, name, daemon):
+        sent.append((target, args, name, daemon))
+        target(*args)
+        return SimpleNamespace(start=lambda: None)
+
+    monkeypatch.setattr(A.threading, "Thread", fake_thread)
+    from hexmind import notify as notify_module
+
+    monkeypatch.setattr(notify_module, "notify", lambda *args: sent.append(args))
+    window = A.HexmindWindow(room=room)
+    room.turnState.emit(True)
+    room.turnState.emit(False)
+    assert sent and sent[-1][0] == "Hexmind turn complete"
+    window.close()
+    window.deleteLater()
 
 
 def test_close_reaches_the_central_widget(qapp, room):
@@ -138,11 +189,28 @@ def test_reload_stats_action_reaches_through_the_stats_attribute(window, room):
     assert room.reloaded == 1
 
 
-def test_palette_entry_is_documented_but_disabled(window):
-    """The widget owns the live Ctrl+K QShortcut. A second enabled action here would double-fire it,
-    so this entry is deliberately inert — a test that catches someone 'fixing' that."""
+def test_palette_entry_opens_the_room_palette(window, room):
+    """Phase 0.4 (P11): the menu entry is a live path to the room's Ctrl+K palette, not a dead
+    control. Duck-typed, so the StubRoom — which has no `open_palette` — answers a click by
+    doing nothing instead of raising."""
+    opened = []
+    room.open_palette = lambda: opened.append(True)
     entry = _action(window, "room_menu", "palette")
-    assert not entry.isEnabled()
+    assert entry.isEnabled()
+    entry.trigger()
+    assert opened == [True]
+
+
+def test_palette_entry_without_a_room_palette_does_not_raise(window):
+    """A partial room (no `open_palette`) must not take the window down mid-conversation."""
+    _action(window, "room_menu", "palette").trigger()
+
+
+def test_palette_action_carries_no_shortcut(window):
+    """The widget owns the single live Ctrl+K QShortcut. If this action ever gains its own
+    QKeySequence, one keypress fires the palette twice — this test catches that regression."""
+    entry = _action(window, "room_menu", "palette")
+    assert entry.shortcut().isEmpty(), "Ctrl+K must fire exactly once, from the widget"
     assert entry.toolTip() == "Ctrl+K"
 
 
@@ -196,6 +264,18 @@ def test_open_path_reports_a_failure_instead_of_raising(window, monkeypatch):
 
     window.open_path("/tmp/whatever")  # the point: no exception escapes
     assert shown and shown[0][0] == "Could not open file"
+
+
+def test_task_path_signal_uses_the_window_open_path(qapp, monkeypatch):
+    opened = []
+    monkeypatch.setattr(A.HexmindWindow, "open_path", lambda self, path: opened.append(path))
+    window = A.HexmindWindow(room=FileRoom())
+
+    window.room.openFileRequested.emit("/tmp/example.py")
+
+    assert opened == ["/tmp/example.py"]
+    window.close()
+    window.deleteLater()
 
 
 # ---------- the stylesheet belongs to the host ----------
@@ -372,6 +452,34 @@ def test_console_script_target_resolves():
     """pyproject points `hexmind-gui` here. A rename that leaves the entry point dangling ships a
     command that dies with an ImportError, which packaging tests never catch."""
     from importlib import import_module
-    from importlib.metadata import entry_points  # noqa: F401 - import kept for parity below
 
-    assert callable(getattr(import_module("hexmind.qt.app", __package__), "main"))
+    assert callable(import_module("hexmind.qt.app", __package__).main)
+
+
+def test_main_uses_config_room_defaults_and_cli_overrides(host, tmp_path, monkeypatch):
+    from hexmind import config
+    cfg_file = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "PATH", cfg_file)
+    config.save_section("room", {"lead": "codex", "audit": True}, cfg_file)
+
+    # 1. No CLI flags: picks up lead="codex" and audit=True from config
+    assert A.main([]) == 0
+    assert host.built[-1]["lead"] == "codex"
+    assert host.built[-1]["audit"] is True
+
+    # 2. CLI flag override: explicit --lead claude overrides config's "codex"
+    assert A.main(["--lead", "claude"]) == 0
+    assert host.built[-1]["lead"] == "claude"
+    assert host.built[-1]["audit"] is True
+
+
+def test_main_uses_saved_roster_without_cli_roster_filters(host, tmp_path, monkeypatch):
+    from hexmind import backends, config
+
+    cfg_file = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "PATH", cfg_file)
+    monkeypatch.setattr(backends, "available", lambda roster: roster)
+    config.save_section("room", {"members": ["codex"], "audit": False}, cfg_file)
+
+    assert A.main([]) == 0
+    assert host.built[-1]["members"] == ["codex"]

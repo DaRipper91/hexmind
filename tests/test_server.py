@@ -428,3 +428,32 @@ def test_api_bearer_still_401_when_ws_auth_disabled(authed_client, monkeypatch):
 
     valid = authed_client.get("/api/status", headers={"Authorization": "Bearer sekrit"})
     assert valid.status_code == 200
+
+
+# ---------- Phase 2.5: Server Cancellation Endpoint ----------
+
+def test_turn_cancel_endpoint(client, mock_server):
+    import asyncio
+
+    # When no turn is active, cancel returns 400
+    res = client.post("/api/turn/cancel")
+    assert res.status_code == 400
+    assert "No active turn to cancel" in res.json()["detail"]
+
+    # When a turn is active
+    async def _dummy_turn():
+        await asyncio.sleep(10)
+
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(_dummy_turn())
+    mock_server.current_run_task = task
+    mock_server.is_busy = True
+
+    try:
+        cancel_res = client.post("/api/turn/cancel")
+        assert cancel_res.status_code == 200
+        assert cancel_res.json() == {"status": "cancelling"}
+        assert task.cancelling() or task.cancelled()
+    finally:
+        loop.close()
+

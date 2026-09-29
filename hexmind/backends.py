@@ -8,15 +8,19 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
-import signal
 import shlex
 import shutil
+import signal
 import tempfile
 import urllib.request
 import uuid
+from collections.abc import Callable
 
 from .core import REGISTRY
+
+logger = logging.getLogger(__name__)
 
 # Per-agent argv for a one-shot, non-interactive turn. Prompts go over stdin.
 # Edits are auto-accepted so agents can actually do work in the room's folder.
@@ -55,7 +59,7 @@ DIRECT_CMDS.update({
 LOCAL_MODELS: dict[str, str] = {n: m.model for n, m in REGISTRY.models.items() if m.verify == "ollama"}
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 MAX_OUTPUT_BYTES = 1_000_000
-TERMINATE_GRACE_SECONDS = 1
+TERMINATE_GRACE_SECONDS = 1.5
 
 
 async def _read_capped(stream: asyncio.StreamReader, limit: int = MAX_OUTPUT_BYTES) -> bytes:
@@ -64,6 +68,35 @@ async def _read_capped(stream: asyncio.StreamReader, limit: int = MAX_OUTPUT_BYT
         kept.extend(chunk)
         if len(kept) > limit:
             del kept[:len(kept) - limit]
+    return bytes(kept)
+
+
+async def _read_stream(
+    stream: asyncio.StreamReader,
+    agent: str,
+    callback: Callable[[str, str], None] | None,
+    limit: int = MAX_OUTPUT_BYTES,
+) -> bytes:
+    kept = bytearray()
+    pending = bytearray()
+    while chunk := await stream.read(65536):
+        kept.extend(chunk)
+        if len(kept) > limit:
+            del kept[:len(kept) - limit]
+        if callback is None:
+            continue
+        pending.extend(chunk)
+        while b"\n" in pending:
+            raw, _, pending = pending.partition(b"\n")
+            try:
+                callback(agent, raw.decode(errors="replace").rstrip("\r"))
+            except (RuntimeError, TypeError, ValueError) as exc:
+                logger.debug("Live output callback failed for %s: %s", agent, exc)
+    if callback is not None and pending:
+        try:
+            callback(agent, pending.decode(errors="replace"))
+        except (RuntimeError, TypeError, ValueError) as exc:
+            logger.debug("Live output callback failed for %s: %s", agent, exc)
     return bytes(kept)
 
 
@@ -151,9 +184,15 @@ async def run_local(agent: str, prompt: str, timeout: int) -> str:
 
 
 class DirectBackend:
-    def __init__(self, cwd: str, timeout: int = 1800):
+    def __init__(
+        self,
+        cwd: str,
+        timeout: int = 1800,
+        stream_callback: Callable[[str, str], None] | None = None,
+    ):
         self.cwd = cwd
         self.timeout = timeout
+        self.stream_callback = stream_callback
 
     async def run(self, agent: str, prompt: str, cwd: str | None = None,
                   schema: dict | None = None) -> str:
@@ -181,11 +220,17 @@ class DirectBackend:
                        (json.dumps({"event": "user", "message": {"content": prompt}}) + "\n").encode()
                        if agent == "agy" else prompt.encode())
             stdin_task = asyncio.create_task(_write_stdin(proc, payload))
-            stdout_task = asyncio.create_task(_read_capped(proc.stdout))
+            stdout_task = asyncio.create_task(
+                _read_stream(proc.stdout, agent, self.stream_callback)
+            )
             stderr_task = asyncio.create_task(_read_capped(proc.stderr))
             try:
                 await asyncio.wait_for(asyncio.gather(proc.wait(), stdin_task, stdout_task, stderr_task),
                                        self.timeout)
+            except asyncio.CancelledError:
+                await _terminate_group(proc)
+                await asyncio.gather(stdin_task, stdout_task, stderr_task, return_exceptions=True)
+                raise
             except asyncio.TimeoutError:
                 await _terminate_group(proc)
                 await asyncio.gather(stdin_task, stdout_task, stderr_task, return_exceptions=True)

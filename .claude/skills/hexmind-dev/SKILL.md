@@ -7,7 +7,7 @@ description: Conventions, invariants and traps for working on the Hexmind codeba
 
 Hexmind is a multi-model agent orchestrator: a lead model plans a task graph, tasks fan out
 across different AI CLIs, a peer auditor reviews each task, and per-domain audit verdicts
-decide who gets assigned what. Read `README.md` for behaviour and `docs/OPENCODE-TEAM-PLAN.md`
+decide who gets assigned what. Read `README.md` for behaviour and `docs/handbooks/OPENCODE-TEAM-PLAN.md`
 for the roadmap.
 
 ## Layout
@@ -47,7 +47,7 @@ uv pip install --python .venv/bin/python -e ".[qt,server,dev]"
 QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m pytest tests -q
 ```
 
-**619 tests pass.** The 60 Qt tests `importorskip` when PySide6 is absent, so the suite is green
+**705 tests pass.** The Qt tests `importorskip` when PySide6 is absent, so the suite is green
 either way — but that also means a green run can mean "the widget was never exercised".
 
 There is no committed lint config despite a `.ruff_cache` existing, and ~139 findings are
@@ -154,4 +154,3 @@ hand-written argv because their protocols genuinely differ.
 - `TaskGraphView` renders tasks as an interactive DAG. Never block graph layout or drop in-place node update signals (`update_task`).
 - The standalone desktop application is [`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) launched via `hexmind-gui`.
 - Refer to the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and the [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) for all Phase 1–9 GUI milestones.
-

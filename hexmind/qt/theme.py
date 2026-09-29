@@ -145,6 +145,25 @@ def stylesheet() -> str:
         border: 1px solid {CYAN};
         color: {CYAN};
     }}
+    QPushButton#stopButton {{
+        color: {RED};
+        border: 1px solid {RED};
+    }}
+    QPushButton#stopButton:hover {{
+        background: #2a1518;
+    }}
+    QPushButton#stopButton:disabled {{
+        color: {INK_FAINT};
+        border: 1px solid {PANEL_EDGE};
+        background: {GRID};
+    }}
+
+    QLabel#turnMeter {{
+        color: {CYAN};
+        font-family: monospace;
+        font-weight: bold;
+        padding: 0 4px;
+    }}
 
     QComboBox {{
         background: {PANEL};
@@ -157,6 +176,25 @@ def stylesheet() -> str:
         color: {INK};
         selection-background-color: {VIOLET};
         selection-color: {INK};
+        border: 1px solid {PANEL_EDGE};
+    }}
+
+    /* --- checkboxes: the indicator must read on the dark substrate --- */
+    QCheckBox {{ spacing: 6px; }}
+    QCheckBox::indicator {{
+        width: 15px;
+        height: 15px;
+        border: 1px solid {PANEL_EDGE};
+        background: {PANEL};
+    }}
+    QCheckBox::indicator:hover {{ border: 1px solid {VIOLET}; }}
+    QCheckBox::indicator:checked {{
+        background: {GREEN};
+        border: 1px solid {GREEN};
+    }}
+    QCheckBox::indicator:checked:hover {{ border: 1px solid {INK}; }}
+    QCheckBox::indicator:disabled {{
+        background: {GRID};
         border: 1px solid {PANEL_EDGE};
     }}
 

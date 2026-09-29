@@ -130,6 +130,28 @@ def verdict_detail(task: Any) -> str:
     return ""
 
 
+def history_detail(task: Any) -> str:
+    """Format every recorded audit round for the courtroom tooltip."""
+    history = getattr(task, "audit_history", None)
+    if not isinstance(history, list) or not history:
+        return ""
+    lines = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        round_number = entry.get("round", "?")
+        verdict = str(entry.get("verdict", "UNKNOWN"))
+        auditor = str(entry.get("auditor", "") or "")
+        issues = str(entry.get("issues", "") or "").strip()
+        line = f"Round {round_number}: {verdict}"
+        if auditor:
+            line += f" by {auditor}"
+        if issues and verdict != PASS:
+            line += f" — {issues}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def event_key(item: Any) -> tuple[int, int, str]:
     """Plan order, numerically. Accepts a task or a bare id.
 
@@ -159,6 +181,7 @@ class Row:
     status: str
     verdict: str
     detail: str
+    history: str = ""
 
 
 def timeline_rows(tasks: Any) -> list[Row]:
@@ -173,6 +196,7 @@ def timeline_rows(tasks: Any) -> list[Row]:
                 status=str(getattr(task, "status", "") or ""),
                 verdict=verdict_of(task),
                 detail=verdict_detail(task),
+                history=history_detail(task),
             )
         )
     rows.sort(key=lambda row: event_key(row.task_id))
@@ -337,7 +361,7 @@ class TimelinePanel(QWidget):
         status_item.setToolTip(f"task status · verdict {row.verdict.lower()} by the auditor")
 
         verdict_item = self._cell(index, 4, row.verdict, theme.VERDICT_HUE.get(row.verdict, theme.SLATE))
-        verdict_item.setToolTip(row.detail or "no audit verdict recorded")
+        verdict_item.setToolTip(row.history or row.detail or "no audit verdict recorded")
         self._cell(index, 5, row.detail or "—", theme.INK_DIM)
 
     def _cell(self, index: int, column: int, text: str, hue: str, align=None) -> QTableWidgetItem:
@@ -368,6 +392,7 @@ __all__ = [
     "TimelinePanel",
     "UNKNOWN",
     "event_key",
+    "history_detail",
     "summary_line",
     "tally",
     "tasks_of",

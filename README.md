@@ -8,7 +8,7 @@
   <img alt="Textual TUI" src="https://img.shields.io/badge/TUI-Textual-5A4FCF">
   <img alt="Team" src="https://img.shields.io/badge/team-16%20members-8%20free%20opencode-c084fc">
   <img alt="Relay chains" src="https://img.shields.io/badge/chains-4%20bundled-0ea5e9">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-619%20passing-0A9EDC?logo=pytest&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-708%20passing-0A9EDC?logo=pytest&logoColor=white">
 </p>
 
 # Hexmind
@@ -293,7 +293,7 @@ and `--assign pinned`.
 > 30-minute default: `hexmind --audit --timeout 5400`.
 
 **`opencode-team`, `fix-review` and `audit` are how this project builds itself** — see
-[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md). Every stage is pinned to a specific model, on purpose:
+[`docs/plans/BUILD-PATH.md`](docs/plans/BUILD-PATH.md). Every stage is pinned to a specific model, on purpose:
 the builder is never the reviewer, and the two auditors fail in opposite directions — one hunts
 what is *wrong*, one hunts what is *missing*.
 
@@ -572,7 +572,7 @@ with a `ModuleNotFoundError`.
 > required on every `/api/` request and on `/ws/room`. CORS is restricted to `localhost:8765` and
 > `127.0.0.1:8765` by default; the permissive wildcard policy is removed. Agents run
 > with edits auto-accepted, so keep the server on a trusted network or behind a
-> proxy that authenticates. See [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md).
+> proxy that authenticates. See [`docs/plans/BUILD-PATH.md`](docs/plans/BUILD-PATH.md).
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -689,7 +689,7 @@ timeline
 ```
 
 Shipped here is proven by the suite; next is ordered by dependency. The full map lives in
-[`docs/BUILD-PATH.md`](docs/BUILD-PATH.md). What follows is the short version.
+[`docs/plans/BUILD-PATH.md`](docs/plans/BUILD-PATH.md). What follows is the short version.
 
 **Shipped**
 
@@ -725,29 +725,32 @@ Shipped here is proven by the suite; next is ordered by dependency. The full map
 
 The Qt desktop interface is actively evolving through the 10-phase Flagship Roadmap documented in our DaRipper Designed Document Format (D3F) handbooks:
 
-| Phase | Milestone | Focus | Handbook Reference |
+| Phase | Milestone | Focus | Status |
 |---|---|---|---|
-| **Phase 0** | **Foundation & Fixes** | Shipped ✅ — 11 tasks closed, server auth hardened, 619 tests passing | [Fixes Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md) |
-| **Phase 1** | **Frame & Foundation** | Desktop ergonomics, window geometry, standard accelerators | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **Phase 2** | **Live Wire** | Reactive signal bus, in-place DAG updates, turn lifecycle | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **Phase 3** | **The Foundry** | Advanced prompt engineering, draft plan editor, template library | [Feature Forge](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
-| **Phase 4** | **Battleground** | Peer audit review split, side-by-side diffing, escalation dialog | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **Phase 5** | **Roster & Identity** | Visual team manager, agent cards, model performance badges | [UX Architecture](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-ux-ideas.md) |
-| **Phase 6** | **Timeline & History** | Execution waterfall, turn scrubbing, replay slider | [Feature Forge](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
-| **Phase 7** | **Analytics & Scorecard** | Domain capability matrix, audit confidence graph | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **Phase 8** | **Command Center** | Command Palette 2.0 (fuzzy search, actions), custom keybindings | [Master Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) |
-| **Phase 9** | **Polish & Ship** | Responsive themes, desktop notifications, native packaging | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **Phase 0** | **Honest Instruments** | Lead/audit state, contrast-safe controls, palette activation | ✅ Complete |
+| **Phase 1** | **Shared Config** | Central TOML configuration and CLI/GUI defaults | ✅ Complete |
+| **Phase 2** | **Live Wire & Hand Brake** | Turn lifecycle, live meter, process-group cancellation | ✅ Complete |
+| **Phase 3** | **Bench Rail** | Room, Direct Line, Calibration Rack, and Settings navigation | ✅ Complete |
+| **Phase 4** | **Settings Page** | Persisted roster, audit, theme, and notification preferences | ✅ Complete |
+| **Phase 5** | **Agent Health** | Executable, credential, latency, and allowlisted read-only auth diagnostics | ✅ Complete |
+| **Phase 6** | **Calibration Rack** | Registry metadata and threaded model probe | ✅ Complete |
+| **Phase 7** | **Direct Line** | Direct one-to-one chat and Ask Another comparison | ✅ Complete |
+| **Phase 8** | **Polish & Hook Activation** | Palette refresh, graph selection, search, drawer, WCAG AA | ✅ Complete |
+| **Phase 9** | **Flagship Backlog** | Notifications, Live Tap streaming, and audit-round history | ✅ Complete |
+
+The authoritative phase definitions and implementation ledger are in the
+[Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md).
 
 Detailed agent implementation SOPs and preserved hooks architecture are maintained in the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md).
 
-**Next Engine Steps** — [`docs/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md) is the map, re-derived from the code;
-[`docs/OPENCODE-TEAM-PLAN.md`](file:///home/daripper/Projects/hexmind/docs/OPENCODE-TEAM-PLAN.md) is why any of this exists
+**Next Engine Steps** — [`docs/plans/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/plans/BUILD-PATH.md) is the map, re-derived from the code;
+[`docs/handbooks/OPENCODE-TEAM-PLAN.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/OPENCODE-TEAM-PLAN.md) is why any of this exists
 
 - [ ] **Per-model sessions.** Every model keeps its own conversation across turns, keyed
       `(model, directory)`. opencode sessions are directory-bound and *hang* rather than error,
       which is why the guard is day-one work and not a follow-up
-- [ ] **Live output.** A model is currently silent for up to thirty minutes while it thinks.
-      It should be visibly working
+- [x] **Live output.** Direct CLI stdout is streamed line-by-line into the Qt Live Pane, while
+      lifecycle events remain visible for backends without a stream protocol
 - [ ] **Per-model journals**, and the leader's over-provisioning advisor
 - [ ] **The local Ollama models** from the model report, with a per-model `think` flag
 - [ ] **Preference weighting** so the free opencode models are actually favoured
@@ -762,12 +765,12 @@ pip install -e ".[dev,qt,server]"
 python3 -m pytest tests
 ```
 
-619 tests, a fake backend, no model CLIs and no network. They cover plan
+708 tests, a fake backend, no model CLIs and no network. They cover plan
 parsing and the task graph (`test_core.py`), relay loading, rotation and worktrees
 (`test_relay.py`), the auditor and rankings (`test_auditor.py`,
 `test_audit_integration.py`), both backends with mocked subprocesses (`test_backends.py`,
 `test_hcom_backend.py`), nicknames (`test_nicknames.py`), the TUI running headless (`test_tui.py`),
-the Qt desktop window and widgets (`test_qt.py`, `test_qt_panels.py`), and the headless server
+the Qt desktop window and widgets (`tests/test_qt*.py`), and the headless server
 with loopback token authentication (`test_server.py`).
 
 <details>

@@ -25,6 +25,7 @@ __all__ = ["HexmindWidget"]
 for _module, _names in (
     (".graph", ("GraphPanel", "TaskGraphView")),
     (".timeline", ("TimelinePanel",)),
+    (".live", ("LivePane",)),
     (".stats", ("StatsPanel",)),
 ):
     try:
@@ -33,4 +34,3 @@ for _module, _names in (
     except Exception:  # pragma: no cover - panels are presentation only
         pass
 del _module, _names
-

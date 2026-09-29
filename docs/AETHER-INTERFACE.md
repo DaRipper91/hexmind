@@ -133,7 +133,7 @@ is the same default `--once` and the TUI use.
 
 ## Notes
 
-- Tracked as **P10** in [`docs/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md).
+- Tracked as **P10** in [`docs/plans/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/plans/BUILD-PATH.md).
 - Hexmind also ships a standalone desktop window ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) via `hexmind-gui`).
 - The TUI and server keep working untouched — Qt is purely additive.
 - The Flagship GUI Roadmap (Phases 0–9) extends this foundation with interactive DAG graph views, command palette, and timeline drawers while preserving the one-way embedding contract.

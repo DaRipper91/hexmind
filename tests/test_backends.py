@@ -5,8 +5,14 @@ import types
 
 import pytest
 
-from hexmind.backends import (DIRECT_CMDS, MAX_OUTPUT_BYTES, DirectBackend, HcomBackend,
-                              _read_capped, available)
+from hexmind.backends import (
+    DIRECT_CMDS,
+    MAX_OUTPUT_BYTES,
+    DirectBackend,
+    HcomBackend,
+    _read_capped,
+    available,
+)
 
 
 class FakePipe:
@@ -107,6 +113,18 @@ def test_timeout_kills_and_waits_for_child(monkeypatch, tmp_path):
     assert proc.killed and proc.waited
 
 
+def test_direct_backend_streams_stdout_lines(monkeypatch, tmp_path):
+    lines = []
+
+    async def create(*args, **kwargs):
+        return FakeProcess(args, stdout="first\nsecond\n")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    backend = DirectBackend(str(tmp_path), stream_callback=lambda agent, line: lines.append((agent, line)))
+    assert asyncio.run(backend.run("claude", "prompt")) == "first\nsecond\n"
+    assert lines == [("claude", "first"), ("claude", "second")]
+
+
 @pytest.mark.parametrize("stdout,stderr,expected", [
     ("useful stdout", "", "useful stdout"),
     ("ignored stdout", "useful stderr", "useful stderr"),
@@ -172,3 +190,40 @@ def test_direct_and_hcom_route_jules_without_hcom(monkeypatch, tmp_path):
     assert asyncio.run(DirectBackend(str(tmp_path)).run("jules", "prompt")) == "jules reply"
     assert asyncio.run(HcomBackend(str(tmp_path)).run("jules", "prompt")) == "jules reply"
     assert calls == [("prompt", str(tmp_path)), ("prompt", str(tmp_path))]
+
+
+def test_direct_backend_terminates_group_on_cancellation(monkeypatch, tmp_path):
+    """Task 2.3 & 2.4: cancellation terminates the process group."""
+    terminated = []
+
+    class HangingProc:
+        def __init__(self):
+            self.pid = 12345
+            self.returncode = None
+            self.stdin = types.SimpleNamespace(write=lambda p: None, drain=lambda: asyncio.sleep(0), close=lambda: None)
+            self.stdout = asyncio.StreamReader()
+            self.stderr = asyncio.StreamReader()
+
+        async def wait(self):
+            await asyncio.sleep(10)
+            return 0
+
+    async def fake_create(*args, **kwargs):
+        return HangingProc()
+
+    async def fake_terminate(proc):
+        terminated.append(proc.pid)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr("hexmind.backends._terminate_group", fake_terminate)
+
+    async def _runner():
+        backend = DirectBackend(str(tmp_path))
+        task = asyncio.create_task(backend.run("claude", "hi"))
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_runner())
+    assert terminated == [12345]

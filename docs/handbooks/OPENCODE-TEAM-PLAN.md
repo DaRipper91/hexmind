@@ -4,12 +4,12 @@
 
 It was written 2026-09-27 against commit `0897b1c` (baseline `107 passed, 1 skipped`) and its
 R1–R11 requirements are still the reason any of this exists. For *what is actually built*, read
-[`BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
+[`BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/plans/BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
 state. For the desktop graphical workstation and preserved assets, consult the
 [`PONYTAIL-MASTER-HANDBOOK.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and [`Flagship GUI Roadmap`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md). Where documents disagree, this file describes intent and BUILD-PATH describes reality.
 
 **Baseline when written:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
-**Now:** `619 passed` on `main` at `ed0db64`, Python 3.14 (full PySide6 Qt GUI suite, headless server loopback/auth hardening, and 11 reliability fixes).
+**Current worktree:** `705 passed` on 2026-09-29 (full PySide6 Qt GUI suite, headless server loopback/auth hardening, and the completed safe GUI roadmap increments). The historical `main` baseline below remains `619 passed`.
 
 Two places below are known to be superseded, and are marked as such where they appear:
 
@@ -867,7 +867,7 @@ when that matters.
   ```bash
   opencode run --model opencode/nemotron-3-ultra-free \
     -f docs/model-updates.md \
-    -f docs/OPENCODE-TEAM-PLAN.md \
+    -f docs/handbooks/OPENCODE-TEAM-PLAN.md \
     "Perform a rigorous technical audit of these two documents. Focus on architecture feasibility, failure modes, concurrency on 8GB RAM, and any missing edge cases in Phase 0 (P0) and Phase 1 (P1)."
   ```
 
@@ -877,8 +877,8 @@ when that matters.
 * **Dispatch Command:**
   ```bash
   opencode run --model opencode/big-pickle \
-    -f docs/OPENCODE-TEAM-PLAN.md \
-    "Execute Phase 0 (P0) from docs/OPENCODE-TEAM-PLAN.md. Create hexmind/models.toml and hexmind/models.py with full test coverage in tests/test_models.py. Ensure all existing 107 tests continue to pass."
+    -f docs/handbooks/OPENCODE-TEAM-PLAN.md \
+    "Execute Phase 0 (P0) from docs/handbooks/OPENCODE-TEAM-PLAN.md. Create hexmind/models.toml and hexmind/models.py with full test coverage in tests/test_models.py. Ensure all existing 107 tests continue to pass."
   ```
 
 ### 3. Post-Build Critic & Code Auditor (Verification)
@@ -890,7 +890,7 @@ when that matters.
   # Step A: LongCat verifies full plan compliance across the entire diff
   git diff main > /tmp/hexmind_implementation.diff
   opencode run --model opencode/longcat-2.5-preview-free \
-    -f docs/OPENCODE-TEAM-PLAN.md \
+    -f docs/handbooks/OPENCODE-TEAM-PLAN.md \
     -f /tmp/hexmind_implementation.diff \
     "Verify that every requirement (R1-R7) and defect (D1-D6) in the plan is addressed in this diff with zero missing implementations."
 
@@ -951,5 +951,3 @@ The Opencode models (specifically leveraging `opencode/muse-spark-1.3-contributo
 | **2. Build** | **`opencode/big-pickle`** | Relentless full-stack TDD execution, tests-first implementation, no hand-waving | `opencode/nemotron-3.5-lightning-free` *(fast fixes)* |
 | **3. Post-Audit** | **`opencode/nemotron-3-ultra-free`** | Adversarial code review, security, AST scrutiny, contract verification | `opencode/longcat-2.5-preview-free` *(diff compliance)* |
 | **Meta-Authoring**| **`opencode/muse-spark-1.3-contributor-free`** | Standardized `SKILL.md` skill sets and chain definition authoring | `opencode/space-bunny-free` *(lateral ideation)* |
-
-

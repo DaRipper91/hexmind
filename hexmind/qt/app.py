@@ -20,18 +20,27 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
+import time
 from typing import Any
 
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
+    QSystemTrayIcon,
     QWidget,
 )
 
+from .. import config
 from . import theme
+from .chat import DirectLine
+from .models import CalibrationRack
+from .rail import BenchRail
+from .settings import SettingsPage
 
 APP_NAME = "Hexmind"
 ORG_NAME = "hexmind"
@@ -48,9 +57,37 @@ class HexmindWindow(QMainWindow):
         # `room` is injectable so a test can stand a window up around a stub, and so the window is
         # never the reason a room fails to build.
         self.room = room if room is not None else self._build_room(**room_kwargs)
-        self.setCentralWidget(self.room)
+        self.settings_page = SettingsPage(parent=self)
+        self.calibration_rack = CalibrationRack(parent=self)
+        self.direct_line = DirectLine(parent=self)
+        self.bench_rail = BenchRail(
+            self.room,
+            self,
+            workspace_pages={
+                "Direct Line": self.direct_line,
+                "Calibration Rack": self.calibration_rack,
+                "Settings": self.settings_page,
+            },
+        )
+        self.setCentralWidget(self.bench_rail)
+        self._turn_started_at: float | None = None
+        self._notification_defaults = config.get_notification_defaults()
+        self.tray_icon: QSystemTrayIcon | None = None
+        self._setup_notifications()
+        open_file_requested = getattr(self.room, "openFileRequested", None)
+        connect = getattr(open_file_requested, "connect", None)
+        if callable(connect):
+            connect(self.open_path)
         self._build_menus()
         self.statusBar().showMessage(f"working in {getattr(self.room, 'cwd', os.getcwd())}")
+        try:
+            from PySide6.QtCore import QByteArray
+
+            gui_cfg = config.load_config().get("gui", {})
+            if "geometry" in gui_cfg:
+                self.restoreGeometry(QByteArray.fromHex(gui_cfg["geometry"].encode("ascii")))
+        except (OSError, TypeError, ValueError):
+            self.statusBar().showMessage("Could not restore saved window geometry")
 
     def _build_room(self, **room_kwargs: Any) -> QWidget:
         """Stand up the room with an audit ledger wired in.
@@ -90,11 +127,13 @@ class HexmindWindow(QMainWindow):
         self.refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
         self.refresh_action.triggered.connect(self._refresh_team)
         room_menu.addAction(self.refresh_action)
-        # Ctrl+K is the palette. It is listed here so the shortcut is discoverable; the widget
-        # already owns the live QShortcut, and building a second one here would double-fire.
+        # Phase 0.4 (P11): the menu entry opens the room's palette. It carries no QKeySequence
+        # of its own — the widget owns the single live Ctrl+K QShortcut — so a menu click opens
+        # the palette once instead of double-firing it. Duck-typed like every action here, so a
+        # partial room answers without raising.
         self.palette_action = QAction("Command palette (Ctrl+K)…", self)
-        self.palette_action.setEnabled(False)
         self.palette_action.setToolTip("Ctrl+K")
+        self.palette_action.triggered.connect(self._open_palette)
         room_menu.addAction(self.palette_action)
         self.stats_action = QAction("Reload &stats", self)
         self.stats_action.triggered.connect(self._reload_stats)
@@ -105,6 +144,57 @@ class HexmindWindow(QMainWindow):
         self.about_action.triggered.connect(self._about)
         help_menu.addAction(self.about_action)
 
+    def _setup_notifications(self) -> None:
+        turn_state = getattr(self.room, "turnState", None)
+        connect = getattr(turn_state, "connect", None)
+        if callable(connect):
+            connect(self._on_turn_state)
+
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        tray = QSystemTrayIcon(QIcon.fromTheme("dialog-information"), self)
+        tray.setToolTip(APP_NAME)
+        menu = QMenu(self)
+        show_action = menu.addAction("Show Hexmind")
+        show_action.triggered.connect(self.showNormal)
+        menu.addSeparator()
+        quit_action = menu.addAction("Quit")
+        quit_action.triggered.connect(self.close)
+        tray.setContextMenu(menu)
+        tray.show()
+        self.tray_icon = tray
+
+    def _on_turn_state(self, in_flight: bool) -> None:
+        if in_flight:
+            self._turn_started_at = time.monotonic()
+            return
+        started = self._turn_started_at
+        self._turn_started_at = None
+        if started is None:
+            return
+        elapsed = time.monotonic() - started
+        if elapsed < self._notification_defaults.threshold_seconds:
+            return
+
+        title = f"{APP_NAME} turn complete"
+        body = f"Finished after {round(elapsed)} seconds."
+        if self.tray_icon is not None:
+            self.tray_icon.showMessage(
+                title,
+                body,
+                QSystemTrayIcon.MessageIcon.Information,
+                5000,
+            )
+        if self._notification_defaults.phone_buzz:
+            from ..notify import notify
+
+            threading.Thread(
+                target=notify,
+                args=(title, body),
+                name="hexmind-notification",
+                daemon=True,
+            ).start()
+
     # ---------- actions, all duck-typed so a stub room works too ----------
 
     def open_path(self, path: str) -> None:
@@ -114,11 +204,11 @@ class HexmindWindow(QMainWindow):
             return
         try:
             if sys.platform == "darwin":
-                subprocess.Popen(["open", path])  # noqa: S603,S607 - fixed argv, no shell
+                subprocess.Popen(["open", path])
             elif os.name == "nt":
-                os.startfile(path)  # type: ignore[attr-defined]  # noqa: S606 - the documented way
+                os.startfile(path)  # type: ignore[attr-defined]
             else:
-                subprocess.Popen(["xdg-open", path])  # noqa: S603,S607 - fixed argv, no shell
+                subprocess.Popen(["xdg-open", path])
         except Exception as exc:  # noqa: BLE001 - presentation must not crash the room
             QMessageBox.warning(self, "Could not open file", f"{path}\n\n{exc}")
 
@@ -132,6 +222,11 @@ class HexmindWindow(QMainWindow):
         refresh = getattr(self.room, "refresh_team", None)
         if callable(refresh):
             refresh()
+
+    def _open_palette(self) -> None:
+        opener = getattr(self.room, "open_palette", None)
+        if callable(opener):
+            opener()
 
     def _reload_stats(self) -> None:
         stats = getattr(self.room, "stats", None)
@@ -153,9 +248,13 @@ class HexmindWindow(QMainWindow):
         """The room is a QThread, and a QThread destroyed while running aborts the process. The
         widget's own `closeEvent` stops it, and Qt walks central widgets, so this only has to make
         sure the widget actually gets the event."""
-        central = self.centralWidget()
-        if central is not None:
-            central.close()
+        self.room.close()
+        try:
+            from .. import config
+            geo = bytes(self.saveGeometry().toHex()).decode("ascii")
+            config.save_section("gui", {"geometry": geo})
+        except (OSError, TypeError, ValueError):
+            self.statusBar().showMessage("Could not save window geometry")
         super().closeEvent(event)
 
 
@@ -180,16 +279,32 @@ def main(argv: list[str] | None = None) -> int:
     """Build the application, the window and the room, then hand control to Qt."""
     args = build_parser().parse_args(argv)
 
-    # `available` lives in `backends`, not `core` — same split `hexmind/__main__.py` uses. And the
-    # dots are `..` not `.`: from inside `hexmind/qt/`, a single dot is `hexmind.qt`, so getting
-    # either wrong is a ModuleNotFoundError on the first executed line of `main()`.
+    from .. import config
     from ..backends import available
     from ..core import OPT_IN, ROSTER
+
+    room_cfg = config.load_config().get("room", {})
+    lead = args.lead
+    if lead is None and room_cfg.get("lead"):
+        lead = str(room_cfg["lead"])
+
+    audit = args.audit
+    if not audit and "audit" in room_cfg and not any(arg.startswith("--audit") for arg in (argv or sys.argv[1:])):
+        audit = bool(room_cfg["audit"])
 
     cwd = os.path.abspath(args.cwd or os.getcwd())
     # The widget discovers the roster itself when `members` is None, but the --without/--with
     # filters have already been applied here, so pass the filtered list through.
-    members = [m for m in available(list(ROSTER)) if m not in args.without
+    configured_members = room_cfg.get("members")
+    default_members = list(ROSTER)
+    if (
+        not args.without
+        and not args.with_
+        and isinstance(configured_members, list)
+        and all(isinstance(member, str) for member in configured_members)
+    ):
+        default_members = configured_members
+    members = [m for m in available(default_members) if m not in args.without
                and (m not in OPT_IN or m in args.with_)]
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
@@ -211,11 +326,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    if args.lead is not None and args.lead not in members:
+    if lead is not None and lead not in members:
         QMessageBox.critical(
             None,
             "That lead is not installed",
-            f"'{args.lead}' is not one of the installed members:\n\n  "
+            f"'{lead}' is not one of the installed members:\n\n  "
             + ", ".join(members),
         )
         return 1
@@ -224,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     # a second one would hand the first window's closeEvent to the room when that window is garbage
     # collected -- which stops the room's QThread out from under the window we are about to show.
     try:
-        window = HexmindWindow(members=members, lead=args.lead, audit=args.audit, cwd=cwd)
+        window = HexmindWindow(members=members, lead=lead, audit=audit, cwd=cwd)
     except Exception as exc:  # noqa: BLE001 - a bad flag should not be a bare traceback
         QMessageBox.critical(None, f"{APP_NAME} could not start", str(exc))
         return 1

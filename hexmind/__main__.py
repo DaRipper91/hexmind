@@ -44,6 +44,11 @@ def main() -> None:
         sys.exit("No team members available. Install at least one agent CLI (claude, agy, codex, "
                  "opencode, copilot, kimi) and make sure it is on your PATH.")
 
+    from . import config
+    room_cfg = config.load_config().get("room", {})
+    if args.lead is None and room_cfg.get("lead"):
+        args.lead = str(room_cfg["lead"])
+
     # No default lead. A hardcoded one is wrong twice over: it crashes when that model is not
     # installed (a commit set it to nemotron-ultra and made hexmind refuse to start for anyone
     # without the opencode CLI), and it silently picks the room's spokesperson for the user. The

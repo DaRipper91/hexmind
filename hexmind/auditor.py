@@ -14,7 +14,7 @@ import logging
 import os
 import re
 import time
-from typing import Callable, Any
+from typing import Any, Callable
 
 from .core import clip
 
@@ -240,6 +240,14 @@ async def audited_run(
 
         passed, issues = parse_verdict(audit_out)
         last_issues = issues
+        history = getattr(task, "audit_history", None)
+        if isinstance(history, list):
+            history.append({
+                "round": round_idx + 1,
+                "auditor": auditor,
+                "verdict": "PASS" if passed else "FAIL",
+                "issues": issues,
+            })
 
         # Record stats only for the first verdict (first-attempt quality)
         if round_idx == 0:

@@ -1,12 +1,13 @@
 import asyncio
+from dataclasses import dataclass, field
 
 import pytest
-from dataclasses import dataclass
+
 from hexmind.auditor import (
     Stats,
-    pick_auditor,
-    parse_verdict,
     audited_run,
+    parse_verdict,
+    pick_auditor,
 )
 
 
@@ -23,6 +24,7 @@ class DummyTask:
     audit: str | None = None
     auditor: str | None = None
     output: str = ""
+    audit_history: list[dict[str, object]] = field(default_factory=list)
 
 
 class FakeBackend:
@@ -139,6 +141,10 @@ async def _test_audited_run_revision_and_fix(tmp_path):
 
     assert out == "def hello(): return 2"
     assert task.audit == "fixed"
+    assert task.audit_history == [
+        {"round": 1, "auditor": "agy", "verdict": "FAIL", "issues": "- should return 2"},
+        {"round": 2, "auditor": "agy", "verdict": "PASS", "issues": "Fixed."},
+    ]
     assert stats.score("claude", "implementation") == 1 / 3  # (0+1)/(0+1+2)
 
 

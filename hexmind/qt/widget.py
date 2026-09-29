@@ -26,11 +26,12 @@ import atexit
 import logging
 import os
 import threading
+import time
 import weakref
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -59,6 +60,10 @@ from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task
 
 TASK_COLUMNS = ("id", "agent", "status", "audit", "title")
 TEAM_COLUMNS = ("model", "state", "domains")
+# Phase 0.1: the lead box shows the room's true state. With no lead there is nothing to plan
+# with, so index 0 says so instead of silently pre-selecting the first member — which would
+# look chosen without ever going through `set_lead`, the only door to the lead.
+NO_LEAD_PLACEHOLDER = "(no lead — parallel turn)"
 # A task title is prose, so a "path" is only emitted on something that reads like one: no spaces, a
 # separator, and a code-ish tail. Guessing here would open nonsense in the host editor.
 _PATHISH = ("py", "toml", "md", "txt", "json", "yaml", "yml", "rs", "go", "ts", "tsx", "js", "c", "h")
@@ -117,6 +122,8 @@ class _Room(QThread):
     taskChanged = Signal(object)    # core.Task
     teamChanged = Signal()          # the roster may have changed; ask for a snapshot
     turnState = Signal(bool)        # True while a turn is in flight
+    turnProgress = Signal(str, str) # model/agent, status_text (Phase 2.1)
+    liveOutput = Signal(str, str)   # model/agent, one stdout line
 
     def __init__(self, backend: Any, members: list[str], lead: str | None, audit: bool,
                  cwd: str, stats: Any | None = None) -> None:
@@ -128,12 +135,15 @@ class _Room(QThread):
         # submit while a turn is running, so the two are serialised here rather than in the loop.
         self._orch_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._current_task: asyncio.Task | None = None
         # `stats` is injected, not resolved here, for the same reason the TUI injects it
         # (`tui.py:520`): where the ledger lives is policy, and policy belongs to whoever
         # built the front-end. This is the room, not the application. Passing `None` is a valid
         # choice — it means "this session records no audit history", not "this is broken".
         self.orch = Orchestrator(backend, list(members), lead, emit=self._emit, audit=audit,
                                  stats=stats)
+        if hasattr(backend, "stream_callback"):
+            backend.stream_callback = self._emit_live_output
         self._turn_in_flight = False  # serialises submit() calls (no Qt equivalent of is_busy)
         _LIVE_ROOMS.add(self)
 
@@ -148,6 +158,11 @@ class _Room(QThread):
         elif kind == "plan":
             for task in data.get("tasks", []):
                 self.taskChanged.emit(task)
+        elif kind == "status":
+            self.turnProgress.emit(str(data.get("agent", "")), str(data.get("state", "")))
+
+    def _emit_live_output(self, agent: str, line: str) -> None:
+        self.liveOutput.emit(agent, line)
 
     # ---------- thread lifecycle ----------
     def run(self) -> None:
@@ -182,14 +197,27 @@ class _Room(QThread):
                 return
             asyncio.run_coroutine_threadsafe(self._set_lead(name), self._loop)
 
+    def cancel_turn(self) -> None:
+        """Cancel any in-flight turn safely across thread boundaries (Phase 2.3)."""
+        loop = self._loop
+        if loop is not None and loop.is_running():
+            def _cancel():
+                if self._current_task is not None and not self._current_task.done():
+                    self._current_task.cancel()
+            loop.call_soon_threadsafe(_cancel)
+
     # ---------- what the room does, on its own thread ----------
     async def _handle(self, text: str) -> None:
         self.turnState.emit(True)
+        self._current_task = asyncio.current_task()
         try:
             await self.orch.handle(text)
+        except asyncio.CancelledError:
+            self.message.emit("hexmind", "⏹️ Turn cancelled.")
         except Exception as e:  # a turn must not take the widget down with it
             self.message.emit("hexmind", f"**Error:** {e}")
         finally:
+            self._current_task = None
             self.turnState.emit(False)
             self.teamChanged.emit()
             self._turn_in_flight = False
@@ -268,17 +296,31 @@ class HexmindWidget(QWidget):
             backend = DirectBackend(self.cwd)
         self.members = list(members)
         self.lead = lead
+        self._active_agent: str | None = None
+        self._active_state: str | None = None
+        self._turn_start_time: float | None = None
 
         self._build_ui()
+        # Phase 0.2: the checkbox shows the orchestrator's true state from the first frame.
+        # Set before the room exists and before `stateChanged` is connected, so this is a
+        # display of the `audit` argument, not a toggle event — the room is built with it.
+        self.auditBox.setChecked(bool(audit))
         self._room = _Room(backend, self.members, lead, audit, self.cwd, stats)
         self._room.message.connect(self._on_message)
         self._room.taskChanged.connect(self._on_task)
         self._room.teamChanged.connect(self.refresh_team)
+        self._room.teamChanged.connect(self._refresh_palette_commands)
         self._room.turnState.connect(self._on_turn_state)
+        self._room.turnProgress.connect(self._on_turn_progress)
+        self._room.liveOutput.connect(self._on_live_output)
         self._room.start()
         self._room.wait_until_ready()
         # Wire the audit checkbox to the orchestrator (Task 5).
         self.auditBox.stateChanged.connect(self._on_audit_toggle)
+        # Live Turn Meter timer (Phase 2.2)
+        self._turn_timer = QTimer(self)
+        self._turn_timer.setInterval(1000)
+        self._turn_timer.timeout.connect(self._update_turn_meter)
         # Defence in depth for the embed case. `closeEvent` is the tidy path, but a host that
         # embeds this and exits without closing it — a shell that stops its own workers and not
         # its guests' — would take the process down with "QThread: Destroyed while thread is still
@@ -297,6 +339,7 @@ class HexmindWidget(QWidget):
         try:
             from .palette import install_palette
             self._palette = install_palette(self)
+            self._refresh_palette_commands()
         except Exception:  # pragma: no cover - presentation only
             self._palette = None
 
@@ -333,17 +376,25 @@ class HexmindWidget(QWidget):
         self.status = QLabel("ready")
         self.status.setAccessibleName("Status")
 
+        self.turnMeter = QLabel("")
+        self.turnMeter.setObjectName("turnMeter")
+        self.turnMeter.setAccessibleName("Turn Meter")
+
         bar = QHBoxLayout()
         bar.addWidget(QLabel("Lead:"))
         bar.addWidget(self.leadBox, 1)
         bar.addWidget(self.auditBox)
         bar.addWidget(self.status)
+        bar.addWidget(self.turnMeter)
         lay.addLayout(bar)
 
         self.transcript = QPlainTextEdit()
         self.transcript.setReadOnly(True)
         self.transcript.setAccessibleName("Conversation")
         self.transcript.setMaximumBlockCount(2000)  # a long session must not grow without bound
+        from .live import LivePane
+
+        self.live_tap = LivePane()
 
         self.input = QLineEdit()
         self.input.setAccessibleName("Ask the team")
@@ -351,9 +402,15 @@ class HexmindWidget(QWidget):
         self.input.returnPressed.connect(self.send)
         self.sendButton = QPushButton("Send")
         self.sendButton.clicked.connect(self.send)
+        self.stopButton = QPushButton("Stop ■")
+        self.stopButton.setObjectName("stopButton")
+        self.stopButton.setAccessibleName("Stop Turn")
+        self.stopButton.setEnabled(False)
+        self.stopButton.clicked.connect(self.cancel)
         row = QHBoxLayout()
         row.addWidget(self.input, 1)
         row.addWidget(self.sendButton)
+        row.addWidget(self.stopButton)
 
         self.tasks = _table(TASK_COLUMNS, "Tasks")
         self.tasks.itemDoubleClicked.connect(self._on_task_activated)
@@ -373,6 +430,11 @@ class HexmindWidget(QWidget):
         self.detail.setAccessibleName("Task detail")
         self.detail.setToolTip("Selected task instructions + output, rendered as markdown.")
         self.detail.setOpenExternalLinks(False)
+        self.detail_toggle = QPushButton("Task detail", self)
+        self.detail_toggle.setAccessibleName("Toggle task detail")
+        self.detail_toggle.setCheckable(True)
+        self.detail_toggle.setChecked(True)
+        self.detail_toggle.toggled.connect(self.detail.setVisible)
         # Advanced: transcript search (plain-text find, no new deps).
         self.searchBox = QLineEdit()
         self.searchBox.setAccessibleName("Search conversation")
@@ -380,6 +442,16 @@ class HexmindWidget(QWidget):
         self.searchBox.setClearButtonEnabled(True)
         self.searchBox.textChanged.connect(self._on_search)
         self._search_hits: list = []
+        self.search_previous = QPushButton("Previous", self)
+        self.search_previous.setAccessibleName("Previous conversation match")
+        self.search_previous.clicked.connect(lambda: self._find_match(backward=True))
+        self.search_next = QPushButton("Next", self)
+        self.search_next.setAccessibleName("Next conversation match")
+        self.search_next.clicked.connect(self._find_match)
+        search_row = QHBoxLayout()
+        search_row.addWidget(self.searchBox, 1)
+        search_row.addWidget(self.search_previous)
+        search_row.addWidget(self.search_next)
 
         # Advanced: slash-command completer, same vocabulary as relay HELP + /team family.
         self._commands = ["/relay", "/chains", "/audit", "/ranks", "/drafts", "/approve",
@@ -417,6 +489,7 @@ class HexmindWidget(QWidget):
         right.setDocumentMode(True)
         right.addTab(self.team, "Team")
         right.addTab(self.tasks, "Tasks")
+        right.addTab(self.live_tap, "Live Tap")
         if self.graph is not None:
             right.addTab(self.graph, "Graph")
         if self.timeline is not None:
@@ -430,7 +503,8 @@ class HexmindWidget(QWidget):
         leftLayout = QVBoxLayout(left)
         leftLayout.setContentsMargins(0, 0, 0, 0)
         leftLayout.addWidget(self.transcript, 1)
-        leftLayout.addWidget(self.searchBox)
+        leftLayout.addLayout(search_row)
+        leftLayout.addWidget(self.detail_toggle)
         leftLayout.addWidget(self.detail, 1)
         leftLayout.addLayout(row)
         split.addWidget(left)
@@ -459,6 +533,8 @@ class HexmindWidget(QWidget):
         # which is the spelling every PySide6 release accepts.
         clear = QShortcut(QKeySequence("Ctrl+L"), self)
         clear.activated.connect(self._clear_transcript)
+        find = QShortcut(QKeySequence("Ctrl+F"), self)
+        find.activated.connect(self._focus_search)
 
     # ---------- talking to the room ----------
     def send(self) -> None:
@@ -468,28 +544,57 @@ class HexmindWidget(QWidget):
             self._submit(text)
 
     def _submit(self, text: str) -> None:
-        if not self.lead:
-            self._on_message("hexmind", "**No lead.** Pick one in the Lead box first — the room has "
-                                         "nobody to plan with.")
-            self.leadBox.setFocus()
-            return
         if text.startswith("/"):
             # A command that can change the room without asking it anything is the way out of a
             # wedged state, exactly as in the TUI.
             self._on_message("you", text)
             self._room.submit(text)
             return
+        if not self.lead:
+            self._on_message("hexmind", "**No lead.** Pick one in the Lead box first — the room has "
+                                         "nobody to plan with.")
+            self.leadBox.setFocus()
+            return
         self._on_message("you", text)
         self._room.submit(text)
 
     def _on_lead_picked(self, name: str) -> None:
-        if not name or name == self.lead:
+        if not name or name == self.lead or name == NO_LEAD_PLACEHOLDER:
             return
         self.lead = name
         self._room.change_lead(name)
 
+    def open_palette(self) -> None:
+        """Menu entry point for the Ctrl+K palette (Phase 0.4).
+
+        Duck-typed through `_palette` so a room whose palette failed to install — the lazy
+        try/except in `__init__` — still answers a menu click without raising."""
+        opener = getattr(getattr(self, "_palette", None), "open_palette", None)
+        if callable(opener):
+            opener()
+
+    def cancel(self) -> None:
+        """Cancel any active turn in flight (Phase 2.3)."""
+        if hasattr(self, "_room"):
+            self._room.cancel_turn()
+
     def _on_turn_state(self, busy: bool) -> None:
-        self.status.setText("working…" if busy else "ready")
+        if busy:
+            self.status.setText("working…")
+            self._active_agent = self.lead
+            self._active_state = "working"
+            self._turn_start_time = time.monotonic()
+            self.stopButton.setEnabled(True)
+            self._update_turn_meter()
+            self._turn_timer.start()
+        else:
+            self._turn_timer.stop()
+            self._turn_start_time = None
+            self._active_agent = None
+            self._active_state = None
+            self.status.setText("ready")
+            self.turnMeter.setText("")
+            self.stopButton.setEnabled(False)
         self.input.setEnabled(not busy)  # one request at a time, as the TUI's turn lock does
         self.sendButton.setEnabled(not busy)
         if not busy and self.stats is not None:
@@ -498,11 +603,38 @@ class HexmindWidget(QWidget):
             # half-updated copy of it.
             self.stats.reload()
 
+    def _on_turn_progress(self, agent: str, state: str) -> None:
+        """Track granular status progression from the orchestrator (Phase 2.1)."""
+        if agent:
+            self._active_agent = agent
+        if state:
+            self._active_state = state
+        if agent or state:
+            self.live_tap.append_event(agent or "team", state or "working")
+        if self._turn_start_time is not None:
+            self._update_turn_meter()
+
+    def _on_live_output(self, agent: str, line: str) -> None:
+        self.live_tap.append_event(agent, line)
+
+    def _update_turn_meter(self) -> None:
+        """Update turn meter badge: [● claude · planning · 0:42] (Phase 2.2)."""
+        if self._turn_start_time is None:
+            self.turnMeter.setText("")
+            return
+        elapsed = max(0, int(time.monotonic() - self._turn_start_time))
+        mins = elapsed // 60
+        secs = elapsed % 60
+        agent = self._active_agent or self.lead or "team"
+        state = self._active_state or "working"
+        self.turnMeter.setText(f"[● {agent} · {state} · {mins}:{secs:02d}]")
+
     # ---------- what the room says back ----------
     def _on_message(self, who: str, text: str) -> None:
         label = "you" if who == "you" else (who or "hexmind")
         self.transcript.appendPlainText(f"{label}: {text}")
         self.transcript.verticalScrollBar().setValue(self.transcript.verticalScrollBar().maximum())
+        self.live_tap.append_message(label, text)
         # Advanced: last message doubles as detail preview (markdown-rendered).
         try:
             self.detail.setMarkdown(f"**{label}**\n\n{text}")
@@ -523,12 +655,31 @@ class HexmindWidget(QWidget):
         try:
             if not needle:
                 return
-            doc = self.transcript.document()
-            cursor = doc.find(needle)
-            if not cursor.isNull():
-                self.transcript.setTextCursor(cursor)
+            self._find_match()
         except Exception:
             pass
+
+    def _focus_search(self) -> None:
+        self.searchBox.setFocus()
+        self.searchBox.selectAll()
+
+    def _find_match(self, backward: bool = False) -> None:
+        needle = self.searchBox.text().strip()
+        if not needle:
+            return
+        doc = self.transcript.document()
+        cursor = self.transcript.textCursor()
+        found = doc.find(needle, cursor, QTextDocument.FindFlag.FindBackward if backward else
+                         QTextDocument.FindFlag(0))
+        if found.isNull():
+            origin = QTextCursor(doc)
+            if backward:
+                origin.movePosition(QTextCursor.MoveOperation.End)
+                found = doc.find(needle, origin, QTextDocument.FindFlag.FindBackward)
+            else:
+                found = doc.find(needle, origin)
+        if not found.isNull():
+            self.transcript.setTextCursor(found)
 
     def _on_task_selected(self, item: QTableWidgetItem) -> None:
         row = item.row()
@@ -548,6 +699,10 @@ class HexmindWidget(QWidget):
                 self.detail.setMarkdown(body)
             except Exception:
                 self.detail.setPlainText(body)
+            if getattr(self, "graph", None) is not None and hasattr(self.graph, "select_task"):
+                self.graph.select_task(tid)
+                if hasattr(self.graph, "fit"):
+                    self.graph.fit()
         except Exception:
             pass
 
@@ -562,7 +717,13 @@ class HexmindWidget(QWidget):
             if column == 0:
                 item.setData(Qt.ItemDataRole.UserRole, task.id)
             self.tasks.setItem(row, column, item)
-        self._refresh_graph()
+        if getattr(self, "graph", None) is not None and hasattr(self.graph, "update_task"):
+            try:
+                self.graph.update_task(task)
+            except Exception:  # noqa: BLE001
+                self._refresh_graph()
+        else:
+            self._refresh_graph()
         self._refresh_timeline()
 
     def _on_task_activated(self, item: QTableWidgetItem) -> None:
@@ -574,6 +735,18 @@ class HexmindWidget(QWidget):
         path = _looks_like_path(title_item.text() if title_item else "")
         if path:
             self.openFileRequested.emit(path)
+
+    def _refresh_palette_commands(self) -> None:
+        """Keep the palette's per-agent actions aligned with the live roster."""
+        palette = getattr(self, "_palette", None)
+        if palette is None or not hasattr(palette, "set_commands"):
+            return
+        try:
+            from .palette import palette_commands
+
+            palette.set_commands(palette_commands(self))
+        except Exception:
+            return
 
     def _row_of(self, table: QTableWidget, key: str) -> int:
         for row in range(table.rowCount()):
@@ -589,9 +762,13 @@ class HexmindWidget(QWidget):
         self.lead = lead
 
         # The lead box is repopulated from the roster; a signal blocker keeps that from looking like
-        # a user picking a lead, which would call set_lead on every refresh.
+        # a user picking a lead, which would call set_lead on every refresh. With no lead the
+        # placeholder sits at index 0 and is selected, so the box reads as unset, not as the
+        # first member being chosen.
         blocker = self.leadBox.blockSignals(True)
         self.leadBox.clear()
+        if lead is None:
+            self.leadBox.addItem(NO_LEAD_PLACEHOLDER)
         self.leadBox.addItems(members)
         if lead in members:
             self.leadBox.setCurrentText(lead)
@@ -625,6 +802,7 @@ class HexmindWidget(QWidget):
 
     def _clear_transcript(self) -> None:
         self.transcript.clear()
+        self.live_tap.clear()
         try:
             self.detail.clear()
         except Exception:
