@@ -8,6 +8,7 @@ import sys
 
 from .backends import DirectBackend, HcomBackend, available
 from .core import ROSTER, Orchestrator
+from .desktop import install_desktop_entry
 
 
 def main() -> None:
@@ -34,7 +35,17 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8765, help="server port (default: 8765)")
     p.add_argument("--token", default=None, metavar="TOKEN",
                    help="auth token for the server; required off loopback (or set HEXMIND_TOKEN)")
+    p.add_argument("--install-desktop", action="store_true",
+                   help="install a per-user desktop menu entry for hexmind-gui")
     args = p.parse_args()
+
+    if args.install_desktop:
+        try:
+            desktop_path = install_desktop_entry()
+        except (OSError, ValueError) as exc:
+            sys.exit(f"hexmind: {exc}")
+        print(f"Installed desktop entry: {desktop_path}")
+        return
 
     from .core import OPT_IN
     members = [m for m in available(list(ROSTER)) if m not in args.without

@@ -424,6 +424,21 @@ def test_parser_defaults():
     assert args.cwd is None
 
 
+def test_parser_includes_desktop_install_action():
+    args = A.build_parser().parse_args(["--install-desktop"])
+    assert args.install_desktop is True
+
+
+def test_install_desktop_action_precedes_qt_and_roster_startup(monkeypatch, tmp_path, capsys):
+    desktop_path = tmp_path / "applications" / "hexmind-gui.desktop"
+    monkeypatch.setattr(A, "install_desktop_entry", lambda: desktop_path)
+    monkeypatch.setattr(A.config, "load_config", lambda: pytest.fail("config must not load"))
+
+    assert A.main(["--install-desktop"]) == 0
+    assert capsys.readouterr().out.strip() == f"Installed desktop entry: {desktop_path}"
+
+
+
 def test_parser_accumulates_repeated_filters():
     args = A.build_parser().parse_args(["--without", "agy", "--without", "codex", "--with", "qwen"])
     assert args.without == ["agy", "codex"]

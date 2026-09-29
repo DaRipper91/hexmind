@@ -138,6 +138,18 @@ async def _noop(self, request):
     return ""
 
 
+def test_install_desktop_action_precedes_roster_checks(monkeypatch, tmp_path, capsys):
+    desktop_path = tmp_path / "applications" / "hexmind-gui.desktop"
+    monkeypatch.setattr(sys, "argv", ["hexmind", "--install-desktop"])
+    monkeypatch.setattr(cli, "install_desktop_entry", lambda: desktop_path)
+    monkeypatch.setattr(cli, "available", lambda _members: pytest.fail("roster check must not run"))
+
+    cli.main()
+
+    assert capsys.readouterr().out.strip() == f"Installed desktop entry: {desktop_path}"
+
+
+
 def test_bundled_model_registry_ships_with_the_package():
     """A non-editable install must carry models.toml, or the app cannot start at all."""
     import tomllib
@@ -149,7 +161,9 @@ def test_bundled_model_registry_ships_with_the_package():
     data = tomllib.loads(pyproject.read_text())
     patterns = data["tool"]["setuptools"]["package-data"]["hexmind"]
     assert any("models.toml" in p for p in patterns), f"models.toml not packaged: {patterns}"
+    assert "hexmind.svg" in patterns, f"desktop icon not packaged: {patterns}"
     assert (Path(hexmind.__file__).parent / "models.toml").is_file()
+    assert (Path(hexmind.__file__).parent / "hexmind.svg").is_file()
 
 
 def test_default_lead_is_opencode_ultra():

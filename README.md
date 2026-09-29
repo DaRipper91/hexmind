@@ -589,7 +589,15 @@ Run the room as a standalone desktop window with native OS integration, menus, a
 hexmind-gui                          # launch the standalone workbench
 hexmind-gui --lead claude --audit    # pre-select lead and enable peer audit
 hexmind-gui --cwd ~/Projects/my-app  # work in another directory
+hexmind-gui --install-desktop        # add Hexmind to this user's desktop menu
+hexmind --install-desktop            # same installer from the TUI command
 ```
+
+The install action creates a per-user XDG launcher at
+`$XDG_DATA_HOME/applications/hexmind-gui.desktop` (default:
+`~/.local/share/applications/hexmind-gui.desktop`) and installs its packaged icon at
+`$XDG_DATA_HOME/icons/hicolor/scalable/apps/hexmind.svg` (using the same default data directory).
+Run it after installing the `qt` extra; the action does not start the GUI or require an agent CLI.
 
 The standalone application ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py)) provides:
 - **Menu bar & Shortcuts:** File operations, OS-level file opening (`openFileRequested`), team refresh (`F5`), and quick reload.

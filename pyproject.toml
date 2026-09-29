@@ -40,4 +40,4 @@ build-backend = "setuptools.build_meta"
 packages = ["hexmind", "hexmind.qt"]
 
 [tool.setuptools.package-data]
-hexmind = ["chains/*.toml", "models.toml"]
+hexmind = ["chains/*.toml", "hexmind.svg", "models.toml"]

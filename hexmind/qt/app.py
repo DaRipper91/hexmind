@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import config
+from ..desktop import install_desktop_entry
 from . import theme
 from .chat import DirectLine
 from .models import CalibrationRack
@@ -272,12 +273,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--audit", action="store_true",
                    help="start with the runner-up audit loop on (toggle in room: /audit on|off)")
     p.add_argument("--cwd", default=None, help="folder the team works in (default: current)")
+    p.add_argument("--install-desktop", action="store_true",
+                   help="install a per-user desktop menu entry for hexmind-gui")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     """Build the application, the window and the room, then hand control to Qt."""
     args = build_parser().parse_args(argv)
+
+    if args.install_desktop:
+        try:
+            desktop_path = install_desktop_entry()
+        except (OSError, ValueError) as exc:
+            print(f"hexmind-gui: {exc}", file=sys.stderr)
+            return 1
+        print(f"Installed desktop entry: {desktop_path}")
+        return 0
 
     from .. import config
     from ..backends import available
