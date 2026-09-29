@@ -399,3 +399,81 @@ def test_the_example_chains_are_no_longer_bundled():
     assert {"feature", "opencode-team"} <= bundled, "the self-contained originals must ship"
     examples = Path(__file__).parent.parent / "docs/examples/chains"
     assert {p.stem for p in examples.glob("*.toml")} == {"doc-chain", "rip-it-apart"}
+
+
+# ---------- handbook models integration (all 37 models) ----------
+
+HANDBOOK_MODELS = [
+    # 8 Zen (Free) tier
+    "nemotron-lightning",
+    "nemotron-ultra",
+    "muse-spark",
+    "mimo-flash",
+    "big-pickle",
+    "ling-flash",
+    "space-bunny",
+    "longcat-preview",
+    # 27 Go tier + 2 Contributor models
+    "deepseek-v4-pro",
+    "deepseek-v4-1-flash",
+    "deepseek-v4-flash",
+    "deepseek-v4-vision",
+    "gpt-6-luna",
+    "gpt-5-6-luna",
+    "grok-4-7",
+    "grok-4-6",
+    "qwen3-8-max",
+    "qwen3-8-flash",
+    "qwen3-7-plus",
+    "kimi-k3",
+    "kimi-k2-7-code",
+    "glm-5-3",
+    "glm-5-3-flash",
+    "glm-5-2",
+    "mimo-v2-6-pro",
+    "mimo-v2-6-flash",
+    "mimo-v2-5-pro",
+    "mimo-v2-5",
+    "minimax-m3",
+    "minimax-m2-7",
+    "hy4-preview",
+    "hy3",
+    "longcat-2-0",
+    "longcat-go",
+    "space-bunny-go",
+    "muse-spark-contributor",
+    "muse-spark-1-2",
+]
+
+
+def test_all_thirty_seven_handbook_models_are_registered():
+    assert len(HANDBOOK_MODELS) == 37
+    for name in HANDBOOK_MODELS:
+        assert name in REGISTRY, f"{name} from handbook missing in REGISTRY"
+        m = REGISTRY.get(name)
+        assert m.cli == "opencode"
+        assert m.tier == "cloud"
+        assert m.verify == "path"
+        assert m.model.startswith(("opencode/", "opencode-go/")), f"{name} model id {m.model} invalid"
+        assert m.best_at, f"{name} missing best_at"
+        assert m.avoid_for, f"{name} missing avoid_for"
+        assert m.domains, f"{name} missing domains"
+        assert all(d in DOMAINS for d in m.domains), f"{name} has invalid domain"
+        assert name in backends.DIRECT_CMDS
+        assert backends.DIRECT_CMDS[name] == ["opencode", "run", "--auto", "-m", m.ref]
+
+
+def test_handbook_model_variants_reach_cli_command():
+    m = REGISTRY.get("kimi-k3")
+    assert m.variant == "max"
+    assert m.ref == "opencode-go/kimi-k3#max"
+    assert backends.DIRECT_CMDS["kimi-k3"] == ["opencode", "run", "--auto", "-m", "opencode-go/kimi-k3#max"]
+
+    m_gpt = REGISTRY.get("gpt-6-luna")
+    assert m_gpt.variant == "high"
+    assert m_gpt.ref == "opencode-go/gpt-6-luna#high"
+
+    m_ds = REGISTRY.get("deepseek-v4-pro")
+    assert m_ds.variant == "high"
+    assert m_ds.ref == "opencode-go/deepseek-v4-pro#high"
+

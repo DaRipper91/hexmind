@@ -4,11 +4,12 @@
 
 It was written 2026-09-27 against commit `0897b1c` (baseline `107 passed, 1 skipped`) and its
 R1–R11 requirements are still the reason any of this exists. For *what is actually built*, read
-[`BUILD-PATH.md`](BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
-state. Where the two disagree, this file describes intent and BUILD-PATH describes reality.
+[`BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
+state. For the desktop graphical workstation and preserved assets, consult the
+[`PONYTAIL-MASTER-HANDBOOK.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and [`Flagship GUI Roadmap`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md). Where documents disagree, this file describes intent and BUILD-PATH describes reality.
 
 **Baseline when written:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
-**Now:** `363 passed` on `main` at `ddaf390`, Python 3.14.
+**Now:** `619 passed` on `main` at `ed0db64`, Python 3.14 (full PySide6 Qt GUI suite, headless server loopback/auth hardening, and 11 reliability fixes).
 
 Two places below are known to be superseded, and are marked as such where they appear:
 

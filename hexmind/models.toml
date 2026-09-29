@@ -229,3 +229,401 @@ weight = 50
 color = "red"
 footprint = "cloud · 1M context"
 variant = "max"
+
+# ── OpenCode Go & Contributor tier models: from OpenCode Model Master Handbook ──
+# 27 Go models + 2 Contributor models. All verified in `opencode models`.
+# Opt-in by default to protect API quota, joinable via /add, --with, or chains.
+
+[models.deepseek-v4-pro]
+label = "DeepSeek V4 Pro"
+best_at = "deep architectural refactoring, algorithmic implementation, complex debugging across interdependent files"
+avoid_for = "fast one-line CLI edits or simple syntax fixes (massive latency and token overhead)"
+domains = ["architecture", "implementation", "debugging"]
+cli = "opencode"
+model = "opencode-go/deepseek-v4-pro"
+verify = "path"
+tier = "cloud"
+weight = 75
+variant = "high"
+think = true
+color = "royal_blue1"
+footprint = "cloud · deep architecture & algorithms, $0.66/M"
+
+[models.deepseek-v4-1-flash]
+label = "DeepSeek V4.1 Flash"
+best_at = "autonomous builder/coder agent loops, fast unit test creation, ShellCheck fixes, rapid AST edits"
+avoid_for = "high-level, green-field system architecture from vague, non-specific specifications"
+domains = ["implementation", "tests", "shell"]
+cli = "opencode"
+model = "opencode-go/deepseek-v4.1-flash"
+verify = "path"
+tier = "cloud"
+weight = 75
+variant = "high"
+color = "deep_sky_blue1"
+footprint = "cloud · fast autonomous coder, $0.15/M"
+
+[models.deepseek-v4-flash]
+label = "DeepSeek V4 Flash"
+best_at = "general inline code completions, fast bug patches, lightweight utility scripting"
+avoid_for = "deep multi-hop logical debugging across large repos (can lose track of distant interfaces)"
+domains = ["implementation", "refactor", "general"]
+cli = "opencode"
+model = "opencode-go/deepseek-v4-flash"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "steel_blue"
+footprint = "cloud · fast inline patches"
+
+[models.deepseek-v4-vision]
+label = "DeepSeek V4 Flash Vision Exp"
+best_at = "converting UI screenshots/wireframes to code, inspecting visual terminal artifacts, chart auditing"
+avoid_for = "pure backend C/Python logic (burning vision token overhead adds zero value to terminal-only tasks)"
+domains = ["ui", "research", "review"]
+cli = "opencode"
+model = "opencode-go/deepseek-v4-flash-vision-exp"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "cornflower_blue"
+footprint = "cloud · multimodal UI vision"
+
+[models.gpt-6-luna]
+label = "OpenAI GPT-6 Luna"
+best_at = "high-level API design, cross-language design patterns, writing clean maintainable technical documentation"
+avoid_for = "high-throughput autonomous CLI loops (rate limits make it inefficient for sub-agents)"
+domains = ["architecture", "docs", "general"]
+cli = "opencode"
+model = "opencode-go/gpt-6-luna"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "high"
+color = "light_sky_blue1"
+footprint = "cloud · 272K context, $0.10/M"
+
+[models.gpt-5-6-luna]
+label = "OpenAI GPT-5.6 Luna"
+best_at = "code reviews, PR summaries, clean docstring scaffolding, drafting readable integration tests"
+avoid_for = "low-level C/kernel debugging or heavy command-line automation"
+domains = ["review", "docs", "tests"]
+cli = "opencode"
+model = "opencode-go/gpt-5.6-luna"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "sky_blue2"
+footprint = "cloud · PR reviews & doc scaffolding"
+
+[models.grok-4-7]
+label = "xAI Grok 4.7"
+best_at = "blunt root-cause diagnosis, debugging obscure runtime crashes, vetting architectural trade-offs without sugarcoating"
+avoid_for = "strict JSON-only tool-calling pipelines; tends to leak conversational prose if not pinned down"
+domains = ["debugging", "review", "architecture"]
+cli = "opencode"
+model = "opencode-go/grok-4.7"
+verify = "path"
+tier = "cloud"
+weight = 75
+variant = "high"
+color = "bright_magenta"
+footprint = "cloud · 200K context, adversarial audit, $2.00/M"
+
+[models.grok-4-6]
+label = "xAI Grok 4.6"
+best_at = "solid fallback for general architecture and debugging when Grok 4.7 hits provider-side rate limits"
+avoid_for = "fine-grained AST-level refactors or strict adherence to niche API interfaces"
+domains = ["debugging", "review", "architecture"]
+cli = "opencode"
+model = "opencode-go/grok-4.6"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "magenta3"
+footprint = "cloud · fallback diagnostician"
+
+[models.qwen3-8-max]
+label = "Alibaba Qwen3.8 Max"
+best_at = "strict systems programming, low-level logic, complex POSIX/shell plumbing, rigorous math/algorithm verification"
+avoid_for = "open-ended marketing copy or writing subjective documentation without strict constraints"
+domains = ["implementation", "architecture", "shell", "research"]
+cli = "opencode"
+model = "opencode-go/qwen3.8-max"
+verify = "path"
+tier = "cloud"
+weight = 75
+variant = "xhigh"
+color = "dark_orange"
+footprint = "cloud · systems programming, deep logic, $2.00/M"
+
+[models.qwen3-8-flash]
+label = "Alibaba Qwen3.8 Flash"
+best_at = "rapid bash/fish shell automation, CLI utilities, standard CRUD endpoints, terminal tooling"
+avoid_for = "complex asynchronous concurrency bug-hunting where race conditions depend on deep timing nuances"
+domains = ["shell", "implementation", "general"]
+cli = "opencode"
+model = "opencode-go/qwen3.8-flash"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "medium"
+color = "orange3"
+footprint = "cloud · fast shell automation, $0.15/M"
+
+[models.qwen3-7-plus]
+label = "Alibaba Qwen3.7 Plus"
+best_at = "generalist mid-tier coding, drafting glue scripts, routine feature extensions"
+avoid_for = "superseded by Qwen3.8 Flash for raw speed and Qwen3.8 Max for complex logic"
+domains = ["implementation", "general", "refactor"]
+cli = "opencode"
+model = "opencode-go/qwen3.7-plus"
+verify = "path"
+tier = "cloud"
+weight = 60
+color = "tan"
+footprint = "cloud · 256K context generalist, $0.40/M"
+
+[models.kimi-k3]
+label = "Moonshot AI Kimi K3"
+best_at = "deep reasoning over large codebases, complex regression tracing, multi-tier state machine design"
+avoid_for = "quick single-file script adjustments (spins up heavy compute for low-complexity prompts)"
+domains = ["architecture", "debugging", "research"]
+cli = "opencode"
+model = "opencode-go/kimi-k3"
+verify = "path"
+tier = "cloud"
+weight = 75
+variant = "max"
+think = true
+color = "indian_red1"
+footprint = "cloud · 1M context deep reasoning, $3.00/M"
+
+[models.kimi-k2-7-code]
+label = "Moonshot AI Kimi K2.7 Code"
+best_at = "code-specific refactoring where long context windows are needed to reference existing library patterns"
+avoid_for = "sub-second interactive CLI tab completions"
+domains = ["refactor", "implementation"]
+cli = "opencode"
+model = "opencode-go/kimi-k2.7-code"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "light_salmon1"
+footprint = "cloud · code refactoring, $0.95/M"
+
+[models.glm-5-3]
+label = "Zhipu GLM-5.3"
+best_at = "structured agent function calling, API glue code, pipeline orchestration"
+avoid_for = "edge-case low-level systems programming (e.g., custom memory allocators or bare-metal logic)"
+domains = ["implementation", "architecture", "general"]
+cli = "opencode"
+model = "opencode-go/glm-5.3"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "high"
+color = "medium_spring_green"
+footprint = "cloud · function orchestration, $1.40/M"
+
+[models.glm-5-3-flash]
+label = "Zhipu GLM-5.3-Flash"
+best_at = "fast tool-dispatching sub-agents, JSON payload parsing, standard unit-test mocking"
+avoid_for = "writing core domain logic from scratch without explicit boilerplate provided"
+domains = ["ui", "tests", "shell"]
+cli = "opencode"
+model = "opencode-go/glm-5.3-flash"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "high"
+color = "light_green"
+footprint = "cloud · tool dispatcher, $0.15/M"
+
+[models.glm-5-2]
+label = "Zhipu GLM-5.2"
+best_at = "backup function-calling model for legacy agent scripts tuned to GLM schemas"
+avoid_for = "new green-field projects (outclassed by GLM-5.3 in token efficiency and instruction-following)"
+domains = ["implementation", "general"]
+cli = "opencode"
+model = "opencode-go/glm-5.2"
+verify = "path"
+tier = "cloud"
+weight = 55
+color = "sea_green3"
+footprint = "cloud · backup function-calling"
+
+[models.mimo-v2-6-pro]
+label = "Xiaomi MiMo-V2.6-Pro"
+best_at = "mid-tier day-to-day coding, boilerplate drafting, small component refactoring"
+avoid_for = "monolithic repo migrations requiring 100k+ tokens of sustained context coherence"
+domains = ["implementation", "refactor", "tests"]
+cli = "opencode"
+model = "opencode-go/mimo-v2.6-pro"
+verify = "path"
+tier = "cloud"
+weight = 70
+color = "dark_turquoise"
+footprint = "cloud · balanced coding, $0.435/M"
+
+[models.mimo-v2-6-flash]
+label = "Xiaomi MiMo-V2.6-Flash (Go)"
+best_at = "fast scratchpad code fixes, lint cleanup, automated commit message generation with Go-tier throughput"
+avoid_for = "complex architectural reasoning; tends to take shortcuts on edge-case handling"
+domains = ["ui", "implementation", "refactor"]
+cli = "opencode"
+model = "opencode-go/mimo-v2.6-flash"
+verify = "path"
+tier = "cloud"
+weight = 65
+color = "turquoise2"
+footprint = "cloud · high throughput, Go tier"
+
+[models.mimo-v2-5-pro]
+label = "Xiaomi MiMo V2.5 Pro"
+best_at = "legacy testing and regression checking against older agent prompts"
+avoid_for = "modern multi-tool agent loops where V2.6 handles context significantly better"
+domains = ["tests", "implementation"]
+cli = "opencode"
+model = "opencode-go/mimo-v2.5-pro"
+verify = "path"
+tier = "cloud"
+weight = 55
+color = "cadet_blue"
+footprint = "cloud · legacy testing pro, $0.435/M"
+
+[models.mimo-v2-5]
+label = "Xiaomi MiMo V2.5"
+best_at = "legacy testing and regression checking against older agent prompts, low latency"
+avoid_for = "modern multi-tool agent loops where V2.6 handles context significantly better"
+domains = ["tests", "refactor"]
+cli = "opencode"
+model = "opencode-go/mimo-v2.5"
+verify = "path"
+tier = "cloud"
+weight = 55
+color = "medium_turquoise"
+footprint = "cloud · low latency legacy testing, $0.14/M"
+
+[models.minimax-m3]
+label = "MiniMax-M3"
+best_at = "parsing mixed prose/code documentation, onboarding summaries, contextual codebase explanations"
+avoid_for = "strict, zero-shot systems code generation with heavy type constraints"
+domains = ["docs", "research", "general"]
+cli = "opencode"
+model = "opencode-go/minimax-m3"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "thinking"
+think = true
+color = "dark_goldenrod"
+footprint = "cloud · 512K context doc parser, $0.30/M"
+
+[models.minimax-m2-7]
+label = "MiniMax-M2.7"
+best_at = "long-form markdown documentation generation and changelog compilation"
+avoid_for = "autonomous tool-calling agent loops (can lose schema formatting during complex tool runs)"
+domains = ["docs", "general"]
+cli = "opencode"
+model = "opencode-go/minimax-m2.7"
+verify = "path"
+tier = "cloud"
+weight = 60
+color = "khaki3"
+footprint = "cloud · long-form markdown docs, $0.30/M"
+
+[models.hy4-preview]
+label = "Tencent Hy4 Preview"
+best_at = "experimental code synthesis and early testing of next-gen speculative model weights"
+avoid_for = "mission-critical refactoring or live production deployment pipelines"
+domains = ["research", "general", "implementation"]
+cli = "opencode"
+model = "opencode-go/hy4-preview"
+verify = "path"
+tier = "cloud"
+weight = 60
+variant = "high"
+color = "plum1"
+footprint = "cloud · experimental speculative synthesis, $0.834/M"
+
+[models.hy3]
+label = "Tencent Hy3"
+best_at = "fallback experimental testing"
+avoid_for = "standard agent workflows (superseded by Hy4)"
+domains = ["research", "general"]
+cli = "opencode"
+model = "opencode-go/hy3"
+verify = "path"
+tier = "cloud"
+weight = 50
+color = "orchid1"
+footprint = "cloud · fallback experimental"
+
+[models.longcat-2-0]
+label = "LongCat 2.0"
+best_at = "legacy long-context fallback for reading large documentation dumps"
+avoid_for = "active code synthesis (prone to looser syntax formatting compared to LongCat 2.5)"
+domains = ["research", "docs"]
+cli = "opencode"
+model = "opencode-go/longcat-2.0"
+verify = "path"
+tier = "cloud"
+weight = 55
+color = "dark_olive_green3"
+footprint = "cloud · legacy long-context fallback"
+
+[models.longcat-go]
+label = "LongCat 2.5 Preview (Go)"
+best_at = "massive-context ingestion — whole-repo and monorepo surveys with Go-tier throughput and reliability"
+avoid_for = "small edits; best for reading everything before deciding"
+domains = ["research", "docs", "architecture"]
+cli = "opencode"
+model = "opencode-go/longcat-2.5-preview-free"
+verify = "path"
+tier = "cloud"
+weight = 70
+color = "chartreuse4"
+footprint = "cloud · massive context window, Go tier"
+
+[models.space-bunny-go]
+label = "Space Bunny (Go)"
+best_at = "lateral thinking, feature ideation, breaking architectural deadlocks with Go-tier throughput"
+avoid_for = "deterministic test or security verification; best for exploring options before committing to one"
+domains = ["research", "general", "ui"]
+cli = "opencode"
+model = "opencode-go/space-bunny-free"
+verify = "path"
+tier = "cloud"
+weight = 70
+variant = "high"
+color = "dark_orchid"
+footprint = "cloud · high divergence, Go tier"
+
+[models.muse-spark-contributor]
+label = "Meta Muse Spark 1.3 Contributor"
+best_at = "prototyping creative UI layouts, styling, terminal UI themes, CSS/HTML mockups"
+avoid_for = "concurrency, memory management, or deep backend threading logic"
+domains = ["docs", "ui", "general"]
+cli = "opencode"
+model = "opencode-go/muse-spark-1.3-contributor"
+verify = "path"
+tier = "cloud"
+weight = 65
+variant = "high"
+color = "light_sky_blue3"
+footprint = "cloud · skill authoring contributor, $0.10/M"
+
+[models.muse-spark-1-2]
+label = "Meta Muse Spark 1.2 Contributor"
+best_at = "legacy experimental styling and creative script generation"
+avoid_for = "any production-grade backend logic"
+domains = ["docs", "ui", "general"]
+cli = "opencode"
+model = "opencode-go/muse-spark-1.2-contributor"
+verify = "path"
+tier = "cloud"
+weight = 55
+color = "light_slate_blue"
+footprint = "cloud · legacy experimental styling"
+

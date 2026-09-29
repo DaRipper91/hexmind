@@ -263,8 +263,8 @@ def test_the_palette_stays_on_screen(qapp):
     """A palette that opens past the bottom edge is a palette the user cannot see."""
     from hexmind.qt.palette import _clamp_origin
 
-    area = qapp.primaryScreen().availableGeometry()
     p = CommandPalette(as_commands([("a command", "", "a")]))
+    area = p.screen().availableGeometry() if p.screen() else qapp.primaryScreen().availableGeometry()
     try:
         p.resize(500, 300)
         x, y = _clamp_origin(p, area.right() + 5000, area.bottom() + 5000)

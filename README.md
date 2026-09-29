@@ -8,7 +8,7 @@
   <img alt="Textual TUI" src="https://img.shields.io/badge/TUI-Textual-5A4FCF">
   <img alt="Team" src="https://img.shields.io/badge/team-16%20members-8%20free%20opencode-c084fc">
   <img alt="Relay chains" src="https://img.shields.io/badge/chains-4%20bundled-0ea5e9">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-364%20passing-0A9EDC?logo=pytest&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-619%20passing-0A9EDC?logo=pytest&logoColor=white">
 </p>
 
 # Hexmind
@@ -520,8 +520,9 @@ run `/lead NAME`.**
 | `--timeout SECONDS` | `1800` | per-call agent timeout. A relay stage doing a full TDD cycle can exceed 30 min |
 | `--once "REQUEST"` | none | run one request without the TUI and print the results |
 | `--serve` | off | headless FastAPI + WebSocket server — needs the `server` extra |
-| `--host HOST` | `0.0.0.0` | server bind address |
+| `--host HOST` | `127.0.0.1` | server bind address (loopback default; non-loopback requires token) |
 | `--port PORT` | `8765` | server port |
+| `--token TOKEN` | none | auth token required if `--host` is non-loopback (or `HEXMIND_TOKEN` env) |
 
 > [!NOTE]
 > **`--lead` has no default, on purpose.** A hardcoded one crashed anyone without that
@@ -577,24 +578,44 @@ with a `ModuleNotFoundError`.
 
 ## 🪟 Qt front-end
 
-The same room as a widget, for embedding in any Qt app. PySide6 is opt-in (`pip install -e ".[qt]"`,
-~240 MB) and nothing above changes without it.
+Hexmind provides a full PySide6 desktop suite behind the opt-in `qt` extra (`pip install -e ".[qt]"`),
+serving both as a standalone multi-agent workbench and an embeddable widget.
+
+### Standalone workbench: `hexmind-gui`
+
+Run the room as a standalone desktop window with native OS integration, menus, and keyboard shortcuts:
+
+```bash
+hexmind-gui                          # launch the standalone workbench
+hexmind-gui --lead claude --audit    # pre-select lead and enable peer audit
+hexmind-gui --cwd ~/Projects/my-app  # work in another directory
+```
+
+The standalone application ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py)) provides:
+- **Menu bar & Shortcuts:** File operations, OS-level file opening (`openFileRequested`), team refresh (`F5`), and quick reload.
+- **Command Palette (`Ctrl+K`):** Fast launcher for room commands, agent inspection, and chain triggers via [`CommandPalette`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py).
+- **Status bar:** Live working directory, active model counts, and turn state.
+- **Theme management:** System dark palette applied globally at the application level via [`theme.py`](file:///home/daripper/Projects/hexmind/hexmind/qt/theme.py).
+
+### Embeddable widget: `HexmindWidget`
+
+For embedding inside IDEs, host environments, or multi-panel dashboards like [Aether](file:///home/daripper/Projects/hexmind/docs/AETHER-INTERFACE.md):
 
 ```python
 from hexmind.qt import HexmindWidget
 
-room = HexmindWidget()                 # or HexmindWidget(parent) when embedding
-room.openFileRequested.connect(editor.open)   # optional: a path double-clicked in a task title
+room = HexmindWidget()                        # or HexmindWidget(parent) when embedding
+room.openFileRequested.connect(editor.open)   # double-click a path in a task title to open
+room.turnState.connect(on_state_change)       # observe planning/executing/idle states
 stack.addWidget(room)
 ```
 
-One brain, not a second implementation: a turn goes through the same orchestrator the TUI drives,
-so sleep, lead, the busy set and the audit behave identically whichever front-end asked. A turn runs
-on a worker thread with its own event loop — a model can think for thirty minutes, and the GUI must
-not. The lead combo is the picker: with no lead chosen, sending says so and sends nothing.
+**Architecture & Invariants:**
+- **One brain, zero duplication:** A turn runs through the exact same [`Orchestrator`](file:///home/daripper/Projects/hexmind/hexmind/core.py) that drives the TUI. Sleep states, INVARIANT S-1, the busy set, and peer audit behave identically.
+- **Dedicated worker thread:** Agent execution runs on a dedicated QThread with its own asyncio loop — a model can deliberate for 30 minutes without dropping a single frame in the UI.
+- **Host isolation invariant:** [`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py) strictly avoids calling `QApplication.setStyleSheet` or polluting the host's palette.
+- **Rich visualization panels:** Includes [`TaskGraphView`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py) (visual DAG with in-place node state updates), [`TimelinePanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/timeline.py) (task waterfall), and [`StatsPanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/stats.py) (audit track record with pyqtgraph).
 
-It embeds into [Aether](docs/AETHER-INTERFACE.md) (one-way: Hexmind never imports Aether), and runs
-standalone too.
 
 <p align="center"><img src="docs/assets/divider.svg" alt="" width="100%"></p>
 
@@ -691,14 +712,36 @@ Shipped here is proven by the suite; next is ordered by dependency. The full map
 - [x] **`/scan` → `/found` → `/profile`:** catalogue what is installed — 122 models here, 16 curated —
       then promote exactly one, deliberately, by writing down what it is for
 - [x] **Qt front-end** — `from hexmind.qt import HexmindWidget`, the same room as a widget, behind
-      the opt-in `qt` extra. Embeds in [Aether](docs/AETHER-INTERFACE.md)
-- [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](docs/TEAM-ASSEMBLY.md))
+      the opt-in `qt` extra. Embeds in [Aether](file:///home/daripper/Projects/hexmind/docs/AETHER-INTERFACE.md)
+- [x] **Standalone GUI workbench** — `hexmind-gui` desktop window ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py)) with menus, status bar, and `Ctrl+K` palette
+- [x] **Hardened server posture** — loopback bind (`127.0.0.1`), token authentication (`--token` / `HEXMIND_TOKEN`), and restricted CORS
+- [x] **Team assembly:** `/recommend` → you edit the live room → `/go` makes the lead plan against what you chose ([design](file:///home/daripper/Projects/hexmind/docs/TEAM-ASSEMBLY.md))
 - [x] **Chains and skills in a plan:** the lead can ask for a relay chain — run for real through
       `/relay`, with a provenance line in its notes — and for a skill to use. `create` and `edit`
       come back as proposals: **nothing is written to your skill directory without your say-so**
+- [x] **Phase 0 audit fixes (11 tasks)** — turn serialization, Jules branch detection, quota re-assignment, gate warning, corrupt stats recovery, directive validation, and test suite expansion (see [2026-09-28-hexmind-fixes.md](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md))
 
-**Next** — [`docs/BUILD-PATH.md`](docs/BUILD-PATH.md) is the map, re-derived from the code;
-[`docs/OPENCODE-TEAM-PLAN.md`](docs/OPENCODE-TEAM-PLAN.md) is why any of this exists
+### Flagship GUI Roadmap (Phases 0–9)
+
+The Qt desktop interface is actively evolving through the 10-phase Flagship Roadmap documented in our DaRipper Designed Document Format (D3F) handbooks:
+
+| Phase | Milestone | Focus | Handbook Reference |
+|---|---|---|---|
+| **Phase 0** | **Foundation & Fixes** | Shipped ✅ — 11 tasks closed, server auth hardened, 619 tests passing | [Fixes Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md) |
+| **Phase 1** | **Frame & Foundation** | Desktop ergonomics, window geometry, standard accelerators | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **Phase 2** | **Live Wire** | Reactive signal bus, in-place DAG updates, turn lifecycle | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **Phase 3** | **The Foundry** | Advanced prompt engineering, draft plan editor, template library | [Feature Forge](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
+| **Phase 4** | **Battleground** | Peer audit review split, side-by-side diffing, escalation dialog | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **Phase 5** | **Roster & Identity** | Visual team manager, agent cards, model performance badges | [UX Architecture](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-ux-ideas.md) |
+| **Phase 6** | **Timeline & History** | Execution waterfall, turn scrubbing, replay slider | [Feature Forge](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
+| **Phase 7** | **Analytics & Scorecard** | Domain capability matrix, audit confidence graph | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **Phase 8** | **Command Center** | Command Palette 2.0 (fuzzy search, actions), custom keybindings | [Master Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) |
+| **Phase 9** | **Polish & Ship** | Responsive themes, desktop notifications, native packaging | [Roadmap Handbook](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+
+Detailed agent implementation SOPs and preserved hooks architecture are maintained in the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md).
+
+**Next Engine Steps** — [`docs/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md) is the map, re-derived from the code;
+[`docs/OPENCODE-TEAM-PLAN.md`](file:///home/daripper/Projects/hexmind/docs/OPENCODE-TEAM-PLAN.md) is why any of this exists
 
 - [ ] **Per-model sessions.** Every model keeps its own conversation across turns, keyed
       `(model, directory)`. opencode sessions are directory-bound and *hang* rather than error,
@@ -715,15 +758,17 @@ Shipped here is proven by the suite; next is ordered by dependency. The full map
 ## 🔧 Development
 
 ```bash
-pip install -e . pytest
+pip install -e ".[dev,qt,server]"
 python3 -m pytest tests
 ```
 
-364 tests, a fake backend, no model CLIs and no network. They cover plan
+619 tests, a fake backend, no model CLIs and no network. They cover plan
 parsing and the task graph (`test_core.py`), relay loading, rotation and worktrees
 (`test_relay.py`), the auditor and rankings (`test_auditor.py`,
 `test_audit_integration.py`), both backends with mocked subprocesses (`test_backends.py`,
-`test_hcom_backend.py`), nicknames (`test_nicknames.py`), and the TUI running headless (`test_tui.py`).
+`test_hcom_backend.py`), nicknames (`test_nicknames.py`), the TUI running headless (`test_tui.py`),
+the Qt desktop window and widgets (`test_qt.py`, `test_qt_panels.py`), and the headless server
+with loopback token authentication (`test_server.py`).
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -741,8 +786,16 @@ hexmind/
 ├── tui.py        Textual room, responsive layout, TeamScreen
 ├── server.py     headless FastAPI + WebSocket daemon (--serve)
 ├── jules.py      the Google Jules cloud member
-├── notify.py     phone ping when the room needs you back
+├── notify.py     phone ping when the room needs you back (Phase 9 come-back pings)
 ├── config.py     nicknames (~/.config/hexmind/config.toml)
+├── qt/           PySide6 desktop suite & embeddable widget
+│   ├── app.py       hexmind-gui standalone desktop window (QMainWindow)
+│   ├── widget.py    HexmindWidget embeddable room widget
+│   ├── graph.py     TaskGraphView & GraphPanel (dependency DAG)
+│   ├── palette.py   CommandPalette (Ctrl+K launcher)
+│   ├── stats.py     StatsPanel (audit track record & pyqtgraph)
+│   ├── timeline.py  TimelinePanel (waterfall task timing)
+│   └── theme.py     dark palette stylesheet & visual design
 └── chains/       bundled chain files
 ```
 

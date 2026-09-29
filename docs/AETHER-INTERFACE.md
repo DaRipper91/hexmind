@@ -1,19 +1,18 @@
-# Aether Integration — the interface this repo is being asked to ship
+# Aether Integration — Shipped Interface Contract
 
 Aether (`~/Projects/Aether`) is a PySide6 host whose three tabs are **Room** (Hexmind),
-**Deck** (agentdeck) and Workspace. Deck and Workspace are shipped. **Room is the only
-unchecked item on Aether's roadmap**, and it is blocked on one thing from this repo.
+**Deck** (agentdeck) and Workspace. Deck and Workspace are shipped. **Room is unblocked**:
+the `hexmind.qt` module is implemented, tested (60 Qt tests pass), and shipped in `hexmind`.
 
-## What Aether is waiting on
+## The Shipped Interface
 
-A Qt front-end module named `hexmind.qt` exposing a widget called `HexmindWidget`:
+The Qt front-end module [`hexmind.qt`](file:///home/daripper/Projects/hexmind/hexmind/qt/__init__.py) exports [`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py):
 
-```
+```python
 from hexmind.qt import HexmindWidget
 ```
 
-That import today raises `ModuleNotFoundError` — Hexmind has no `qt` subpackage at all
-(its front-end is the Textual TUI in `tui.py`).
+The import succeeds cleanly when Hexmind is installed with its `qt` extra (`pip install -e ".[qt]"`).
 
 ## The seam on the Aether side (do not change this)
 
@@ -92,17 +91,20 @@ Aether's problem, not this repo's — included here so the timing is understood.
 
 ## What shipped
 
-`hexmind/qt/widget.py`, a `HexmindWidget(QWidget)` with:
+`hexmind/qt/widget.py`, a [`HexmindWidget(QWidget)`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py) with:
 
 | surface | notes |
 | :--- | :--- |
-| transcript | read-only, 2000-block cap; the TUI's chat, without a TUI |
+| transcript | read-only, 2000-block cap; the TUI's chat, rendered natively in Qt |
 | input + Send | Enter sends; disabled while a turn is in flight, so the room cannot be double-driven |
 | task board | the TUI's columns: id, agent, status, audit, title |
 | roster | model, state (lead / awake / busy + task ids), domains |
-| lead combo | **is** the picker — see below |
+| lead combo | **is** the picker — blocks turn execution if no leader selected |
 | peer-audit toggle | the same `audit` flag the TUI sets |
-| `openFileRequested(str)` | the one optional signal, matching `DeckWidget.openRequested` |
+| `openFileRequested(str)` | emitted when a file path is double-clicked in a task title |
+| `taskChanged(dict)` | emitted on task state changes (pending, running, auditing, done, failed) |
+| `teamChanged(list)` | emitted when the roster changes (sleep/wake/add/remove) |
+| `turnState(str)` | emitted on turn transitions (`idle`, `planning`, `executing`, `auditing`, `synthesizing`) |
 
 **One brain.** The orchestrator, the backends, the registry and `relay.command` are the ones the TUI
 and `--once` use, and a turn goes through `Orchestrator.handle` exactly as the TUI drives it. No
@@ -131,8 +133,7 @@ is the same default `--once` and the TUI use.
 
 ## Notes
 
-- This is not in `docs/BUILD-PATH.md`; it is a genuinely new leading workstream, not a
-  row in that map. Add a row when it gets scheduled.
-- Hexmind is currently a TUI-first project with no Qt anywhere; nothing existing needs to
-  change to accommodate this except the packaging lines above.
-- The TUI keeps working untouched — this is purely additive.
+- Tracked as **P10** in [`docs/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/BUILD-PATH.md).
+- Hexmind also ships a standalone desktop window ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) via `hexmind-gui`).
+- The TUI and server keep working untouched — Qt is purely additive.
+- The Flagship GUI Roadmap (Phases 0–9) extends this foundation with interactive DAG graph views, command palette, and timeline drawers while preserving the one-way embedding contract.

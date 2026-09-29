@@ -23,7 +23,14 @@ for the roadmap.
 | `server.py` | headless FastAPI + WebSocket daemon (`--serve`, needs the `server` extra) |
 | `jules.py` | the Google Jules cloud member (works on the GitHub copy, not your tree) |
 | `reaping.py` | classifying a relay run's worktree as safe / dirty / unmerged / active, for `/relay clean` |
-| `qt/widget.py` | the same room as a `QWidget` (`hexmind.qt.HexmindWidget`, needs the `qt` extra). One brain with the TUI — a turn goes through the same `Orchestrator` |
+| `notify.py` | come-back pings via KDE Connect when the room needs human intervention (Phase 9) |
+| `qt/app.py` | `hexmind-gui` standalone desktop application ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py), menus, shortcuts, status bar) |
+| `qt/widget.py` | the same room as a `QWidget` ([`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py), needs the `qt` extra). One brain with the TUI |
+| `qt/graph.py` | [`TaskGraphView`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py) visual dependency DAG with in-place node update & layout |
+| `qt/palette.py` | [`CommandPalette`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py) launcher (Ctrl+K) with fuzzy action matching |
+| `qt/stats.py` | [`StatsPanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/stats.py) audit scorecard & pyqtgraph visualization |
+| `qt/timeline.py` | [`TimelinePanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/timeline.py) execution waterfall & task timing |
+| `qt/theme.py` | dark pastel stylesheet applied at application level |
 
 ## Commands
 
@@ -40,7 +47,7 @@ uv pip install --python .venv/bin/python -e ".[qt,server,dev]"
 QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m pytest tests -q
 ```
 
-**363 tests pass.** The 14 Qt tests `importorskip` when PySide6 is absent, so the suite is green
+**619 tests pass.** The 60 Qt tests `importorskip` when PySide6 is absent, so the suite is green
 either way — but that also means a green run can mean "the widget was never exercised".
 
 There is no committed lint config despite a `.ruff_cache` existing, and ~139 findings are
@@ -86,6 +93,17 @@ what `/profile` uses.
 team-assembly flow keeps only a snapshot to diff against — never a second copy of the team to drift
 from the live one.
 
+**Host Isolation Invariant for Qt.** [`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py) is strictly an embeddable component. It must **never** call `QApplication.setStyleSheet`, alter the application-level palette, or assume ownership of the main window. All global theme stylesheets belong in [`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) or the embedding host (such as Aether).
+
+**Server Loopback & Auth Invariant.** The headless server defaults to binding `127.0.0.1`. Any non-loopback `--host` (e.g. `0.0.0.0`) strictly requires `--token` or `HEXMIND_TOKEN`, enforced on all `/api/` REST endpoints and the `/ws/room` WebSocket. Default CORS is strictly confined to localhost.
+
+**Preserved Roadmap Hooks Invariant.** Static code audits (such as Ponytail) must **never** delete uncalled helper methods that are reserved for the Flagship GUI Roadmap:
+- `hexmind/qt/palette.py: set_commands` & `Command.haystack` (Phase 8: Palette 2.0 / P10)
+- `hexmind/qt/graph.py: select_task, fit, clear` (Phase 8: Wiring Diagram / P13)
+- `hexmind/notify.py` (Phase 9: Come-back notifications via KDE Connect)
+- `hexmind/qt/graph.py: update_task` (Phase 2: Live Wire in-place node update)
+Consult the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) before refactoring any of these.
+
 ## opencode traps
 
 **Sessions are directory-bound, and violating that HANGS.** Resuming a session id from a different
@@ -128,3 +146,12 @@ hand-written argv because their protocols genuinely differ.
 - Modals are `ModalScreen` with their own CSS and a `VerticalScroll` so they fit a short terminal.
 - Always run the **full** suite. `tests/test_mobile_tui.py` asserts no widget overflows the
   terminal width, and a new control in a narrow-mode bar will break it at 40 columns.
+
+## Qt GUI conventions
+
+- Always test offscreen in headless CI/tests: `QT_QPA_PLATFORM=offscreen`.
+- `HexmindWidget` runs long turns on a `QThread` with its own `asyncio` event loop. GUI updates must arrive as Qt signals, never direct cross-thread widget calls.
+- `TaskGraphView` renders tasks as an interactive DAG. Never block graph layout or drop in-place node update signals (`update_task`).
+- The standalone desktop application is [`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) launched via `hexmind-gui`.
+- Refer to the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and the [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) for all Phase 1–9 GUI milestones.
+

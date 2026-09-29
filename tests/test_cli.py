@@ -269,11 +269,12 @@ def test_text_only_lead_error_lists_only_models_that_can_lead(monkeypatch, tmp_p
 
     monkeypatch.setattr(sys, "argv", ["hexmind", "--cwd", str(tmp_path), "--lead", "qwen",
                                       "--with", "qwen", "--once", "hi"])
-    monkeypatch.setattr("hexmind.backends.available", lambda m: ["claude", "qwen"])
+    monkeypatch.setattr(cli, "available", lambda m: ["claude", "qwen"])
     with pytest.raises(SystemExit) as err:
         cli.main()
     assert "text-only" in str(err.value)
-    assert "claude" in str(err.value) and "qwen" not in str(err.value).split("pick one of:")[1]
+    candidates = [m.strip() for m in str(err.value).split("pick one of:")[1].split(",")]
+    assert "claude" in candidates and "qwen" not in candidates
 
 
 def test_serve_hands_the_timeout_to_the_backend_too(monkeypatch, tmp_path):

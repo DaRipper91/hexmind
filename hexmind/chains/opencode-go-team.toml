@@ -1,0 +1,61 @@
+# The opencode Go-tier flagship build pipeline:
+# Adversarial audit (grok-4-7) -> Deep architecture & planning (kimi-k3) ->
+# Autonomous TDD build (deepseek-v4-pro) -> Verification & compliance (qwen3-8-max) ->
+# Adversarial review (grok-4-7).
+#
+#   /relay opencode-go-team --assign pinned
+
+name = "opencode-go-team"
+description = "Grok adversarial audit -> Kimi deep planning -> DeepSeek Pro TDD build -> Qwen systems check -> Grok critique"
+
+[[stages]]
+name = "pre-audit"
+agent = "grok-4-7"
+domain = "review"
+instructions = """
+Conduct a blunt, skeptical pre-implementation audit of the work request.
+Scrutinize edge cases, identify hidden assumptions, race conditions, and error paths.
+Verify the proposal against existing architectural patterns.
+Produce a concrete implementation contract with explicit constraints and pass/fail verification steps.
+"""
+
+[[stages]]
+name = "system-plan"
+agent = "kimi-k3"
+domain = "architecture"
+instructions = """
+Formulate the deep architectural plan and state machine transitions for this contract.
+Map the exact file diffs, interfaces, and boundary types required.
+Ensure compatibility across existing dependencies and verify data flow integrity.
+"""
+
+[[stages]]
+name = "tdd-build"
+agent = "deepseek-v4-pro"
+domain = "implementation"
+gate = true
+instructions = """
+Implement the execution plan using strict Test-Driven Development.
+Write failing unit tests first, verify the failure mode, write the minimal surgical
+implementation, and confirm all tests pass green. Do not introduce breaking regressions.
+"""
+
+[[stages]]
+name = "systems-check"
+agent = "qwen3-8-max"
+domain = "tests"
+gate = true
+instructions = """
+Conduct rigorous verification on systems-level mechanics, POSIX/shell logic,
+type constraints, and boundary conditions. Run the complete test suite and linters to verify zero regressions.
+"""
+
+[[stages]]
+name = "post-critique"
+agent = "grok-4-7"
+domain = "debugging"
+instructions = """
+Perform an adversarial critique of the final implementation and test results.
+Scrutinize the git diff for silent failures, incomplete error handling, or performance bottlenecks.
+Provide the final sign-off verdict.
+"""

@@ -166,10 +166,10 @@ def test_only_the_default_opencode_model_is_reachable_over_hcom():
     assert HcomBackend.supports("nemotron-lightning") is True
     non_default = {"nemotron-ultra", "muse-spark", "mimo-flash", "big-pickle",
                    "ling-flash", "space-bunny", "longcat-preview"}
-    for member in non_default:
+    assert non_default <= HCOM_EXCLUDED
+    for member in HCOM_EXCLUDED:
         assert HcomBackend.supports(member) is False, member
-    # the set and the predicate must not drift apart
-    assert non_default == HCOM_EXCLUDED
+    assert "nemotron-lightning" not in HCOM_EXCLUDED
 
 
 def test_excluded_opencode_members_are_never_offered_by_members(monkeypatch, tmp_path):

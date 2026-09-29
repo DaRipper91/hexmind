@@ -1,16 +1,16 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-derived 2026-09-28 against `main` at `ddaf390`
-(**pushed**), **363 tests passing** (14 of them Qt, skipped without the `qt` extra; a fresh `.venv`
-needs `.[qt,server,dev]` before the whole suite can run).
+Where every planned operation actually stands. Re-derived 2026-09-28 against `main` at `ed0db64`
+(**pushed**), **619 tests passing** (60 of them Qt, offscreen; runs across all surfaces with
+`.[qt,server,dev]`).
 
 Derived from the commit history and the code, not from intention, and **re-checked rather than
 carried forward** — which is how the previous version came to claim `/add` and `/remove` worked when
 neither command existed. Where a workstream is partly built, it says which half.
 
-The design documents are [`OPENCODE-TEAM-PLAN.md`](OPENCODE-TEAM-PLAN.md) (the original R1–R11
-requirements) and [`TEAM-ASSEMBLY.md`](TEAM-ASSEMBLY.md) (the pre-flight flow). This file is the
-state; those are the reason.
+The design documents are [`OPENCODE-TEAM-PLAN.md`](file:///home/daripper/Projects/hexmind/docs/OPENCODE-TEAM-PLAN.md) (the original R1–R11
+requirements), [`TEAM-ASSEMBLY.md`](file:///home/daripper/Projects/hexmind/docs/TEAM-ASSEMBLY.md) (the pre-flight flow), and the [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) (Phases 0–9).
+This file is the state; those are the reason.
 
 Legend: **DONE** shipped · **PART** part built, gap named · **TODO** not started · **BLOCKED** cannot
 proceed until something else lands.
@@ -34,12 +34,13 @@ proceed until something else lands.
 | P7 | WS-9 roster advisor | **TODO** | `/lead recommend` is adjacent but is not the over-provisioning advisor |
 | P8 | WS-11 journals | **TODO** | nothing built |
 | P9 | WS-12 `/relay clean` | **DONE** | `reaping.py`; pushed, and used for real: it reaped the merged chain's worktree and kept the stage reports |
-| P10 | Qt front-end (`hexmind.qt`) | **DONE** | `HexmindWidget`; one brain with the TUI, worker-threaded; unblocks Aether's last roadmap item. Aether still has to flip its own extra — see Risks |
+| P10 | Qt front-end suite (`hexmind.qt`) | **DONE** | `HexmindWidget` (embeddable), `HexmindWindow` (`hexmind-gui` standalone workbench), `TaskGraphView` DAG visualizer, `CommandPalette`, `TimelinePanel`, `StatsPanel`; worker-threaded, zero style pollution; unblocks Aether's Room tab |
+| P11 / F0 | Security & Reliability (11 tasks) | **DONE** | Loopback `127.0.0.1` default, token auth for REST/WS, restricted CORS, directive validation, gate warning, Jules branch detection, corrupt stats recovery, turn serialization (see [2026-09-28-hexmind-fixes.md](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md)) |
 
 Team Assembly steps 1–7 in `TEAM-ASSEMBLY.md`: **steps 1–5 DONE** — no default lead, mount-safe
 emits, the startup `LeadPicker`, the `Assembly` flow (`/recommend` → edit the room → `/go` →
 `/cancel`), and `/scan` `/found` `/profile` as the catalogue the roster is edited from. **Step 6**
-(the `hexmind-lead` skill) is **TODO** and is the next thing; step 7 (`/relay clean`, which the plan
+(the `hexmind-lead` skill) is **TODO** and is the next engine thing; step 7 (`/relay clean`, which the plan
 listed as part of this flow) shipped separately as WS-12.
 
 ---
@@ -192,3 +193,30 @@ that now exists.
 | Aether's placeholder is still up until Aether installs the extra | open, and **not ours to fix** — `Aether/pyproject.toml:16` still says `room = ["hexmind"]` |
 | `Stats` is one or two samples deep | `opencode-ultra` is 0/2 on architecture. The rankings are a prior, not evidence yet |
 | audit chain ignored "read-only" and edited `main` | prompt-level control is worthless; only the after-the-fact check caught it |
+
+---
+
+## Flagship GUI Roadmap (Phases 0–9)
+
+The project's desktop GUI surface is organized into 10 phases governed by the [D3F Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and detailed plans in `docs/plans/`:
+
+| Phase | Title | Status | Scope & Deliverables | Document |
+| :--- | :--- | :--- | :--- | :--- |
+| **0** | **Foundation & Fixes** | **DONE** | 11 audit reliability fixes, loopback 127.0.0.1 default, token auth for REST/WS, restricted CORS, 619 tests passing | [`2026-09-28-hexmind-fixes.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md) |
+| **1** | **Frame & Foundation** | **DONE** | Native `HexmindWindow` (`hexmind-gui`), menus (File, Room), shortcuts (F5, Ctrl+K, Ctrl+Q, Ctrl+O), status bar | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **2** | **Live Wire** | **READY** | Reactive signal bus (`turnState`, `taskChanged`, `teamChanged`), in-place DAG node updates via preserved `update_task` | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **3** | **The Foundry** | **READY** | Prompt editor, draft plan inspector, template library, multi-turn review | [`2026-09-28-gui-feature-forge.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
+| **4** | **Battleground** | **READY** | Split-pane peer audit view, diff viewer, escalation modal | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **5** | **Roster & Identity** | **READY** | Visual roster management, model capability badges, member details | [`2026-09-28-gui-ux-ideas.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-ux-ideas.md) |
+| **6** | **Timeline & History** | **READY** | Execution waterfall (`TimelinePanel`), turn replay slider, session log | [`2026-09-28-gui-feature-forge.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md) |
+| **7** | **Analytics & Scorecard**| **READY** | Domain audit matrix, pyqtgraph performance charts (`StatsPanel`), export | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **8** | **Command Center** | **READY** | `CommandPalette` 2.0 (fuzzy search, custom actions via preserved `set_commands`), DAG tools via preserved `select_task`, `fit`, `clear` | [`PONYTAIL-MASTER-HANDBOOK.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) |
+| **9** | **Polish & Ship** | **READY** | Dark pastel design system, desktop alerts via preserved `notify.py`, native PyInstaller distribution | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+
+### Preserved Roadmap Assets Invariant
+Static code audits (such as [`docs/audits/PONYTAIL-2026-09-28.md`](file:///home/daripper/Projects/hexmind/docs/audits/PONYTAIL-2026-09-28.md)) must **never** strip the following hooks as dead code:
+1. `hexmind/qt/palette.py: set_commands` & `Command.haystack` (Phase 8: Palette 2.0 / P10)
+2. `hexmind/qt/graph.py: select_task, fit, clear` (Phase 8: Wiring Diagram / P13)
+3. `hexmind/notify.py` (Phase 9: Come-back notifications via KDE Connect)
+4. `hexmind/qt/graph.py: update_task` (Phase 2: Live Wire in-place node update)
+
