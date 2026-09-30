@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from .. import config
+from ..core import REGISTRY
+from .model_selector import ModelSelectorDialog, load_enabled_from_config, save_enabled_to_config
 from .health import HealthScanner
 
 
@@ -39,17 +41,27 @@ class SettingsPage(QWidget):
         self._tracking_dirty = True
         self.setAccessibleName("Settings workspace")
 
+        # Load enabled models and team from config
+        self._enabled_models = load_enabled_from_config()
+        self._team = config.get_defaults(self._config_path).members
+        self._lead = config.get_defaults(self._config_path).lead
+
         title = QLabel("Settings", self)
         title.setAccessibleName("Settings heading")
 
-        self.lead_input = QLineEdit(self)
-        self.lead_input.setAccessibleName("Default lead")
-        self.lead_input.setPlaceholderText("(no lead — parallel turn)")
-        self.lead_input.setToolTip("Leave blank to start without a default lead.")
+        # Lead selector - combo box populated from enabled models
+        self.lead_combo = QComboBox(self)
+        self.lead_combo.setAccessibleName("Default lead")
+        self.lead_combo.setToolTip("Who plans the work and writes your answer. Nothing runs without one.")
+        self._populate_lead_combo()
 
-        self.members_input = QLineEdit(self)
-        self.members_input.setAccessibleName("Default roster")
-        self.members_input.setToolTip("Comma-separated model IDs used by new GUI sessions.")
+        # Team selector - button opens ModelSelectorDialog
+        self.team_button = QPushButton("Select Team…", self)
+        self.team_button.setAccessibleName("Select default team")
+        self.team_button.setToolTip("Choose which enabled models are in the default roster")
+        self.team_button.clicked.connect(self._open_team_selector)
+        self.team_label = QLabel(self._format_team_label(), self)
+        self.team_label.setAccessibleName("Default roster preview")
 
         self.audit_checkbox = QCheckBox("Enable peer audit by default", self)
         self.audit_checkbox.setAccessibleName("Default peer audit")
@@ -79,8 +91,8 @@ class SettingsPage(QWidget):
         self.server_token_input.setPlaceholderText("Optional unless serving off localhost")
 
         form = QFormLayout()
-        form.addRow("Default lead", self.lead_input)
-        form.addRow("Default roster", self.members_input)
+        form.addRow("Default lead", self.lead_combo)
+        form.addRow("Default roster", self._team_row())
         form.addRow("", self.audit_checkbox)
         form.addRow("Theme", self.theme_selector)
         form.addRow("Server host", self.server_host_input)
@@ -137,6 +149,62 @@ class SettingsPage(QWidget):
         self._connect_dirty_inputs()
         self.reload()
 
+    def _team_row(self) -> QWidget:
+        """Create a widget containing the team button and label."""
+        container = QWidget(self)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.team_button)
+        layout.addWidget(self.team_label, 1)
+        return container
+
+    def _populate_lead_combo(self) -> None:
+        """Populate lead combo with enabled models."""
+        self.lead_combo.blockSignals(True)
+        self.lead_combo.clear()
+        self.lead_combo.addItem("(no lead — parallel turn)", "")
+        for name in REGISTRY.enabled_names():
+            if self._enabled_models.get(name, True):
+                model = REGISTRY.get(name)
+                self.lead_combo.addItem(f"{model.label} ({name})", name)
+        # Select current lead
+        idx = self.lead_combo.findData(self._lead)
+        if idx >= 0:
+            self.lead_combo.setCurrentIndex(idx)
+        self.lead_combo.blockSignals(False)
+
+    def _format_team_label(self) -> str:
+        """Format the team label for display."""
+        if not self._team:
+            return "(empty — click Select Team…)"
+        enabled_team = [m for m in self._team if self._enabled_models.get(m, True)]
+        if not enabled_team:
+            return "(all disabled — click Select Team…)"
+        if len(enabled_team) <= 3:
+            labels = [REGISTRY.get(m).label for m in enabled_team]
+            return ", ".join(labels)
+        return f"{len(enabled_team)} models: {REGISTRY.get(enabled_team[0]).label}, {REGISTRY.get(enabled_team[1]).label}, …"
+
+    def _update_team_label(self) -> None:
+        self.team_label.setText(self._format_team_label())
+
+    def _open_team_selector(self) -> None:
+        dialog = ModelSelectorDialog(
+            current_enabled=self._enabled_models,
+            current_team=self._team,
+            current_lead=self._lead,
+            parent=self,
+        )
+        dialog.saved.connect(self._on_team_saved)
+        dialog.exec()
+
+    def _on_team_saved(self, enabled: dict[str, bool], team: list[str]) -> None:
+        self._enabled_models = enabled
+        self._team = team
+        self._populate_lead_combo()
+        self._update_team_label()
+        self._on_form_edited()
+
     @property
     def config_path(self) -> Path:
         raw = self._config_path if self._config_path is not None else config.PATH
@@ -147,8 +215,7 @@ class SettingsPage(QWidget):
         return self._dirty
 
     def _connect_dirty_inputs(self) -> None:
-        self.lead_input.textChanged.connect(self._on_form_edited)
-        self.members_input.textChanged.connect(self._on_form_edited)
+        self.lead_combo.currentTextChanged.connect(self._on_form_edited)
         self.audit_checkbox.toggled.connect(self._on_form_edited)
         self.theme_selector.currentTextChanged.connect(self._on_form_edited)
         self.server_host_input.textChanged.connect(self._on_form_edited)
@@ -158,9 +225,10 @@ class SettingsPage(QWidget):
         self.threshold_input.valueChanged.connect(self._on_form_edited)
 
     def _capture_state(self) -> dict[str, object]:
+        lead = self.lead_combo.currentData()
         return {
-            "lead": self.lead_input.text(),
-            "members": self.members_input.text(),
+            "lead": lead if lead else "",
+            "members": ", ".join(self._team),
             "audit": self.audit_checkbox.isChecked(),
             "theme": self.theme_selector.currentText(),
             "server_host": self.server_host_input.text(),
@@ -173,8 +241,17 @@ class SettingsPage(QWidget):
     def _apply_state(self, state: dict[str, object]) -> None:
         self._tracking_dirty = False
         try:
-            self.lead_input.setText(str(state["lead"]))
-            self.members_input.setText(str(state["members"]))
+            lead = str(state["lead"])
+            idx = self.lead_combo.findData(lead)
+            if idx >= 0:
+                self.lead_combo.setCurrentIndex(idx)
+            else:
+                self.lead_combo.setCurrentIndex(0)
+            self._lead = lead
+
+            members = str(state["members"])
+            self._team = [m.strip() for m in members.split(",") if m.strip()]
+
             self.audit_checkbox.setChecked(bool(state["audit"]))
             theme = str(state["theme"])
             if self.theme_selector.findText(theme) < 0:
@@ -185,6 +262,7 @@ class SettingsPage(QWidget):
             self.server_token_input.setText(str(state["server_token"]))
             self.phone_buzz_checkbox.setChecked(bool(state["phone_buzz"]))
             self.threshold_input.setValue(int(state["threshold"]))
+            self._update_team_label()
         finally:
             self._tracking_dirty = True
 
@@ -218,8 +296,11 @@ class SettingsPage(QWidget):
         room = config.RoomDefaults()
         server = config.ServerDefaults()
         notifications = config.NotificationDefaults()
-        self.lead_input.setText(room.lead)
-        self.members_input.setText(", ".join(room.members))
+        self._enabled_models = {name: True for name in REGISTRY.names()}
+        save_enabled_to_config(self._enabled_models)
+        self._team = list(room.members)
+        self._lead = room.lead
+        self._populate_lead_combo()
         self.audit_checkbox.setChecked(room.audit)
         if self.theme_selector.findText(room.theme) < 0:
             self.theme_selector.addItem(room.theme)
@@ -229,6 +310,7 @@ class SettingsPage(QWidget):
         self.server_token_input.setText(server.token)
         self.phone_buzz_checkbox.setChecked(notifications.phone_buzz)
         self.threshold_input.setValue(notifications.threshold_seconds)
+        self._update_team_label()
         self.status.setText("Restored defaults in the form. Save to write them.")
         self._on_form_edited()
 
@@ -237,6 +319,8 @@ class SettingsPage(QWidget):
         if not self._dirty:
             return
         self._apply_state(self._loaded_state)
+        self._populate_lead_combo()
+        self._update_team_label()
         self.status.setText("Reverted unsaved changes.")
         self._set_dirty(False)
 
@@ -248,6 +332,11 @@ class SettingsPage(QWidget):
         room = config.get_defaults(self._config_path)
         server = config.get_server_defaults(self._config_path)
         notifications = config.get_notification_defaults(self._config_path)
+
+        self._enabled_models = load_enabled_from_config()
+        self._team = list(room.members)
+        self._lead = room.lead
+        self._populate_lead_combo()
 
         self._apply_state(
             {
@@ -269,19 +358,21 @@ class SettingsPage(QWidget):
 
     def save(self) -> bool:
         """Persist validated settings and report a usable error when validation fails."""
-        lead = self.lead_input.text().strip()
-        members = [member.strip() for member in self.members_input.text().split(",") if member.strip()]
+        lead = self.lead_combo.currentData()
+        lead_str = lead if lead else ""
+        members = self._team
+
         if not members:
             self.status.setText("Enter at least one model ID for the default roster.")
-            self.members_input.setFocus()
+            self.team_button.setFocus()
             return False
         if len(members) != len(set(members)):
             self.status.setText("Default roster model IDs must be unique.")
-            self.members_input.setFocus()
+            self.team_button.setFocus()
             return False
-        if lead and lead not in members:
+        if lead_str and lead_str not in members:
             self.status.setText("Default lead must be included in the default roster.")
-            self.lead_input.setFocus()
+            self.lead_combo.setFocus()
             return False
 
         host = self.server_host_input.text().strip()
@@ -294,7 +385,7 @@ class SettingsPage(QWidget):
             config.save_section(
                 "room",
                 {
-                    "lead": lead,
+                    "lead": lead_str,
                     "members": members,
                     "audit": self.audit_checkbox.isChecked(),
                     "theme": self.theme_selector.currentText(),
@@ -318,6 +409,7 @@ class SettingsPage(QWidget):
                 },
                 self._config_path,
             )
+            save_enabled_to_config(self._enabled_models)
         except OSError as exc:
             self.status.setText(f"Could not save settings: {exc}")
             return False
@@ -363,6 +455,8 @@ class SettingsPage(QWidget):
             },
             path,
         )
+        # Also save enabled models defaults
+        save_enabled_to_config({name: True for name in REGISTRY.names()})
         return path
 
     def request_open_config_file(self) -> None:

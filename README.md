@@ -603,6 +603,7 @@ The standalone application ([`HexmindWindow`](file:///home/daripper/Projects/hex
 - **Menu bar & Shortcuts:** File operations, OS-level file opening (`openFileRequested`), team refresh (`F5`), and quick reload.
 - **Command Palette (`Ctrl+K`):** Fast launcher for room commands, agent inspection, and chain triggers via [`CommandPalette`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py).
 - **Settings workspace:** Edit default lead/roster, audit, server, and notification preferences; reload from disk, restore defaults, run agent health checks, and open `config.toml` from the GUI.
+- **Model management:** The **Select Team…** button (in Settings and in the room's top bar) opens a dialog where you can enable/disable models globally and choose which enabled models are in the default roster. Disabled models are hidden from all UI surfaces. The lead is always shown at the top of the team table.
 - **Status bar:** Live working directory, active model counts, and turn state.
 - **Theme management:** System dark palette applied globally at the application level via [`theme.py`](file:///home/daripper/Projects/hexmind/hexmind/qt/theme.py).
 

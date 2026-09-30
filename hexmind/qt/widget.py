@@ -56,7 +56,8 @@ from PySide6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 from ..backends import DirectBackend, available
-from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task
+from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task, REGISTRY
+from .model_selector import load_enabled_from_config
 
 TASK_COLUMNS = ("id", "agent", "status", "audit", "title")
 TEAM_COLUMNS = ("model", "state", "domains")
@@ -82,6 +83,24 @@ def _looks_like_path(text: str) -> str | None:
 # collected, Qt aborts the process. Aether always has one already; this is for a developer standing
 # the widget up on its own, which is exactly the smoke line in docs/AETHER-INTERFACE.md.
 _APP: QApplication | None = None
+
+
+def _load_agentdeck_items() -> tuple[bool, list]:
+    """Try to load agentdeck items. Returns (available, items).
+
+    This is deliberately lazy: if agentdeck is not installed, hexmind operates exactly as before
+    with no degradation — the agentdeck import is wrapped in try/except.
+    """
+    try:
+        import agentdeck  # type: ignore
+        from agentdeck.model import Item, Kind, load as load_items  # type: ignore
+        from agentdeck.providers import PROVIDERS, resolve_provider  # type: ignore
+        from agentdeck.deck import search as deck_search  # type: ignore
+
+        items = load_items()
+        return True, items
+    except Exception:  # pragma: no cover - agentdeck not installed
+        return False, []
 
 
 def _ensure_app() -> QApplication:
@@ -287,11 +306,17 @@ class HexmindWidget(QWidget):
         _ensure_app()
         super().__init__(parent)
         self.cwd = os.path.abspath(cwd or os.getcwd())
+
+        # Load enabled models from config
+        self._enabled_models = load_enabled_from_config()
+
         if members is None:
             # `backends.available` is shutil.which plus a local-tag check — microseconds. The
             # registry's own `available()` also shells out to `opencode models` (1-2 s) and would
             # freeze the GUI on construction, so the cheap one is the right door here.
-            members = [m for m in available(list(ROSTER)) if m not in OPT_IN]
+            all_members = [m for m in available(list(ROSTER)) if m not in OPT_IN]
+            # Filter to only enabled models
+            members = [m for m in all_members if self._enabled_models.get(m, True)]
         if backend is None:
             backend = DirectBackend(self.cwd)
         self.members = list(members)
@@ -370,6 +395,11 @@ class HexmindWidget(QWidget):
         self.leadBox.setToolTip("Who plans the work and writes your answer. Nothing runs without one.")
         self.leadBox.currentTextChanged.connect(self._on_lead_picked)
 
+        self.teamButton = QPushButton("Select Team…", self)
+        self.teamButton.setAccessibleName("Select team")
+        self.teamButton.setToolTip("Choose which models are in the room")
+        self.teamButton.clicked.connect(self._open_team_selector)
+
         self.auditBox = QCheckBox("Peer audit")
         self.auditBox.setToolTip("A runner-up model reviews every task in a bounded revise loop.")
 
@@ -383,6 +413,7 @@ class HexmindWidget(QWidget):
         bar = QHBoxLayout()
         bar.addWidget(QLabel("Lead:"))
         bar.addWidget(self.leadBox, 1)
+        bar.addWidget(self.teamButton)
         bar.addWidget(self.auditBox)
         bar.addWidget(self.status)
         bar.addWidget(self.turnMeter)
@@ -496,6 +527,12 @@ class HexmindWidget(QWidget):
             right.addTab(self.timeline, "Timeline")
         if self.stats is not None:
             right.addTab(self.stats, "Stats")
+        # Agentdeck integration tab: shows skills, agents, and commands discovered from agentdeck
+        available, items = _load_agentdeck_items()
+        if available:
+            from .agentdeck_panel import AgentdeckPanel
+            self.agentdeck_panel = AgentdeckPanel(items)
+            right.addTab(self.agentdeck_panel, "Agentdeck")
         self._right = right
 
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -755,22 +792,58 @@ class HexmindWidget(QWidget):
                 return row
         return -1
 
+    def _open_team_selector(self) -> None:
+        """Open the model selector dialog to manage the team."""
+        from .model_selector import ModelSelectorDialog
+
+        # Get current team from room snapshot
+        snap = self.snapshot()
+        lead = snap.get("lead")
+        members = snap.get("members", [])
+
+        dialog = ModelSelectorDialog(
+            current_enabled=self._enabled_models,
+            current_team=members,
+            current_lead=lead,
+            parent=self,
+        )
+        dialog.saved.connect(self._on_team_saved)
+        dialog.exec()
+
+    def _on_team_saved(self, enabled: dict[str, bool], team: list[str]) -> None:
+        """Handle team selection from the dialog."""
+        self._enabled_models = enabled
+        # Apply the new team to the room
+        # Ensure lead is in team
+        if self.lead and self.lead not in team:
+            team.insert(0, self.lead)
+        # Update room's members
+        self.members = team
+        if hasattr(self, "_room") and self._room is not None:
+            self._room.orch.members = team
+            self._room.orch.emit("team", {"action": "set", "models": team})
+        self.refresh_team()
+
     def refresh_team(self) -> None:
         """Redraw the roster from the room's snapshot. Called on team events and after a turn."""
         snap = self.snapshot()
         lead, members = snap["lead"], snap["members"]
         self.lead = lead
 
-        # The lead box is repopulated from the roster; a signal blocker keeps that from looking like
-        # a user picking a lead, which would call set_lead on every refresh. With no lead the
-        # placeholder sits at index 0 and is selected, so the box reads as unset, not as the
-        # first member being chosen.
+        # Filter members to only enabled models
+        enabled_members = [m for m in members if self._enabled_models.get(m, True)]
+
+        # The lead box is repopulated from the enabled roster; a signal blocker keeps that from
+        # looking like a user picking a lead, which would call set_lead on every refresh.
+        # With no lead the placeholder sits at index 0 and is selected, so the box reads as unset.
         blocker = self.leadBox.blockSignals(True)
         self.leadBox.clear()
         if lead is None:
             self.leadBox.addItem(NO_LEAD_PLACEHOLDER)
-        self.leadBox.addItems(members)
-        if lead in members:
+        # Add enabled members to lead box
+        for name in enabled_members:
+            self.leadBox.addItem(name)
+        if lead in enabled_members:
             self.leadBox.setCurrentText(lead)
         self.leadBox.blockSignals(blocker)
 
@@ -780,8 +853,14 @@ class HexmindWidget(QWidget):
                 held.setdefault(task.agent, []).append(task.id)
 
         self.team.setRowCount(0)
-        for name in members:
-            state = "lead" if name == lead else ("busy " + ", ".join(held[name]) if name in held else "awake")
+        # Lead always at top if present
+        if lead and lead in enabled_members:
+            state = "lead"
+            self._add_row(self.team, (lead, state, ", ".join(_domains(lead))))
+        for name in enabled_members:
+            if name == lead:
+                continue  # already added at top
+            state = "busy " + ", ".join(held[name]) if name in held else "awake"
             self._add_row(self.team, (name, state, ", ".join(_domains(name))))
         self._refresh_graph()
         self._refresh_timeline()

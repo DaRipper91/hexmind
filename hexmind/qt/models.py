@@ -61,7 +61,8 @@ class CalibrationRack(QWidget):
 
         self.models = QListWidget(self)
         self.models.setAccessibleName("Registered models")
-        self.models.addItems(REGISTRY.by_weight())
+        # Only show enabled models
+        self.models.addItems(REGISTRY.enabled_names())
         self.models.currentTextChanged.connect(self._show_model)
 
         self.label_value = QLabel("", self)

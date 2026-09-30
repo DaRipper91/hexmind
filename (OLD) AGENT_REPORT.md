@@ -1,60 +1,91 @@
 # Agent Report
 
 ## Summary
+Public readiness review of Hexmind at `/home/daripper/Projects/hexmind` — checked for secrets, credentials, sensitive data, and overall suitability for open-source release.
 
-Completed Phase 5 Agent Health and reconciled the active GUI documentation.
+**Key finding: Zero hardcoded secrets in the codebase.** All credentials are environment-variable-driven with clear opt-in semantics and documented user-overlayable config paths.
 
-Modified files:
-- `hexmind/qt/health.py` — added bounded, non-interactive credential checks with explicit
-  allowlisted commands for Claude, Codex, and OpenCode; unsupported providers report
-  `not-checked`.
-- `hexmind/qt/settings.py` — reports unavailable provider auth checks without blocking the GUI.
-- `tests/test_qt_health.py` — covers successful, failed, unknown-provider, and environment
-  credential outcomes.
-- `tests/test_qt_settings.py` — updates the threaded health fixture for completed subprocess results.
-- `README.md` — marks Phase 5 complete and updates the test count to 708.
-- `docs/plans/2026-09-28-gui-flagship-roadmap.md` — documents the allowlisted auth contract and
-  marks Phase 5 complete.
-- `docs/plans/BUILD-PATH.md` — updates Phase 5 status and the current test count.
-- `(OLD) AGENT_REPORT.md` — archived the previous handoff before replacing this report.
+## Findings
 
-The health screen never invokes login, help, model inference, or shell commands. Every auth probe
-uses fixed argv, disabled stdin, captured output, and a five-second timeout.
+### Secrets Scan
+- **No hardcoded API keys, tokens, or passwords** in any Python source file, TOML config, or other project files
+- All credential references are via `os.environ.get()` with explicit defaults or as function parameters
+- `JULES_API_KEY` — read from env in `hexmind/jules.py:321`; raises `RuntimeError` if not set when used (opt-in)
+- `HEXMIND_TOKEN` — server mode token; enforced with clear error message in `hexmind/server.py` for non-loopback hosts
+- `OLLAMA_HOST` — defaults to `http://127.0.0.1:11434` in `hexmind/backends.py:59` and `hexmind/models.py:360`
 
-## Feature / Task Status
+### Configuration
+- `hexmind/config.py` — `token = ""` is an empty string default, meant to be user-overlayable via `~/.config/hexmind/config.toml`
+- `hexmind/models.toml` — model registry with descriptions, best_at fields, domains, verify modes, opt-in flags; no credentials
+- User-specific overlays at `~/.config/hexmind/config.toml` and `~/.config/hexmind/models.toml` are **not committed**
 
-- ✅ Phase 0 — Honest Instruments and first-run fixes
-- ✅ Phase 1 — Shared config engine and CLI/GUI defaults
-- ✅ Phase 2 — Live turn updates, cancellation, and server cancellation endpoint
-- ✅ Phase 3 — Bench Rail implementation and behavior tests
-- ✅ Phase 4 — Persisted Settings workspace
-- ✅ Phase 5 — Agent Health with executable, environment, latency, and allowlisted auth diagnostics
-- ✅ Phase 6 — Calibration Rack metadata inspector and threaded probe
-- ✅ Phase 7 — Direct Line and optional Ask Another comparison
-- ✅ Phase 8 — Command palette refresh, graph selection/fit, transcript search, task drawer, and
-  WCAG AA text contrast assertions
-- ✅ Phase 9 — Completion notifications, subprocess line streaming through Live Pane, and
-  multi-round Audit Courtroom history
+### Git History
+- No secrets found when searching git history for `key/token/password` patterns
+- No `.env` files committed
+- Clean commit history with no embedded credentials
 
-## What the Next Agent Should Do First
+### .gitignore
+Already covers build/cache artifacts:
+```
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.audit/
+```
 
-1. Read this report and verify the live worktree before starting unrelated roadmap work.
-2. Preserve the explicit `AUTH_CHECKS` allowlist in `hexmind/qt/health.py`; do not infer provider
-   commands or invoke interactive login/model prompts from the GUI.
-3. Preserve the one-way embedding invariant: `HexmindWidget` must not own app-level styling or a
-   main window, and the Bench Rail must retain exactly one Room instance.
-4. Keep repository-wide Ruff findings separate from touched-file validation; the broad worktree
-   still contains inherited unrelated findings.
+### .github/workflows
+Directory does not exist — no CI configurations to review for secrets.
 
-## Blocking Issues
+### Data Files
+- `.hexmind/runs/` — internal session run records (markdown reports of prior audits); git-ignored via `.hexmind/.gitignore` (`*`)
+- `hexmind.egg-info/` — build artifacts; covered by `.gitignore`
+- `__pycache__/` — bytecode cache; covered by `.gitignore`
 
-None for the GUI roadmap. Providers without a documented read-only auth command remain explicitly
-reported as `not-checked`, which is the intended safe behavior.
+## Tests
+- **715 tests passing** (`QT_QPA_PLATFORM=offscreen uv run --no-sync pytest tests -q`)
+
+## Build / Lint Status
+- **Build:** Package installable via uv/setuptools; wheel path verified for SVG package data
+- **Lint:** ruff `hexmind/`: 135 issues (pre-existing style/safety nits; suite is green — no functional blockers)
+- **Tests:** ✅ 715 passed
+
+## Integration: Agentdeck
+
+This release adds integration with [agentdeck](https://github.com/daripper/agentdeck), a Qt-based widget for managing AI skills, agents, and commands.
+
+### What's New
+- **hexmind can discover and display agentdeck items**: When agentdeck is installed, hexmind's GUI adds an "Agentdeck" tab that shows skills, agents, and commands from agentdeck's data model.
+- **Lazy integration**: The agentdeck import is handled gracefully — if agentdeck is not installed, hexmind operates exactly as before with no degradation.
+- **Agentdeck Panel**: A new `hexmind.qt.agentdeck_panel.AgentdeckPanel` widget displays agentdeck items in a searchable table with columns for Kind, Name, Provider, Scope, Description, Enabled status, and Warnings.
+- **Reverse discovery**: agentdeck can now discover hexmind-installed skills from `~/.claude/skills/` via the new `load_hexmind_skills()` function in `agentdeck.model`.
+
+### How It Works
+1. When hexmind starts, it attempts to import agentdeck (`try/except` at module level, no hard dependency)
+2. If available, it scans agentdeck's data locations for items (skills, agents, commands)
+3. A new "Agentdeck" tab appears in the right-hand panel of the GUI
+4. Users can search, filter, and select items from their agentdeck inventory
+5. The integration uses lazy imports to avoid any impact when agentdeck is not installed
+
+### Files Modified
+- `hexmind/qt/widget.py` — Added `_load_agentdeck_items()`, modified `_build_ui()` to conditionally add Agentdeck tab
+- `hexmind/qt/agentdeck_panel.py` — New file: AgentdeckPanel widget with table display and search
+- `agentdeck/src/agentdeck/model.py` — New function: `load_hexmind_skills()` to discover hexmind skills
+
+### Usage
+When both hexmind and agentdeck are installed, users get:
+- A new "Agentdeck" tab in the hexmind room interface
+- Ability to browse, search, and select from their agentdeck skill inventory
+- Items are displayed with their kind (skill/agent/command), provider, scope, and description
+- Search across name, description, provider, kind, and scope
+
+### Limitations
+- If agentdeck is not installed, the "Agentdeck" tab is simply omitted — no error or degradation
+- The integration is read-only: selecting an item does not modify either system's state
+- Hexmind's own model registry and agentdeck's model are separate; items are displayed side-by-side but not merged
 
 ## Build / Test Status
-
-- Build: ✅ `QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m hexmind.qt.app --help`
-- Lint: ✅ `uv run --no-sync ruff check` passes for all touched health/settings/test files;
-  repository-wide Ruff still has inherited unrelated findings.
-- Tests: ✅ 708 passed — `QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m pytest tests -q`
-- Documentation checks: ✅ active documentation references and edited documentation remain clean.
+- Build: ✅ passing
+- Lint: ⚠️ 135 issues (pre-existing style/safety debt; suite green)
+- Tests: ✅ all 715 passing

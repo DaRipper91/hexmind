@@ -11,6 +11,7 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from hexmind import config
+from hexmind.core import REGISTRY
 from hexmind.qt.settings import SettingsPage
 
 
@@ -34,8 +35,11 @@ def page(qapp, config_path):
 
 
 def test_settings_page_loads_schema_defaults(page):
-    assert page.lead_input.text() == config.RoomDefaults().lead
-    assert page.members_input.text() == ", ".join(config.RoomDefaults().members)
+    # Lead combo should have "(no lead — parallel turn)" as first item
+    assert page.lead_combo.itemText(0) == "(no lead — parallel turn)"
+    assert page.lead_combo.currentIndex() == 0
+    # Team should default to RoomDefaults
+    assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
     assert page.theme_selector.currentText() == config.RoomDefaults().theme
     assert page.server_host_input.text() == config.ServerDefaults().host
@@ -48,8 +52,15 @@ def test_settings_page_loads_schema_defaults(page):
 
 
 def test_settings_page_saves_all_configured_preferences(page, config_path):
-    page.lead_input.setText("codex")
-    page.members_input.setText("codex, claude")
+    # Select lead from combo
+    idx = page.lead_combo.findData("codex")
+    page.lead_combo.setCurrentIndex(idx)
+    # Set team directly
+    page._team = ["codex", "claude"]
+    page._lead = "codex"
+    page._populate_lead_combo()
+    page._update_team_label()
+
     page.audit_checkbox.setChecked(False)
     page.server_host_input.setText("0.0.0.0")
     page.server_port_input.setValue(9000)
@@ -70,17 +81,21 @@ def test_settings_page_saves_all_configured_preferences(page, config_path):
     assert "Changes apply to new GUI sessions" in page.status.text()
 
 
-@pytest.mark.parametrize("roster, message", [("", "at least one"), ("codex, codex", "unique")])
-def test_settings_page_rejects_invalid_rosters(page, roster, message):
-    page.members_input.setText(roster)
+@pytest.mark.parametrize("team, message", [([], "at least one"), (["codex", "codex"], "unique")])
+def test_settings_page_rejects_invalid_rosters(page, team, message):
+    page._team = team
+    page._populate_lead_combo()
+    page._update_team_label()
 
     assert page.save() is False
     assert message in page.status.text()
 
 
 def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
-    page.lead_input.setText("qwen")
-    page.members_input.setText("codex, claude")
+    page._lead = "qwen"
+    page._team = ["codex", "claude"]
+    page._populate_lead_combo()
+    page._update_team_label()
 
     assert page.save() is False
     assert "Default lead must be included" in page.status.text()
@@ -105,8 +120,12 @@ def test_settings_page_loads_saved_values(qapp, config_path):
 
     page = SettingsPage(config_path)
 
-    assert page.lead_input.text() == "kimi"
-    assert page.members_input.text() == "kimi"
+    # Lead should be kimi
+    idx = page.lead_combo.findData("kimi")
+    assert idx >= 0
+    assert page.lead_combo.currentIndex() == idx
+    # Team should be kimi
+    assert page._team == ["kimi"]
     assert page.audit_checkbox.isChecked() is False
     assert page.server_host_input.text() == "192.168.1.5"
     assert page.server_port_input.value() == 8888
@@ -136,8 +155,11 @@ def test_settings_page_reports_agent_health(page, monkeypatch):
 
 
 def test_settings_page_can_restore_defaults_without_saving(page):
-    page.lead_input.setText("codex")
-    page.members_input.setText("codex, claude")
+    page._lead = "codex"
+    page._team = ["codex", "claude"]
+    page._populate_lead_combo()
+    page._update_team_label()
+
     page.audit_checkbox.setChecked(False)
     page.server_host_input.setText("0.0.0.0")
     page.server_port_input.setValue(9000)
@@ -147,8 +169,8 @@ def test_settings_page_can_restore_defaults_without_saving(page):
 
     page.reset_to_defaults()
 
-    assert page.lead_input.text() == config.RoomDefaults().lead
-    assert page.members_input.text() == ", ".join(config.RoomDefaults().members)
+    assert page.lead_combo.currentIndex() == 0  # no lead
+    assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
     assert page.server_host_input.text() == config.ServerDefaults().host
     assert page.server_port_input.value() == config.ServerDefaults().port

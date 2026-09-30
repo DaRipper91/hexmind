@@ -56,6 +56,7 @@ class Model:
     footprint: str = ""
     env: str = ""
     fallback_for: tuple[str, ...] = field(default_factory=tuple)
+    enabled: bool = True
 
     @property
     def is_local(self) -> bool:
@@ -278,6 +279,7 @@ class Registry:
                 raise ValueError(f"model '{name}': verify must be one of {VERIFIERS}")
             for key in ("domains", "fallback_for"):
                 spec[key] = tuple(spec.get(key, ()))
+            spec["enabled"] = spec.get("enabled", True)
             models[name] = Model(name=name, **spec)
         return cls(models, tuple(sources))
 
@@ -324,6 +326,15 @@ class Registry:
         """Preferred-first ordering: the opencode models are favoured (plan R5)."""
         pool = names if names is not None else list(self.models)
         return sorted(pool, key=lambda n: (-self.models[n].weight, n))
+
+    # ---------- enabled models ----------
+    def enabled_names(self) -> list[str]:
+        """All model names that are enabled, in preference order."""
+        return self.by_weight([n for n, m in self.models.items() if m.enabled])
+
+    def enabled_and_available(self) -> list[str]:
+        """Enabled models whose backing tool is actually present, in preference order."""
+        return self.by_weight([n for n in self.available() if self.models[n].enabled])
 
     # ---------- generated prose ----------
     def roster(self) -> dict[str, str]:

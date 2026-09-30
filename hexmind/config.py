@@ -16,6 +16,54 @@ token = ""
 phone_buzz = false         # KDE Connect ping via notify.py
 threshold_seconds = 30     # only notify if turn took longer than 30s
 
+[models]
+# model-name = true/false  (enabled state controls UI visibility)
+claude = true
+agy = true
+codex = true
+kimi = true
+nemotron-lightning = true
+nemotron-ultra = true
+muse-spark = true
+mimo-flash = true
+big-pickle = true
+ling-flash = true
+space-bunny = true
+longcat-preview = true
+copilot = true
+jules = true
+qwen = true
+qwen-large = true
+deepseek-v4-pro = true
+deepseek-v4-1-flash = true
+deepseek-v4-flash = true
+deepseek-v4-vision = true
+gpt-6-luna = true
+gpt-5-6-luna = true
+grok-4-7 = true
+grok-4-6 = true
+qwen3-8-max = true
+qwen3-8-flash = true
+qwen3-7-plus = true
+kimi-k3 = true
+kimi-k2-7-code = true
+glm-5-3 = true
+glm-5-3-flash = true
+glm-5-2 = true
+mimo-v2-6-pro = true
+mimo-v2-6-flash = true
+mimo-v2-5-pro = true
+mimo-v2-5 = true
+minimax-m3 = true
+minimax-m2-7 = true
+hy4-preview = true
+hy3 = true
+longcat-2-0 = true
+longcat-go = true
+space-bunny-go = true
+muse-spark-contributor = true
+muse-spark-1-2 = true
+
 [nicknames]
 claude = "Rex"
 """
@@ -153,6 +201,27 @@ def get_notification_defaults(path: str | Path | None = None) -> NotificationDef
         phone_buzz=bool(cfg.get("phone_buzz", False)),
         threshold_seconds=threshold_int,
     )
+
+
+def get_enabled_models(path: str | Path | None = None) -> dict[str, bool]:
+    """Get enabled models dictionary from config.toml [models] section.
+
+    Returns a dict mapping model name -> enabled state (True/False).
+    If the section is missing or invalid, returns an empty dict (caller should
+    fall back to registry defaults where all models are enabled).
+    """
+    cfg = load_config(path).get("models", {})
+    if not isinstance(cfg, dict):
+        return {}
+    return {k: bool(v) for k, v in cfg.items() if isinstance(v, bool)}
+
+
+def save_enabled_models(enabled: dict[str, bool], path: str | Path | None = None) -> None:
+    """Save enabled models dictionary to config.toml [models] section.
+
+    Preserves all other existing sections.
+    """
+    save_section("models", enabled, path)
 
 
 def load_nicknames(path: str | Path = PATH) -> dict[str, str]:
