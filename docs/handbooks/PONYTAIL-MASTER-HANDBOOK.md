@@ -7,11 +7,11 @@
 > **Authority Level:** High — Canonical Guide for Autonomous Agents & Developers
 > **Scope:** Full Flagship GUI Evolution (`Phase 0` through `Phase 9`), Architectural Invariants, Safe Refactoring, and Asset Preservation
 > **Primary Source References:** 
-> - [`docs/plans/2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md)
-> - [`docs/plans/2026-09-28-gui-ux-ideas.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-ux-ideas.md)
-> - [`docs/plans/2026-09-28-gui-feature-forge.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-feature-forge.md)
-> - [`docs/plans/2026-09-28-hexmind-fixes.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md)
-> - [`docs/audits/PONYTAIL-2026-09-28.md`](file:///home/daripper/Projects/hexmind/docs/audits/PONYTAIL-2026-09-28.md)
+> - [`docs/plans/2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md)
+> - [`docs/plans/2026-09-28-gui-ux-ideas.md`](../archive/plans/2026-09-28-gui-ux-ideas.md)
+> - [`docs/plans/2026-09-28-gui-feature-forge.md`](../archive/plans/2026-09-28-gui-feature-forge.md)
+> - [`docs/plans/2026-09-28-hexmind-fixes.md`](../archive/plans/2026-09-28-hexmind-fixes.md)
+> - [`docs/audits/PONYTAIL-2026-09-28.md`](../audits/PONYTAIL-2026-09-28.md)
 
 ---
 
@@ -70,12 +70,12 @@ The following constructs were flagged in the Ponytail audit as "never called" or
 
 | Symbol / File | Location | Roadmap Need | Reason to Preserve |
 | :--- | :--- | :--- | :--- |
-| **`CommandPalette.set_commands`** | [`hexmind/qt/palette.py:63`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py#L63) | **Phase 8 (P10)** | Called whenever `teamChanged` fires so the command palette updates its slash commands dynamically. |
-| **`TaskGraphView.select_task`** | [`hexmind/qt/graph.py:314`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py#L314) | **Phase 8 (P13)** | Required for interactive graph selection: clicking a graph node highlights and reveals task details in the drawer. |
-| **`TaskGraphView.fit`** | [`hexmind/qt/graph.py:320`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py#L320) | **Phase 8 (P13)** | Required for "Fit to View" DAG auto-centering on canvas resize or turn start. |
-| **`TaskGraphView.clear`** | [`hexmind/qt/graph.py:328`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py#L328) | **Phase 0 / 8** | Required when resetting room state or starting a new turn. |
-| **`notify.py` (KDE Connect)** | [`hexmind/notify.py`](file:///home/daripper/Projects/hexmind/hexmind/notify.py) | **Phase 9 (Forge)** | Required for "Come-back pings": background tray notifications and mobile phone buzz when turns finish or need `/approve`. |
-| **`TaskGraphView.update_task`** | [`hexmind/qt/graph.py:260`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py#L260) | **Phase 2 (Live Wire)** | Evaluated for in-place live status updates (`running`, `passed`, `failed`) during turn execution without redrawing the entire DAG. |
+| **`CommandPalette.set_commands`** | [`hexmind/qt/palette.py:63`](../../hexmind/qt/palette.py#L63) | **Phase 8 (P10)** | Called whenever `teamChanged` fires so the command palette updates its slash commands dynamically. |
+| **`TaskGraphView.select_task`** | [`hexmind/qt/graph.py:314`](../../hexmind/qt/graph.py#L314) | **Phase 8 (P13)** | Required for interactive graph selection: clicking a graph node highlights and reveals task details in the drawer. |
+| **`TaskGraphView.fit`** | [`hexmind/qt/graph.py:320`](../../hexmind/qt/graph.py#L320) | **Phase 8 (P13)** | Required for "Fit to View" DAG auto-centering on canvas resize or turn start. |
+| **`TaskGraphView.clear`** | [`hexmind/qt/graph.py:328`](../../hexmind/qt/graph.py#L328) | **Phase 0 / 8** | Required when resetting room state or starting a new turn. |
+| **`notify.py` (KDE Connect)** | [`hexmind/notify.py`](../../hexmind/notify.py) | **Phase 9 (Forge)** | Required for "Come-back pings": background tray notifications and mobile phone buzz when turns finish or need `/approve`. |
+| **`TaskGraphView.update_task`** | [`hexmind/qt/graph.py:260`](../../hexmind/qt/graph.py#L260) | **Phase 2 (Live Wire)** | Evaluated for in-place live status updates (`running`, `passed`, `failed`) during turn execution without redrawing the entire DAG. |
 
 ---
 
@@ -123,7 +123,7 @@ The following 14 items are verified dead code or obsolete prototype debt that ca
 * **Problem:** On initial launch without `--lead`, the combo defaults to showing the first team member instead of an unassigned state.
 * **Implementation:**
   1. Add placeholder entry `"(no lead — parallel turn)"` as index 0 when `self.lead is None`.
-  2. In `refresh_team()` ([`hexmind/qt/widget.py:310`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py#L310)), update the combo without overwriting an active lead.
+  2. In `refresh_team()` ([`hexmind/qt/widget.py:310`](../../hexmind/qt/widget.py#L310)), update the combo without overwriting an active lead.
   3. Ensure selecting index 0 passes `lead=None` to the room.
 
 #### Task 0.2: Peer Audit Initial Checkbox State (P2)
@@ -148,7 +148,7 @@ The following 14 items are verified dead code or obsolete prototype debt that ca
 * **Target Objective:** Unify CLI, headless server, and GUI under a shared, validated TOML configuration file at `~/.config/hexmind/config.toml`.
 
 #### Technical Specification:
-* **File:** Create [`hexmind/config.py`](file:///home/daripper/Projects/hexmind/hexmind/config.py)
+* **File:** Create [`hexmind/config.py`](../../hexmind/config.py)
 * **Schema:**
   ```toml
   [room]
@@ -272,7 +272,7 @@ The following 14 items are verified dead code or obsolete prototype debt that ca
 * **Target Objective:** Activate the preserved hooks and complete the visual polish.
 
 #### Task 8.1: Palette 2.0 (Connecting Preserved `set_commands`)
-* In `hexmind/qt/palette.py`, activate [`set_commands(commands)`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py#L63).
+* In `hexmind/qt/palette.py`, activate [`set_commands(commands)`](../../hexmind/qt/palette.py#L63).
 * Connect `_Room.teamChanged` → `CommandPalette.set_commands` with updated `/model`, `/lead`, and `/ask` entries.
 
 #### Task 8.2: Graph Interaction (Connecting Preserved `select_task` & `fit`)
