@@ -54,7 +54,8 @@ class HexmindWindow(QMainWindow):
     def __init__(self, room: QWidget | None = None, **room_kwargs: Any) -> None:
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} — multi-model agent team")
-        self.resize(1280, 820)
+        self.resize(1400, 900)
+        self.setMinimumSize(1000, 700)
 
         # `room` is injectable so a test can stand a window up around a stub, and so the window is
         # never the reason a room fails to build.
