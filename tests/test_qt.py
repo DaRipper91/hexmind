@@ -215,6 +215,25 @@ def test_picking_a_lead_updates_the_room_and_the_roster(room):
     assert ["claude", "awake"] in team, team
 
 
+def test_team_save_serializes_with_orch_lock(room):
+    """_on_team_saved must take _orch_lock so a team save mid-turn cannot race submit()/change_lead(),
+    which hold the same lock while touching orchestrator state."""
+    from unittest.mock import MagicMock
+
+    widget = room()
+    widget._room.wait_until_ready()
+
+    mock_lock = MagicMock()
+    widget._room._orch_lock = mock_lock
+
+    widget._on_team_saved({"claude": True}, ["claude"])
+    pump()
+
+    # `with lock:` calls __enter__ on entry and __exit__ on exit.
+    mock_lock.__enter__.assert_called()
+    mock_lock.__exit__.assert_called()
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

@@ -820,8 +820,11 @@ class HexmindWidget(QWidget):
         # Update room's members
         self.members = team
         if hasattr(self, "_room") and self._room is not None:
-            self._room.orch.members = team
-            self._room.orch.emit("team", {"action": "set", "models": team})
+            # Serialize with the room thread: `submit()`/`change_lead()` hold _orch_lock while
+            # touching the same orchestrator state, so a team save mid-turn must not race them.
+            with self._room._orch_lock:
+                self._room.orch.members = team
+                self._room.orch.emit("team", {"action": "set", "models": team})
         self.refresh_team()
 
     def refresh_team(self) -> None:
