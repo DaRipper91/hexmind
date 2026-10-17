@@ -14,7 +14,7 @@ for the roadmap.
 
 | file | responsibility |
 | :--- | :--- |
-| `models.toml` / `models.py` | **the source of truth for the roster.** All 16 members as structured fields |
+| `models.toml` / `models.py` | **the source of truth for the roster.** All roster members from models.toml (currently 45) as structured fields |
 | `core.py` | `Task`, `Orchestrator`, plan parsing, the task graph, team state (sleep/wake/lead) |
 | `relay.py` | chain loading, `from =` resolution, stage assignment, all `/commands` |
 | `auditor.py` | domains, verdict parsing, the bounded revise loop, `Stats` rankings |

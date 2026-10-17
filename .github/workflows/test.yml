@@ -1,0 +1,35 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install hexmind with test extras
+        run: uv pip install --system -e ".[qt,server,dev]"
+
+      - name: Run test suite
+        run: QT_QPA_PLATFORM=offscreen python3 -m pytest tests -q
+        # Two tests are expected to fail on machines without the ling-flash opencode model:
+        # tests/test_team.py::test_wake_puts_it_back
+        # tests/test_team.py::test_sleep_and_wake_commands_round_trip
+        # They hard-code ling-flash without mocking Registry.available(); /wake re-checks
+        # availability by design. Baseline (this machine, ling-flash unavailable):
+        # 725 passed / 2 failed / 727 collected. These are pre-existing environmental
+        # failures, not regressions.
