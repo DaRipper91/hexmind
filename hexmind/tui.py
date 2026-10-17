@@ -97,7 +97,8 @@ class TaskScreen(ModalScreen):
             self.app.copy_to_clipboard(self.output)  # OSC 52; Termux may not honour it, so also try termux-api
             if shutil.which("termux-clipboard-set"):
                 self.termux_copy()
-            self.notify("Copied task output")
+            # Don't notify here: termux_copy is fire-and-forget and notifies on success itself.
+            # Notifying now would claim success before the copy even starts.
         else:
             self.dismiss()
 
@@ -109,10 +110,15 @@ class TaskScreen(ModalScreen):
         try:
             await asyncio.wait_for(proc.communicate(self.output.encode()), 5)
         except asyncio.TimeoutError:
-            pass
+            self.app.notify("Termux clipboard copy timed out", severity="warning", timeout=3)
+            return
         finally:  # also runs if the sheet is closed and the worker cancelled
             if proc.returncode is None:
                 proc.kill()
+        if proc.returncode != 0:
+            self.app.notify("Termux clipboard copy failed", severity="warning", timeout=3)
+            return
+        self.notify("Copied task output")
 
 
 def labelled(content: VisualType, tooltip: str, classes: str = "") -> Static:
