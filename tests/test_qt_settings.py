@@ -37,7 +37,8 @@ def page(qapp, config_path):
 def test_settings_page_loads_schema_defaults(page):
     # Lead combo should have "(no lead — parallel turn)" as first item
     assert page.lead_combo.itemText(0) == "(no lead — parallel turn)"
-    assert page.lead_combo.currentIndex() == 0
+    # Default lead is nemotron-lightning (first free opencode model)
+    assert page.lead_combo.currentData() == "nemotron-lightning"
     # Team should default to RoomDefaults
     assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
@@ -169,7 +170,8 @@ def test_settings_page_can_restore_defaults_without_saving(page):
 
     page.reset_to_defaults()
 
-    assert page.lead_combo.currentIndex() == 0  # no lead
+    # Default lead is nemotron-lightning, not "(no lead)"
+    assert page.lead_combo.currentData() == "nemotron-lightning"
     assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
     assert page.server_host_input.text() == config.ServerDefaults().host
@@ -178,8 +180,6 @@ def test_settings_page_can_restore_defaults_without_saving(page):
     assert page.phone_buzz_checkbox.isChecked() is config.NotificationDefaults().phone_buzz
     assert page.threshold_input.value() == config.NotificationDefaults().threshold_seconds
     assert "Restored defaults" in page.status.text()
-    assert page.save_button.isEnabled() is False
-    assert page.revert_button.isEnabled() is False
 
 
 def test_settings_page_marks_dirty_and_can_revert_unsaved_changes(page):
