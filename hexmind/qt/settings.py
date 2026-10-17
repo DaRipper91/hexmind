@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -32,6 +32,7 @@ class SettingsPage(QWidget):
     config_file_requested = Signal(str)
     config_directory_requested = Signal(str)
     dirty_changed = Signal(bool)
+    closed = Signal()
 
     def __init__(self, config_path: str | Path | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -117,6 +118,10 @@ class SettingsPage(QWidget):
         self.save_button = QPushButton("Save settings", self)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save)
+        self.close_button = QPushButton("Close Settings", self)
+        self.close_button.setAccessibleName("Close settings workspace")
+        self.close_button.setToolTip("Return to the room (Escape)")
+        self.close_button.clicked.connect(self.closed.emit)
         buttons = QHBoxLayout()
         buttons.addWidget(self.reload_button)
         buttons.addWidget(self.defaults_button)
@@ -125,6 +130,7 @@ class SettingsPage(QWidget):
         buttons.addWidget(self.open_config_dir_button)
         buttons.addStretch()
         buttons.addWidget(self.save_button)
+        buttons.addWidget(self.close_button)
 
         layout = QVBoxLayout(self)
         layout.addWidget(title)
@@ -479,6 +485,13 @@ class SettingsPage(QWidget):
         self._health_scanner.finished.connect(self._health_scanner.deleteLater)
         self._health_scanner.finished.connect(lambda _: setattr(self, "_health_scanner", None))
         self._health_scanner.start()
+
+    def keyPressEvent(self, event) -> None:  # Qt's spelling, not ours
+        """Escape closes the settings workspace and returns to the room."""
+        if event.key() == Qt.Key.Key_Escape:
+            self.closed.emit()
+        else:
+            super().keyPressEvent(event)
 
     def _show_health(self, results: list) -> None:
         ready = sum(result.available and result.credential_ready for result in results)

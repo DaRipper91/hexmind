@@ -77,6 +77,7 @@ class HexmindWindow(QMainWindow):
         self.tray_icon: QSystemTrayIcon | None = None
         self.settings_page.saved.connect(self._on_settings_saved)
         self.settings_page.dirty_changed.connect(self._on_settings_dirty_changed)
+        self.settings_page.closed.connect(self._close_settings)
         self.settings_page.config_file_requested.connect(self.open_path)
         self.settings_page.config_directory_requested.connect(self.open_path)
         self._setup_notifications()
@@ -260,6 +261,9 @@ class HexmindWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         self.bench_rail.set_workspace("Settings")
+
+    def _close_settings(self) -> None:
+        self.bench_rail.set_workspace("Room")
 
     def _reload_settings(self) -> None:
         if not self.settings_page.reload():
