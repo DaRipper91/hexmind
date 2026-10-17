@@ -30,6 +30,7 @@ SUBSTRATE = "#0a0d14"          # the bench itself
 PANEL = "#0f1420"               # a raised surface
 PANEL_EDGE = "#1c2436"          # a seam between surfaces
 GRID = "#141a28"                # the strict grid, barely above the substrate
+PANEL_HOVER = "#161c2c"         # a surface under the pointer
 
 INK = "#e6edf7"                 # primary text: clinical, high contrast
 INK_DIM = "#8b98ae"             # secondary labels
@@ -41,6 +42,26 @@ GREEN = "#5fd68a"               # verification — done, passed, audited clean
 AMBER = "#e8b04b"               # warning — failed, gated, needs a human
 RED = "#f2686b"                 # failure — hard error, cancelled, contradicted
 SLATE = "#6b7a94"               # idle, asleep, known-but-not-awake
+
+# ---------- typography ----------
+# A single system font stack, sized so the bench reads at a comfortable distance.
+# Scaling honors the platform's device pixel ratio; Qt applies it automatically
+# when AA_EnableHighDpiScaling is set (QApplication does this by default in Qt 6).
+FONT_FAMILY = '"Inter", "SF Pro Text", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif'
+FONT_MONO = '"JetBrains Mono", "Fira Code", "SF Mono", "Consolas", "Liberation Mono", monospace'
+FONT_SIZE = 14                  # base body text, px
+FONT_SIZE_SMALL = 12            # captions, secondary labels
+FONT_SIZE_LARGE = 16            # section headings, status lines
+FONT_WEIGHT = 400
+FONT_WEIGHT_MEDIUM = 500
+FONT_WEIGHT_SEMIBOLD = 600
+LINE_HEIGHT = 1.5
+
+# ---------- geometry ----------
+# Border radius softens the laboratory edge without breaking the grid.
+BORDER_RADIUS = 8               # panels, inputs, buttons
+BORDER_RADIUS_SMALL = 4         # badges, pills, indicators
+BORDER_WIDTH = 1.5              # seam thickness, px
 
 #: Every state a task can be in, and the hue that posts it. This is the single mapping the whole
 #: app reads: the table, the graph node, the status pill and the legend all resolve through it, so
@@ -82,50 +103,61 @@ def stylesheet() -> str:
     QWidget {{
         background: {SUBSTRATE};
         color: {INK};
-        font-size: 13px;
+        font-family: {FONT_FAMILY};
+        font-size: {FONT_SIZE}px;
+        font-weight: {FONT_WEIGHT};
+        line-height: {LINE_HEIGHT};
     }}
     QMainWindow::separator {{
         background: {PANEL_EDGE};
-        width: 1px;
-        height: 1px;
+        width: {BORDER_WIDTH}px;
+        height: {BORDER_WIDTH}px;
     }}
     QToolTip {{
         background: {PANEL};
         color: {INK};
-        border: 1px solid {PANEL_EDGE};
-        padding: 4px 6px;
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS_SMALL}px;
+        padding: 6px 8px;
+        font-size: {FONT_SIZE_SMALL}px;
     }}
 
     /* --- structure: violet, because this is identity and selection --- */
     QTabWidget::pane {{
-        border: 1px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS}px;
         background: {SUBSTRATE};
     }}
     QTabBar::tab {{
         background: {PANEL};
         color: {INK_DIM};
-        padding: 6px 12px;
-        border: 1px solid {PANEL_EDGE};
+        padding: 8px 14px;
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-bottom: none;
+        border-top-left-radius: {BORDER_RADIUS}px;
+        border-top-right-radius: {BORDER_RADIUS}px;
+        min-width: 70px;
     }}
     QTabBar::tab:selected {{
         background: {SUBSTRATE};
         color: {VIOLET};
         border-top: 2px solid {VIOLET};
     }}
-    QTabBar::tab:hover:!selected {{ color: {INK}; }}
+    QTabBar::tab:hover:!selected {{ color: {INK}; background: {PANEL_HOVER}; }}
 
     /* --- inputs --- */
     QLineEdit, QPlainTextEdit, QTextBrowser, QTextEdit, QSpinBox, QDoubleSpinBox {{
         background: {PANEL};
         color: {INK};
-        border: 1px solid {PANEL_EDGE};
-        padding: 4px 6px;
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS}px;
+        padding: 8px 10px;
         selection-background-color: {VIOLET};
         selection-color: {INK};
     }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
-        border: 1px solid {VIOLET};
+        border: {BORDER_WIDTH}px solid {VIOLET};
+        background: {PANEL_HOVER};
     }}
     QLineEdit:disabled, QPushButton:disabled, QComboBox:disabled {{
         color: {INK_FAINT};
@@ -136,106 +168,144 @@ def stylesheet() -> str:
     QPushButton {{
         background: {PANEL};
         color: {INK};
-        border: 1px solid {PANEL_EDGE};
-        padding: 5px 12px;
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS}px;
+        padding: 8px 16px;
+        min-height: 32px;
     }}
-    QPushButton:hover {{ border: 1px solid {VIOLET}; color: {INK}; }}
+    QPushButton:hover {{ border: {BORDER_WIDTH}px solid {VIOLET}; color: {INK}; background: {PANEL_HOVER}; }}
     QPushButton:pressed {{ background: {GRID}; }}
     QPushButton:checked {{
-        border: 1px solid {CYAN};
+        border: {BORDER_WIDTH}px solid {CYAN};
         color: {CYAN};
+        background: {PANEL_HOVER};
     }}
     QPushButton#stopButton {{
         color: {RED};
-        border: 1px solid {RED};
+        border: {BORDER_WIDTH}px solid {RED};
     }}
     QPushButton#stopButton:hover {{
         background: #2a1518;
+        border: {BORDER_WIDTH}px solid {RED};
     }}
     QPushButton#stopButton:disabled {{
         color: {INK_FAINT};
-        border: 1px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         background: {GRID};
+    }}
+    QPushButton:focus {{
+        outline: none;
+        border: {BORDER_WIDTH}px solid {VIOLET};
     }}
 
     QLabel#turnMeter {{
         color: {CYAN};
-        font-family: monospace;
-        font-weight: bold;
-        padding: 0 4px;
+        font-family: {FONT_MONO};
+        font-weight: {FONT_WEIGHT_SEMIBOLD};
+        padding: 0 6px;
+        font-size: {FONT_SIZE_SMALL}px;
     }}
 
     QComboBox {{
         background: {PANEL};
-        border: 1px solid {PANEL_EDGE};
-        padding: 4px 8px;
+        color: {INK};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS}px;
+        padding: 8px 10px;
+        min-height: 32px;
     }}
-    QComboBox::drop-down {{ border: none; width: 18px; }}
+    QComboBox::drop-down {{ border: none; width: 24px; }}
     QComboBox QAbstractItemView {{
         background: {PANEL};
         color: {INK};
         selection-background-color: {VIOLET};
         selection-color: {INK};
-        border: 1px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: 0 0 {BORDER_RADIUS}px {BORDER_RADIUS}px;
+    }}
+    QComboBox::down-arrow {{
+        image: none;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid {INK_DIM};
+        margin-right: 8px;
+    }}
+    QComboBox:focus {{
+        border: {BORDER_WIDTH}px solid {VIOLET};
+        background: {PANEL_HOVER};
     }}
 
     /* --- checkboxes: the indicator must read on the dark substrate --- */
-    QCheckBox {{ spacing: 6px; }}
+    QCheckBox {{ spacing: 8px; }}
     QCheckBox::indicator {{
-        width: 15px;
-        height: 15px;
-        border: 1px solid {PANEL_EDGE};
+        width: 18px;
+        height: 18px;
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS_SMALL}px;
         background: {PANEL};
     }}
-    QCheckBox::indicator:hover {{ border: 1px solid {VIOLET}; }}
+    QCheckBox::indicator:hover {{ border: {BORDER_WIDTH}px solid {VIOLET}; }}
     QCheckBox::indicator:checked {{
         background: {GREEN};
-        border: 1px solid {GREEN};
+        border: {BORDER_WIDTH}px solid {GREEN};
     }}
-    QCheckBox::indicator:checked:hover {{ border: 1px solid {INK}; }}
+    QCheckBox::indicator:checked:hover {{ border: {BORDER_WIDTH}px solid {INK}; }}
     QCheckBox::indicator:disabled {{
         background: {GRID};
-        border: 1px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+    }}
+    QCheckBox:focus {{
+        outline: none;
     }}
 
     /* --- trees and tables --- */
     QTreeWidget, QTreeView, QTableWidget, QTableView, QListWidget, QListView {{
         background: {SUBSTRATE};
         color: {INK};
-        border: 1px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS}px;
         alternate-background-color: {GRID};
+        gridline-color: {PANEL_EDGE};
+        selection-background-color: {PANEL};
+        selection-color: {VIOLET};
     }}
     QTreeWidget::item:selected, QTableWidget::item:selected,
     QListWidget::item:selected, QListView::item:selected {{
         background: {GRID};
         color: {VIOLET};
+        border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QTreeWidget::item:hover, QTableWidget::item:hover,
-    QListWidget::item:hover, QListView::item:hover {{ background: {PANEL}; }}
+    QListWidget::item:hover, QListView::item:hover {{ background: {PANEL_HOVER}; }}
 
     QHeaderView::section {{
         background: {PANEL};
         color: {INK_DIM};
         border: none;
-        border-right: 1px solid {PANEL_EDGE};
-        border-bottom: 1px solid {PANEL_EDGE};
-        padding: 4px 6px;
-        font-weight: 600;
+        border-right: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-bottom: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        padding: 6px 8px;
+        font-weight: {FONT_WEIGHT_MEDIUM};
+        font-size: {FONT_SIZE_SMALL}px;
+        border-top-left-radius: {BORDER_RADIUS_SMALL}px;
+        border-top-right-radius: {BORDER_RADIUS_SMALL}px;
     }}
 
     /* --- scrollbars: present, never loud --- */
     QScrollBar:vertical {{
         background: {SUBSTRATE};
-        width: 10px;
+        width: 12px;
         margin: 0;
+        border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QScrollBar::handle:vertical {{
         background: {PANEL_EDGE};
-        min-height: 24px;
+        min-height: 40px;
+        border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QScrollBar::handle:vertical:hover {{ background: {VIOLET}; }}
-    QScrollBar:horizontal {{ background: {SUBSTRATE}; height: 10px; margin: 0; }}
-    QScrollBar::handle:horizontal {{ background: {PANEL_EDGE}; min-width: 24px; }}
+    QScrollBar:horizontal {{ background: {SUBSTRATE}; height: 12px; margin: 0; border-radius: {BORDER_RADIUS_SMALL}px; }}
+    QScrollBar::handle:horizontal {{ background: {PANEL_EDGE}; min-width: 40px; border-radius: {BORDER_RADIUS_SMALL}px; }}
     QScrollBar::handle:horizontal:hover {{ background: {VIOLET}; }}
     QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
     QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
@@ -243,19 +313,21 @@ def stylesheet() -> str:
     /* --- the command palette overlay --- */
     #palette {{
         background: {PANEL};
-        border: 1px solid {VIOLET};
+        border: {BORDER_WIDTH}px solid {VIOLET};
+        border-radius: {BORDER_RADIUS}px;
     }}
     #paletteInput {{
         background: {PANEL};
         border: none;
-        border-bottom: 1px solid {PANEL_EDGE};
-        font-size: 15px;
-        padding: 10px 12px;
+        border-bottom: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: 0;
+        font-size: 16px;
+        padding: 12px 14px;
     }}
-    #paletteList::item {{ padding: 5px 8px; border: none; }}
+    #paletteList::item {{ padding: 7px 10px; border: none; }}
     #paletteList::item:selected {{ background: {GRID}; color: {VIOLET}; }}
 
     QSplitter::handle {{ background: {PANEL_EDGE}; }}
-    QStatusBar {{ background: {PANEL}; color: {INK_DIM}; border-top: 1px solid {PANEL_EDGE}; }}
+    QStatusBar {{ background: {PANEL}; color: {INK_DIM}; border-top: {BORDER_WIDTH}px solid {PANEL_EDGE}; }}
     QStatusBar::item {{ border: none; }}
     """
