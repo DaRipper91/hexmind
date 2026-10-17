@@ -53,11 +53,11 @@ def test_settings_page_loads_schema_defaults(page):
 
 def test_settings_page_saves_all_configured_preferences(page, config_path):
     # Select lead from combo
-    idx = page.lead_combo.findData("codex")
+    idx = page.lead_combo.findData("nemotron-lightning")
     page.lead_combo.setCurrentIndex(idx)
     # Set team directly
-    page._team = ["codex", "claude"]
-    page._lead = "codex"
+    page._team = ["nemotron-lightning", "big-pickle"]
+    page._lead = "nemotron-lightning"
     page._populate_lead_combo()
     page._update_team_label()
 
@@ -71,8 +71,8 @@ def test_settings_page_saves_all_configured_preferences(page, config_path):
     assert page.save() is True
     data = config.load_config(config_path)
     assert data["room"] == {
-        "lead": "codex",
-        "members": ["codex", "claude"],
+        "lead": "nemotron-lightning",
+        "members": ["nemotron-lightning", "big-pickle"],
         "audit": False,
         "theme": "measured-dark",
     }
@@ -81,7 +81,7 @@ def test_settings_page_saves_all_configured_preferences(page, config_path):
     assert "Changes apply to new GUI sessions" in page.status.text()
 
 
-@pytest.mark.parametrize("team, message", [([], "at least one"), (["codex", "codex"], "unique")])
+@pytest.mark.parametrize("team, message", [([], "at least one"), (["nemotron-lightning", "nemotron-lightning"], "unique")])
 def test_settings_page_rejects_invalid_rosters(page, team, message):
     page._team = team
     page._populate_lead_combo()
@@ -92,8 +92,8 @@ def test_settings_page_rejects_invalid_rosters(page, team, message):
 
 
 def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
-    page._lead = "qwen"
-    page._team = ["codex", "claude"]
+    page._lead = "deepseek-v4-1-flash-free"
+    page._team = ["nemotron-lightning", "big-pickle"]
     page._populate_lead_combo()
     page._update_team_label()
 
@@ -104,7 +104,7 @@ def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
 def test_settings_page_loads_saved_values(qapp, config_path):
     config.save_section(
         "room",
-        {"lead": "kimi", "members": ["kimi"], "audit": False, "theme": "measured-dark"},
+        {"lead": "nemotron-ultra", "members": ["nemotron-ultra"], "audit": False, "theme": "measured-dark"},
         config_path,
     )
     config.save_section(
@@ -120,12 +120,12 @@ def test_settings_page_loads_saved_values(qapp, config_path):
 
     page = SettingsPage(config_path)
 
-    # Lead should be kimi
-    idx = page.lead_combo.findData("kimi")
+    # Lead should be nemotron-ultra
+    idx = page.lead_combo.findData("nemotron-ultra")
     assert idx >= 0
     assert page.lead_combo.currentIndex() == idx
-    # Team should be kimi
-    assert page._team == ["kimi"]
+    # Team should be nemotron-ultra
+    assert page._team == ["nemotron-ultra"]
     assert page.audit_checkbox.isChecked() is False
     assert page.server_host_input.text() == "192.168.1.5"
     assert page.server_port_input.value() == 8888
@@ -155,8 +155,8 @@ def test_settings_page_reports_agent_health(page, monkeypatch):
 
 
 def test_settings_page_can_restore_defaults_without_saving(page):
-    page._lead = "codex"
-    page._team = ["codex", "claude"]
+    page._lead = "nemotron-lightning"
+    page._team = ["nemotron-lightning", "big-pickle"]
     page._populate_lead_combo()
     page._update_team_label()
 
