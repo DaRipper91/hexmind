@@ -94,3 +94,43 @@ def test_shutdown_cancels_a_running_async_request(qapp):
     assert not thread.isRunning()
     line.close()
     line.deleteLater()
+
+
+def test_output_is_text_and_labelled_with_the_model_asked(qapp):
+    answer = "<b>x</b> & <script>"
+
+    def runner(model, prompt):
+        return answer
+
+    line = DirectLine(chat_runner=runner)
+    asked = line.primary_model.currentText()
+    line.prompt.setText("<i>hi</i>")
+    line.ask()
+    line.primary_model.setCurrentIndex(line.primary_model.count() - 1)  # changed while waiting
+    _wait_for_response(line)
+
+    text = line.transcript.toPlainText()
+    assert "<i>hi</i>" in text
+    assert answer in text
+    assert f"{asked}\n{answer}" in text
+    line.close()
+    line.deleteLater()
+
+
+def test_default_runner_uses_the_given_cwd(qapp, monkeypatch):
+    from hexmind.qt import chat
+
+    seen = []
+
+    class Backend:
+        def __init__(self, cwd, timeout):
+            seen.append(cwd)
+
+        async def run(self, model, prompt):
+            return "ok"
+
+    monkeypatch.setattr(chat, "DirectBackend", Backend)
+    import asyncio
+
+    assert asyncio.run(chat._default_chat("/some/room")("m", "p")) == "ok"
+    assert seen == ["/some/room"]

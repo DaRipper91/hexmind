@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import inspect
 import logging
 import os
@@ -98,9 +99,16 @@ class ChatThread(RunnerThread):
             self.failed.emit(str(exc))
 
 
-async def _default_chat(model: str, prompt: str) -> str:
-    backend = DirectBackend(os.getcwd(), timeout=1800)
-    return await backend.run(model, prompt)
+def _default_chat(cwd: str) -> ChatRunner:
+    # The room's folder, not the process's: opencode sessions are bound to their directory.
+    async def chat(model: str, prompt: str) -> str:
+        return await DirectBackend(cwd, timeout=1800).run(model, prompt)
+    return chat
+
+
+def _html(text: str) -> str:
+    """Model output is text, not markup: unescaped, any `<tag>` in a code answer just vanished."""
+    return html.escape(text).replace("\n", "<br>")
 
 
 class DirectLine(QWidget):
@@ -110,10 +118,12 @@ class DirectLine(QWidget):
         self,
         parent: QWidget | None = None,
         chat_runner: ChatRunner | None = None,
+        cwd: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setAccessibleName("Direct Line workspace")
-        self._chat_runner = chat_runner or _default_chat
+        self._chat_runner = chat_runner or _default_chat(cwd or os.getcwd())
+        self._asked: tuple[str, str] = ("", "")
         self._chat_thread: ChatThread | None = None
 
         self.primary_model = QComboBox(self)
@@ -186,7 +196,8 @@ class DirectLine(QWidget):
         comparison = self.comparison_model.currentText()
         comparison = "" if comparison == "None" or comparison == primary else comparison
         self.prompt.clear()
-        self.transcript.append(f"<b>You</b><br>{prompt}")
+        self._asked = (primary, comparison)
+        self.transcript.append(f"<b>You</b><br>{_html(prompt)}")
         self.status.setText(f"Waiting for {primary}…")
         self.ask_button.setEnabled(False)
         self.primary_output.clear()
@@ -201,9 +212,11 @@ class DirectLine(QWidget):
     def _show_results(self, primary: str, comparison: str) -> None:
         self.primary_output.setPlainText(primary)
         self.comparison_output.setPlainText(comparison or "Comparison disabled.")
-        self.transcript.append(f"<b>{self.primary_model.currentText()}</b><br>{primary}")
+        # Label with the models actually asked; the combos may have changed while waiting.
+        asked_primary, asked_comparison = self._asked
+        self.transcript.append(f"<b>{html.escape(asked_primary)}</b><br>{_html(primary)}")
         if comparison:
-            self.transcript.append(f"<b>{self.comparison_model.currentText()}</b><br>{comparison}")
+            self.transcript.append(f"<b>{html.escape(asked_comparison)}</b><br>{_html(comparison)}")
         self.status.setText("Response complete.")
 
     def _show_error(self, message: str) -> None:

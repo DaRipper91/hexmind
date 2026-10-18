@@ -61,8 +61,9 @@ class HexmindWindow(QMainWindow):
         # never the reason a room fails to build.
         self.room = room if room is not None else self._build_room(**room_kwargs)
         self.settings_page = SettingsPage(parent=self)
-        self.calibration_rack = CalibrationRack(parent=self)
-        self.direct_line = DirectLine(parent=self)
+        room_cwd = getattr(self.room, "cwd", None)
+        self.calibration_rack = CalibrationRack(parent=self, cwd=room_cwd)
+        self.direct_line = DirectLine(parent=self, cwd=room_cwd)
         self.bench_rail = BenchRail(
             self.room,
             self,

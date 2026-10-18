@@ -43,9 +43,10 @@ class ProbeThread(RunnerThread):
             self.failed.emit(str(exc))
 
 
-async def _default_probe(model: str, prompt: str) -> str:
-    backend = DirectBackend(os.getcwd(), timeout=60)
-    return await backend.run(model, prompt)
+def _default_probe(cwd: str) -> ProbeRunner:
+    async def probe(model: str, prompt: str) -> str:
+        return await DirectBackend(cwd, timeout=60).run(model, prompt)
+    return probe
 
 
 class CalibrationRack(QWidget):
@@ -55,10 +56,11 @@ class CalibrationRack(QWidget):
         self,
         parent: QWidget | None = None,
         probe_runner: ProbeRunner | None = None,
+        cwd: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setAccessibleName("Calibration Rack workspace")
-        self._probe_runner = probe_runner or _default_probe
+        self._probe_runner = probe_runner or _default_probe(cwd or os.getcwd())
         self._probe_thread: ProbeThread | None = None
 
         self.models = QListWidget(self)
