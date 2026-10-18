@@ -306,6 +306,25 @@ def test_qsettings_is_hermetic(_hermetic_home):
     assert QSettings("hexmind", "room").fileName().startswith(str(_hermetic_home))
 
 
+def test_agentdeck_panel_imports():
+    import importlib
+
+    importlib.import_module("hexmind.qt.agentdeck_panel")
+
+
+def test_room_survives_an_agentdeck_panel_error(room, monkeypatch):
+    from hexmind.qt import agentdeck_panel, widget as W
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("agentdeck API changed")
+
+    monkeypatch.setattr(W, "_load_agentdeck_items", lambda: (True, []))
+    monkeypatch.setattr(agentdeck_panel, "AgentdeckPanel", explode)
+    widget = room()
+    tabs = [widget._right.tabText(i) for i in range(widget._right.count())]
+    assert "Agentdeck" not in tabs and "Team" in tabs
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

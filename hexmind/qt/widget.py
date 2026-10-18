@@ -552,9 +552,12 @@ class HexmindWidget(QWidget):
         # Agentdeck integration tab: shows skills, agents, and commands discovered from agentdeck
         available, items = _load_agentdeck_items()
         if available:
-            from .agentdeck_panel import AgentdeckPanel
-            self.agentdeck_panel = AgentdeckPanel(items)
-            right.addTab(self.agentdeck_panel, "Agentdeck")
+            try:
+                from .agentdeck_panel import AgentdeckPanel
+                self.agentdeck_panel = AgentdeckPanel(items)
+                right.addTab(self.agentdeck_panel, "Agentdeck")
+            except Exception:  # an optional panel must not take the room down with it
+                logger.exception("agentdeck panel failed to load")
         self._right = right
 
         split = QSplitter(Qt.Orientation.Horizontal)

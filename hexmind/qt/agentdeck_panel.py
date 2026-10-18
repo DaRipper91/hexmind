@@ -8,23 +8,25 @@ hexmind visual grammar (dark substrate, signal hues, measured restraint).
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QModelIndex, QSortFilterProxyModel, QEvent, QAbstractTableModel
+from PySide6.QtCore import Qt, QModelIndex, QSortFilterProxyModel, QEvent, QAbstractTableModel, Signal
 from PySide6.QtGui import QColor, QFont, QCursor, QAction
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView,
     QLineEdit, QPushButton, QLabel, QAbstractItemView, QAbstractScrollArea,
     QFrame, QSpacerItem, QSizePolicy, QSizeGrip, QMenu
 )
+
+from .theme import INK_DIM, STATE_HUE
 
 
 class AgentdeckPanel(QWidget):
     """Panel that displays agentdeck items in a searchable table, following hexmind visual grammar."""
 
     #: Signal emitted when an item is double-clicked
-    itemActivated = pyqtSignal(object)  # Item
+    itemActivated = Signal(object)  # Item
 
     #: Signal emitted when request copy of item ID
-    copyIdRequested = pyqtSignal(str)
+    copyIdRequested = Signal(str)
 
     def __init__(self, items: list, parent: QWidget | None = None) -> None:
         super().__init__(parent)
