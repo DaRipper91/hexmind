@@ -25,9 +25,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
+import shiboken6
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QLabel,
     QLineEdit,
@@ -179,6 +181,8 @@ class CommandPalette(QDialog):
 
     def open_palette(self) -> None:
         """Show over the host window, centred, focused on the input, with a clean slate."""
+        focused = QApplication.focusWidget()
+        self._return_to = focused if focused is not None and focused is not self.input else None
         self.input.clear()
         self._refresh("")
         self.show()
@@ -186,6 +190,14 @@ class CommandPalette(QDialog):
         self.input.setFocus()
         self.raise_()
         self.activateWindow()
+
+    def hideEvent(self, event) -> None:  # Qt's spelling, not ours
+        """Give focus back to whatever had it, or a keyboard user is left with focus nowhere."""
+        super().hideEvent(event)
+        target, self._return_to = getattr(self, "_return_to", None), None
+        if target is not None and shiboken6.isValid(target) and target.isVisible():
+            target.window().activateWindow()  # focus only lands in the active window
+            target.setFocus(Qt.FocusReason.PopupFocusReason)
 
     def _size_and_centre(self) -> None:
         """Size to the contents, then centre on the host if there is one.

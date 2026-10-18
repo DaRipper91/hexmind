@@ -300,3 +300,27 @@ def test_a_teammate_is_findable_by_their_own_name():
 def test_a_room_with_no_members_still_has_its_actions():
     """`getattr(..., None) or []` — a room mid-startup has no roster yet and must not raise."""
     assert len(palette_commands(_Room(None))) == 3
+
+
+def test_escape_gives_focus_back_to_where_it_was(qapp, palette):
+    """After Esc focus used to be None: a keyboard user had to click to get anywhere."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLineEdit
+
+    host = QLineEdit()
+    host.show()
+    host.activateWindow()
+    host.setFocus()
+    qapp.processEvents()
+    assert QApplication.focusWidget() is host
+
+    palette.open_palette()
+    qapp.processEvents()
+    QTest.keyClick(palette, Qt.Key.Key_Escape)
+    qapp.processEvents()
+
+    assert not palette.isVisible()
+    assert QApplication.focusWidget() is host
+    host.close()
+    host.deleteLater()
