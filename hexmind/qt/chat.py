@@ -147,6 +147,7 @@ class DirectLine(QWidget):
 
         self.transcript = QTextBrowser(self)
         self.transcript.setAccessibleName("Direct conversation")
+        self.transcript.setMaximumHeight(90)
         self.transcript.setHtml(
             "<b>Direct Line</b><br>"
             "Ask one model directly without routing through the orchestrator.<br><br>"
@@ -184,7 +185,7 @@ class DirectLine(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addLayout(model_row)
-        layout.addWidget(self.transcript, 1)
+        layout.addWidget(self.transcript, 0)
         layout.addLayout(outputs, 1)
         layout.addWidget(self.status)
         layout.addLayout(input_row)

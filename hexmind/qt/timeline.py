@@ -301,6 +301,7 @@ class TimelinePanel(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        self._size_columns()
         lay.addWidget(self.table, 1)
 
     # -- data
@@ -375,11 +376,12 @@ class TimelinePanel(QWidget):
 
     def _size_columns(self) -> None:
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setMinimumSectionSize(64)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(0, 160)
         for column in (1, 2, 3, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-        self.table.resizeColumnsToContents()
 
 
 __all__ = [

@@ -826,3 +826,33 @@ def test_empty_states_for_tables_and_graph(room, qapp):
         assert widget.live_tap.placeholderText() == "Live tap output appears during a turn."
     finally:
         qapp.setStyleSheet(old_sheet)
+
+
+def test_panel_spacing_stats_timeline_and_direct_line(qapp):
+    """Task 3.8: Stats margins, Timeline columns without hscroll at 600px, Direct Line intro."""
+    from hexmind.qt.chat import DirectLine
+    from hexmind.qt.stats import StatsPanel
+    from hexmind.qt.timeline import TimelinePanel
+
+    # 1. Stats outer margins
+    stats = StatsPanel()
+    margins = stats.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (8, 8, 8, 8)
+    stats.close()
+
+    # 2. Empty Timeline at 600px wide has no horizontal scrollbar
+    timeline = TimelinePanel()
+    timeline.resize(600, 400)
+    timeline.show()
+    pump(50)
+    assert timeline.table.horizontalScrollBar().isVisible() is False
+    timeline.close()
+
+    # 3. Direct Line outputs are taller than the intro box
+    chat = DirectLine()
+    chat.resize(800, 600)
+    chat.show()
+    pump(50)
+    assert chat.primary_output.height() > chat.transcript.height()
+    assert chat.transcript.maximumHeight() <= 100
+    chat.close()

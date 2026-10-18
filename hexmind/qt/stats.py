@@ -316,7 +316,7 @@ class StatsPanel(QWidget):
         self._explicit_agents = bool(agents)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
         self.summary = QLabel(NO_STATS)
