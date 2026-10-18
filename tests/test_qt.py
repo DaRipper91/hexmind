@@ -271,6 +271,35 @@ def test_a_dropped_line_is_not_echoed_and_a_closed_room_refuses(room):
     assert widget._room._turn_in_flight is False
 
 
+class HangingBackend:
+    """A model that never answers, and records whether it was cancelled -- the only path on which
+    DirectBackend kills an agent's process group."""
+
+    def __init__(self) -> None:
+        self.started, self.cancelled = threading.Event(), threading.Event()
+
+    async def run(self, agent, prompt, cwd=None, schema=None):
+        self.started.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        return "never"
+
+
+def test_closing_mid_turn_cancels_the_running_agent(room):
+    backend = HangingBackend()
+    widget = room(backend=backend)
+    widget._room.wait_until_ready()
+
+    assert widget._room.submit("build the thing")
+    assert backend.started.wait(5)
+    widget.close()
+
+    assert backend.cancelled.is_set(), "a closed room left its agent running"
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

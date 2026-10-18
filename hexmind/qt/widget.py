@@ -55,7 +55,7 @@ from PySide6.QtWidgets import (
 
 logger = logging.getLogger(__name__)
 
-from ..backends import DirectBackend, available
+from ..backends import TERMINATE_GRACE_SECONDS, DirectBackend, available
 from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task, REGISTRY
 from .model_selector import load_enabled_from_config
 
@@ -188,6 +188,7 @@ class _Room(QThread):
         asyncio.set_event_loop(self._loop)
         self._ready.set()
         self._loop.run_forever()
+        self._loop.run_until_complete(self._loop.shutdown_asyncgens())
         self._loop.close()
 
     def wait_until_ready(self, timeout: float = 5.0) -> bool:
@@ -247,9 +248,12 @@ class _Room(QThread):
             self.message.emit("hexmind", f"**Error:** {e}")
         finally:
             self._current_task = None
-            self.turnState.emit(False)
-            self.teamChanged.emit()
             self._turn_in_flight = False
+            try:
+                self.turnState.emit(False)
+                self.teamChanged.emit()
+            except RuntimeError:  # the room is being torn down; nobody is left to tell
+                pass
 
     async def _set_lead(self, name: str) -> None:
         from ..core import TeamError
@@ -270,16 +274,23 @@ class _Room(QThread):
         """
         loop = self._loop
         if loop is not None and not loop.is_closed() and loop.is_running():
+            # Cancel, don't just stop: DirectBackend kills an agent's process group only on
+            # CancelledError, so a bare loop.stop() left the CLIs running after the window closed.
+            async def _shutdown() -> None:
+                tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                asyncio.get_running_loop().stop()
             try:
-                loop.call_soon_threadsafe(loop.stop)
+                asyncio.run_coroutine_threadsafe(_shutdown(), loop)
             except RuntimeError:  # closed between the check and the call
                 pass
         if self.isRunning():
-            # wait(3000) returns True if the thread finished; False means it's still
-            # alive after the timeout — log a warning rather than silently leaving
-            # a thread behind.
-            if not self.wait(3000):
-                logger.warning("_Room thread did not finish within 3s; it may be stuck")
+            # Long enough for every group to get SIGTERM, its grace period, then SIGKILL.
+            timeout_ms = int((TERMINATE_GRACE_SECONDS + 1.5) * 1000)
+            if not self.wait(timeout_ms):
+                logger.warning("_Room thread did not finish within %d ms; it may be stuck", timeout_ms)
 
     def snapshot(self) -> dict:
         """Roster + members for display. Read on the caller's thread; the widget uses it only to
