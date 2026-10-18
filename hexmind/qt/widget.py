@@ -31,7 +31,7 @@ import weakref
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor, QTextDocument
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QShortcut, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -478,14 +478,14 @@ class HexmindWidget(QWidget):
         row.addWidget(self.sendButton)
         row.addWidget(self.stopButton)
 
-        self.tasks = _table(TASK_COLUMNS, "Tasks")
+        self.tasks = _table(TASK_COLUMNS, "Tasks", empty_text="No tasks yet. The lead's plan lands here.")
         # itemActivated, not itemDoubleClicked: it is also Enter, and it follows the desktop's
         # single/double-click preference. Selection by arrow keys fills the detail pane too.
         self.tasks.itemActivated.connect(self._on_task_activated)
         self.tasks.itemClicked.connect(self._on_task_selected)
         self.tasks.currentItemChanged.connect(
             lambda current, _previous: current is not None and self._on_task_selected(current))
-        self.team = _table(TEAM_COLUMNS, "Team")
+        self.team = _table(TEAM_COLUMNS, "Team", empty_text="No team members yet.")
 
         # Advanced: dependency graph (pure QGraphicsScene, no new deps).
         # Imported lazily so a broken graph module can never break the base room.
@@ -994,8 +994,29 @@ def _domains(name: str) -> list[str]:
     return list(entry.domains) if entry else []
 
 
-def _table(columns: tuple[str, ...], name: str) -> QTableWidget:
-    table = QTableWidget(0, len(columns))
+class _EmptyOverlayTable(QTableWidget):
+    """QTableWidget that paints centered hint text when empty."""
+
+    def __init__(self, rows: int, cols: int, empty_text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(rows, cols, parent)
+        self.empty_text = empty_text
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.rowCount() == 0 and self.empty_text:
+            from . import theme
+
+            painter = QPainter(self.viewport())
+            painter.setPen(QColor(theme.INK_FAINT))
+            painter.drawText(
+                self.viewport().rect(),
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                self.empty_text,
+            )
+
+
+def _table(columns: tuple[str, ...], name: str, empty_text: str = "") -> QTableWidget:
+    table = _EmptyOverlayTable(0, len(columns), empty_text=empty_text)
     table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
     table.setHorizontalHeaderLabels(list(columns))
     table.setAccessibleName(name)

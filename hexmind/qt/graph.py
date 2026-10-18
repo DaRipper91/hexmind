@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPen
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsLineItem,
@@ -169,6 +169,12 @@ def _ink() -> str:
     return "#e6edf7"
 
 
+def _ink_faint() -> str:
+    if theme is not None:
+        return theme.INK_FAINT
+    return "#7d8899"
+
+
 class Node(QGraphicsEllipseItem):
     def __init__(self, task, x: float, y: float) -> None:
         super().__init__(x - R, y - R, R * 2, R * 2)
@@ -209,6 +215,19 @@ class TaskGraphView(QGraphicsView):
         self.setMinimumHeight(120)
         self._nodes: dict[str, Node] = {}
         self._edges: list[Edge] = []
+
+    def drawForeground(self, painter: QPainter, rect: QRectF) -> None:
+        super().drawForeground(painter, rect)
+        if not self._nodes:
+            painter.save()
+            painter.resetTransform()
+            painter.setPen(QColor(_ink_faint()))
+            painter.drawText(
+                self.viewport().rect(),
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                "Task graph appears once the lead plans.",
+            )
+            painter.restore()
 
     # ---------- data ----------
     def set_tasks(self, tasks) -> None:

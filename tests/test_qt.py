@@ -785,3 +785,44 @@ def test_tab_bar_fits_without_scroll_at_1400(room, qapp):
         )
     finally:
         qapp.setStyleSheet(old_sheet)
+
+
+def test_empty_states_for_tables_and_graph(room, qapp):
+    """Task 3.5: Empty states for Tasks, Team, Live Tap and Graph."""
+    from hexmind.qt import theme
+
+    old_sheet = qapp.styleSheet()
+    qapp.setStyleSheet(theme.stylesheet())
+    try:
+        widget = room()
+        widget.resize(1000, 700)
+        widget.show()
+        pump(50)
+
+        assert widget.tasks.empty_text == "No tasks yet. The lead's plan lands here."
+        assert widget.tasks.rowCount() == 0
+        img_tasks = widget.tasks.grab().toImage()
+        bg_tasks = img_tasks.pixelColor(10, 10)
+        w_t, h_t = img_tasks.width(), img_tasks.height()
+        tasks_has_ink = any(
+            img_tasks.pixelColor(x, y) != bg_tasks
+            for y in range(h_t // 3, (2 * h_t) // 3)
+            for x in range(w_t // 4, (3 * w_t) // 4)
+        )
+        assert tasks_has_ink, "empty Tasks table should paint centered hint text"
+
+        assert widget.graph is not None
+        assert not widget.graph._nodes
+        img_graph = widget.graph.grab().toImage()
+        bg_graph = img_graph.pixelColor(10, 10)
+        w_g, h_g = img_graph.width(), img_graph.height()
+        graph_has_ink = any(
+            img_graph.pixelColor(x, y) != bg_graph
+            for y in range(h_g // 3, (2 * h_g) // 3)
+            for x in range(w_g // 4, (3 * w_g) // 4)
+        )
+        assert graph_has_ink, "empty Graph view should paint centered hint text"
+
+        assert widget.live_tap.placeholderText() == "Live tap output appears during a turn."
+    finally:
+        qapp.setStyleSheet(old_sheet)
