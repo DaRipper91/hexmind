@@ -234,6 +234,27 @@ def test_team_save_does_not_deadlock(room):
     assert names == {"claude", "agy"}
 
 
+def test_room_controls_lock_during_a_turn_and_a_refused_lead_snaps_back(room):
+    widget = room()
+    widget._room.wait_until_ready()
+
+    widget._on_turn_state(True)
+    assert not widget.leadBox.isEnabled()
+    assert not widget.teamButton.isEnabled()
+    assert not widget.auditBox.isEnabled()
+    widget._on_turn_state(False)
+    assert widget.leadBox.isEnabled()
+
+    # The palette's lead: path bypasses the disabled combo, so the room itself must say no.
+    widget._room._turn_in_flight = True
+    widget._room.change_lead("agy")
+    pump(200)
+    widget._room._turn_in_flight = False
+
+    assert "Lead change ignored" in widget.transcript.toPlainText()
+    assert widget.leadBox.currentText() == widget._room.orch.lead == "claude"
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

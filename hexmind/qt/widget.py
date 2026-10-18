@@ -212,9 +212,14 @@ class _Room(QThread):
             self._pending.append(("lead", name))
             return
         with self._orch_lock:
-            if self._turn_in_flight:
-                return
-            asyncio.run_coroutine_threadsafe(self._set_lead(name), self._loop)
+            refused = self._turn_in_flight
+            if not refused:
+                asyncio.run_coroutine_threadsafe(self._set_lead(name), self._loop)
+        if refused:
+            # Outside the lock: teamChanged redraws via snapshot(), which takes it. The redraw snaps
+            # the combo back, so the box never claims a lead the room does not have.
+            self.message.emit("hexmind", "Lead change ignored: a turn is running.")
+            self.teamChanged.emit()
 
     def cancel_turn(self) -> None:
         """Cancel any in-flight turn safely across thread boundaries (Phase 2.3)."""
@@ -383,7 +388,8 @@ class HexmindWidget(QWidget):
 
     def _on_audit_toggle(self, state: int) -> None:
         """Task 5: connect the Peer audit checkbox to the live orchestrator."""
-        self._room.orch.audit = state == 2  # Qt.Checked == 2
+        with self._room._orch_lock:
+            self._room.orch.audit = state == 2  # Qt.Checked == 2
         self.refresh_team()
 
     # ---------- layout ----------
@@ -634,6 +640,11 @@ class HexmindWidget(QWidget):
             self.stopButton.setEnabled(False)
         self.input.setEnabled(not busy)  # one request at a time, as the TUI's turn lock does
         self.sendButton.setEnabled(not busy)
+        # Each of these changes the room under a running turn: a lead change is refused (and used to
+        # look applied), a team save could drop a busy model (INVARIANT S-1), audit flips mid-plan.
+        self.leadBox.setEnabled(not busy)
+        self.teamButton.setEnabled(not busy)
+        self.auditBox.setEnabled(not busy)
         if not busy and self.stats is not None:
             # End of turn, not start: the orchestrator is the only writer of the ledger, and it
             # writes as it finishes each task. Reading at the end shows the whole turn, not a
