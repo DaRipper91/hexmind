@@ -152,7 +152,7 @@ def _fallback_hue(status: str) -> str:
     The values mirror `theme.STATE_HUE`; a second copy is the lesser evil next to an
     ImportError at class-definition time, and this path is a degraded render, not the real one.
     """
-    return {"done": "#5fd68a", "failed": "#f2686b", "running": "#39d0d8"}.get(status, "#6b7a94")
+    return {"done": "#5fd68a", "failed": "#f2686b", "running": "#39d0d8"}.get(status, "#7686a0")
 
 
 def _edge_hue(broken: bool) -> str:
@@ -160,7 +160,7 @@ def _edge_hue(broken: bool) -> str:
     the task itself may still be fine; it just can no longer run."""
     if theme is not None:
         return theme.AMBER if broken else theme.INK_FAINT
-    return "#e8b04b" if broken else "#5a6577"
+    return "#e8b04b" if broken else "#7d8899"
 
 
 def _ink() -> str:

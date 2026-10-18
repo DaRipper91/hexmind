@@ -28,20 +28,21 @@ from __future__ import annotations
 
 SUBSTRATE = "#0a0d14"          # the bench itself
 PANEL = "#0f1420"               # a raised surface
-PANEL_EDGE = "#1c2436"          # a seam between surfaces
+PANEL_EDGE = "#1c2436"          # a seam between surfaces (panes, tables, splitters) -- not controls
+CONTROL_EDGE = "#636e88"        # the outline of anything you can operate: >= 3:1 on every surface
 GRID = "#141a28"                # the strict grid, barely above the substrate
 PANEL_HOVER = "#161c2c"         # a surface under the pointer
 
 INK = "#e6edf7"                 # primary text: clinical, high contrast
 INK_DIM = "#8b98ae"             # secondary labels
-INK_FAINT = "#5a6577"           # whisper-quiet labels that serve from below
+INK_FAINT = "#7d8899"           # whisper-quiet labels that serve from below (still >= 4.5:1)
 
 CYAN = "#39d0d8"                # motion and flow — running, streaming, in transit
 VIOLET = "#9d7cf0"              # structure and identity — lead, identity, selection
 GREEN = "#5fd68a"               # verification — done, passed, audited clean
 AMBER = "#e8b04b"               # warning — failed, gated, needs a human
 RED = "#f2686b"                 # failure — hard error, cancelled, contradicted
-SLATE = "#6b7a94"               # idle, asleep, known-but-not-awake
+SLATE = "#7686a0"               # idle, asleep, known-but-not-awake
 
 # ---------- typography ----------
 # A single system font stack, sized so the bench reads at a comfortable distance.
@@ -149,11 +150,11 @@ def stylesheet() -> str:
     QLineEdit, QPlainTextEdit, QTextBrowser, QTextEdit, QSpinBox, QDoubleSpinBox {{
         background: {PANEL};
         color: {INK};
-        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {CONTROL_EDGE};
         border-radius: {BORDER_RADIUS}px;
         padding: 8px 10px;
         selection-background-color: {VIOLET};
-        selection-color: {INK};
+        selection-color: {SUBSTRATE};
     }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
         border: {BORDER_WIDTH}px solid {VIOLET};
@@ -168,7 +169,7 @@ def stylesheet() -> str:
     QPushButton {{
         background: {PANEL};
         color: {INK};
-        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {CONTROL_EDGE};
         border-radius: {BORDER_RADIUS}px;
         padding: 8px 16px;
         min-height: 32px;
@@ -209,7 +210,7 @@ def stylesheet() -> str:
     QComboBox {{
         background: {PANEL};
         color: {INK};
-        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {CONTROL_EDGE};
         border-radius: {BORDER_RADIUS}px;
         padding: 8px 10px;
         min-height: 32px;
@@ -219,7 +220,7 @@ def stylesheet() -> str:
         background: {PANEL};
         color: {INK};
         selection-background-color: {VIOLET};
-        selection-color: {INK};
+        selection-color: {SUBSTRATE};
         border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-radius: 0 0 {BORDER_RADIUS}px {BORDER_RADIUS}px;
     }}
@@ -240,7 +241,7 @@ def stylesheet() -> str:
     QCheckBox::indicator {{
         width: 18px;
         height: 18px;
-        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border: {BORDER_WIDTH}px solid {CONTROL_EDGE};
         border-radius: {BORDER_RADIUS_SMALL}px;
         background: {PANEL};
     }}
@@ -299,13 +300,13 @@ def stylesheet() -> str:
         border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QScrollBar::handle:vertical {{
-        background: {PANEL_EDGE};
+        background: {CONTROL_EDGE};
         min-height: 40px;
         border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QScrollBar::handle:vertical:hover {{ background: {VIOLET}; }}
     QScrollBar:horizontal {{ background: {SUBSTRATE}; height: 12px; margin: 0; border-radius: {BORDER_RADIUS_SMALL}px; }}
-    QScrollBar::handle:horizontal {{ background: {PANEL_EDGE}; min-width: 40px; border-radius: {BORDER_RADIUS_SMALL}px; }}
+    QScrollBar::handle:horizontal {{ background: {CONTROL_EDGE}; min-width: 40px; border-radius: {BORDER_RADIUS_SMALL}px; }}
     QScrollBar::handle:horizontal:hover {{ background: {VIOLET}; }}
     QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
     QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
