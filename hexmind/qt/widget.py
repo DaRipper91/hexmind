@@ -148,7 +148,6 @@ class _Room(QThread):
                  cwd: str, stats: Any | None = None) -> None:
         super().__init__()
         self._cwd = cwd
-        self._pending: list[tuple[str, Any]] = []
         self._ready = threading.Event()
         # `command()` and `set_lead()` both reach shared orchestrator state, and the GUI thread can
         # submit while a turn is running, so the two are serialised here rather than in the loop.
@@ -189,27 +188,33 @@ class _Room(QThread):
         asyncio.set_event_loop(self._loop)
         self._ready.set()
         self._loop.run_forever()
-        # Drain anything submitted while the loop was stopping, then close it cleanly.
         self._loop.close()
 
     def wait_until_ready(self, timeout: float = 5.0) -> bool:
         return self._ready.wait(timeout)
 
-    def submit(self, text: str) -> None:
-        """Queue a line for the room. Safe from any thread; the lock is belt-and-braces because
-        `command()` and `set_lead()` both reach shared orchestrator state."""
-        if self._loop is None:
-            self._pending.append(("text", text))
-            return
+    def _loop_alive(self) -> bool:
+        return self._loop is not None and not self._loop.is_closed()
+
+    def submit(self, text: str) -> bool:
+        """Queue a line for the room. Safe from any thread. Returns False when the line was not
+        taken -- a turn is in flight (serialised like the TUI's asyncio.Lock) or the room is closed
+        -- so the caller never echoes a line nobody will answer."""
+        if not self._loop_alive():
+            return False
         with self._orch_lock:
             if self._turn_in_flight:
-                return  # a turn is already in flight; serialise like the TUI's asyncio.Lock
+                return False
             self._turn_in_flight = True
-            asyncio.run_coroutine_threadsafe(self._handle(text), self._loop)
+            try:
+                asyncio.run_coroutine_threadsafe(self._handle(text), self._loop)
+            except RuntimeError:  # the loop closed between the check and the call
+                self._turn_in_flight = False
+                return False
+        return True
 
     def change_lead(self, name: str) -> None:
-        if self._loop is None:
-            self._pending.append(("lead", name))
+        if not self._loop_alive():
             return
         with self._orch_lock:
             refused = self._turn_in_flight
@@ -590,16 +595,20 @@ class HexmindWidget(QWidget):
         if text.startswith("/"):
             # A command that can change the room without asking it anything is the way out of a
             # wedged state, exactly as in the TUI.
-            self._on_message("you", text)
-            self._room.submit(text)
+            self._echo_and_submit(text)
             return
         if not self.lead:
             self._on_message("hexmind", "**No lead.** Pick one in the Lead box first — the room has "
                                          "nobody to plan with.")
             self.leadBox.setFocus()
             return
-        self._on_message("you", text)
-        self._room.submit(text)
+        self._echo_and_submit(text)
+
+    def _echo_and_submit(self, text: str) -> None:
+        if self._room.submit(text):
+            self._on_message("you", text)
+        else:
+            self._on_message("hexmind", "Busy: try again when the turn ends.")
 
     def _on_lead_picked(self, name: str) -> None:
         if not name or name == self.lead or name == NO_LEAD_PLACEHOLDER:

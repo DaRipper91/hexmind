@@ -255,6 +255,22 @@ def test_room_controls_lock_during_a_turn_and_a_refused_lead_snaps_back(room):
     assert widget.leadBox.currentText() == widget._room.orch.lead == "claude"
 
 
+def test_a_dropped_line_is_not_echoed_and_a_closed_room_refuses(room):
+    widget = room()
+    widget._room.wait_until_ready()
+
+    widget._room._turn_in_flight = True
+    widget._submit("/team")
+    widget._room._turn_in_flight = False
+    text = widget.transcript.toPlainText()
+    assert "you: /team" not in text and "/team" not in text.replace("Busy", "")
+    assert "Busy" in text
+
+    widget.close()
+    assert widget._room.submit("x") is False
+    assert widget._room._turn_in_flight is False
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):
