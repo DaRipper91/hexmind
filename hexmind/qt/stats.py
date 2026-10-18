@@ -253,7 +253,9 @@ def _stack_bars(plot, labels: Sequence[str], passed: Sequence[int], failed: Sequ
     axis = plot.getAxis("left")
     axis.setTicks([[(i, labels[i]) for i in range(n)]])
     axis.setTextPen(pg.mkPen(theme.INK))
-    plot.getAxis("bottom").setTextPen(pg.mkPen(theme.INK_DIM))
+    bottom_axis = plot.getAxis("bottom")
+    bottom_axis.setTextPen(pg.mkPen(theme.INK_DIM))
+    bottom_axis.setTickSpacing(1, 1)
     plot.setMouseEnabled(x=False, y=False)
     plot.setMenuEnabled(False)
     plot.showGrid(x=True, y=False, alpha=0.14)
@@ -335,6 +337,15 @@ class StatsPanel(QWidget):
             "Where the team hurts",
             "Worst domains first. This is the one to route work away from.",
         )
+        self.hurts_plot = self.trouble_plot
+        self.trouble_caption = QLabel("No failures recorded yet.")
+        self.trouble_caption.setProperty("role", "caption")
+        self.trouble_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.trouble_caption.hide()
+        trouble_box.layout().addWidget(self.trouble_caption, 1)
+        self.hurts_caption = self.trouble_caption
+        self.trouble_empty = self.trouble_caption
+        self.hurts_empty = self.trouble_caption
         top.addWidget(agent_box)
         top.addWidget(trouble_box)
         top.setSizes([400, 400])
@@ -407,6 +418,9 @@ class StatsPanel(QWidget):
                     plot.clear()
                 except Exception:  # pragma: no cover
                     pass
+        if self.trouble_plot is not None:
+            self.trouble_plot.show()
+        self.trouble_caption.hide()
         self.table.setRowCount(0)
         self.table.setColumnCount(0)
 
@@ -424,8 +438,17 @@ class StatsPanel(QWidget):
             logger.warning("Agent chart failed to draw", exc_info=True)
 
     def _draw_trouble(self, rows: Sequence[tuple[str, int, int]]) -> None:
+        total_failed = sum(f for _, _, f in rows)
+        if total_failed == 0:
+            if self.trouble_plot is not None:
+                self.trouble_plot.hide()
+            self.trouble_caption.show()
+            return
+
+        self.trouble_caption.hide()
         if self.trouble_plot is None:
             return
+        self.trouble_plot.show()
         try:
             _stack_bars(
                 self.trouble_plot,
