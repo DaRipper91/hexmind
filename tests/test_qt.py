@@ -936,4 +936,41 @@ def test_table_headers_are_left_aligned_and_not_scalloped(room):
     assert "border-top-right-radius" not in header_section_rule
 
 
+def test_status_pill_styling_and_accessibility_announcement(room, monkeypatch):
+    """Task 4.10: status pill objectName, busy styling property, and QAccessible announcement."""
+    from PySide6 import QtGui
+    from hexmind.qt import theme
+
+    widget = room()
+    assert widget.status.objectName() == "roomStatus"
+    assert widget.status.property("busy") == "false"
+    assert "QLabel#roomStatus" in theme.stylesheet()
+    assert 'QLabel#roomStatus[busy="true"]' in theme.stylesheet()
+
+    announcements = []
+
+    def mock_update_accessibility(event):
+        announcements.append(event)
+
+    monkeypatch.setattr(QtGui.QAccessible, "updateAccessibility", mock_update_accessibility)
+
+    # Transition to busy
+    widget._on_turn_state(True)
+    assert widget.status.property("busy") == "true"
+    assert widget.status.text() == "working…"
+    assert len(announcements) == 1
+    if hasattr(QtGui, "QAccessibleAnnouncementEvent"):
+        assert isinstance(announcements[0], QtGui.QAccessibleAnnouncementEvent)
+        assert announcements[0].message() == "working…"
+
+    # Transition to ready
+    widget._on_turn_state(False)
+    assert widget.status.property("busy") == "false"
+    assert widget.status.text() == "ready"
+    assert len(announcements) == 2
+    if hasattr(QtGui, "QAccessibleAnnouncementEvent"):
+        assert announcements[1].message() == "ready"
+
+
+
 

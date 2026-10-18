@@ -316,6 +316,18 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         padding: 0 6px;
         font-size: {small}px;
     }}
+    QLabel#roomStatus {{
+        color: {INK_DIM};
+        border: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        border-radius: {BORDER_RADIUS_SMALL}px;
+        padding: 2px 8px;
+        font-family: {FONT_MONO};
+        font-size: {small}px;
+    }}
+    QLabel#roomStatus[busy="true"] {{
+        color: {CYAN};
+        border: {BORDER_WIDTH}px solid {CYAN};
+    }}
 
     QComboBox {{
         background: {PANEL};

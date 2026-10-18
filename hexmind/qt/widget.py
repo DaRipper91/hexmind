@@ -30,6 +30,7 @@ import time
 import weakref
 from typing import Any
 
+from PySide6 import QtGui
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QKeySequence, QPainter, QShortcut, QTextCharFormat, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
@@ -442,7 +443,9 @@ class HexmindWidget(QWidget):
         self.auditBox.setToolTip("A runner-up model reviews every task in a bounded revise loop.")
 
         self.status = QLabel("ready")
+        self.status.setObjectName("roomStatus")
         self.status.setAccessibleName("Status")
+        self.status.setProperty("busy", "false")
 
         self.turnMeter = QLabel("")
         self.turnMeter.setObjectName("turnMeter")
@@ -707,8 +710,17 @@ class HexmindWidget(QWidget):
             self._room.cancel_turn()
 
     def _on_turn_state(self, busy: bool) -> None:
+        status_text = "working…" if busy else "ready"
+        self.status.setText(status_text)
+        self.status.setProperty("busy", "true" if busy else "false")
+        self.status.style().unpolish(self.status)
+        self.status.style().polish(self.status)
+        if hasattr(QtGui, "QAccessibleAnnouncementEvent"):
+            QtGui.QAccessible.updateAccessibility(
+                QtGui.QAccessibleAnnouncementEvent(self.status, status_text)
+            )
+
         if busy:
-            self.status.setText("working…")
             self._active_agent = self.lead
             self._active_state = "working"
             self._turn_start_time = time.monotonic()
@@ -720,7 +732,6 @@ class HexmindWidget(QWidget):
             self._turn_start_time = None
             self._active_agent = None
             self._active_state = None
-            self.status.setText("ready")
             self.turnMeter.setText("")
             self.stopButton.setEnabled(False)
         self.input.setEnabled(not busy)  # one request at a time, as the TUI's turn lock does
