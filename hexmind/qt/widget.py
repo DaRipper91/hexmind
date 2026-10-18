@@ -418,7 +418,6 @@ class HexmindWidget(QWidget):
         self.leadBox.currentTextChanged.connect(self._on_lead_picked)
 
         self.teamButton = QPushButton("Select Team…", self)
-        self.teamButton.setAccessibleName("Select team")
         self.teamButton.setToolTip("Choose which models are in the room")
         self.teamButton.clicked.connect(self._open_team_selector)
 
@@ -433,7 +432,9 @@ class HexmindWidget(QWidget):
         self.turnMeter.setAccessibleName("Turn Meter")
 
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Lead:"))
+        self.leadLabel = QLabel("&Lead:", self)
+        self.leadLabel.setBuddy(self.leadBox)  # Alt+L, and the combo is announced as "Lead"
+        bar.addWidget(self.leadLabel)
         bar.addWidget(self.leadBox, 1)
         bar.addWidget(self.teamButton)
         bar.addWidget(self.auditBox)

@@ -127,17 +127,22 @@ class DirectLine(QWidget):
         self._chat_thread: ChatThread | None = None
 
         self.primary_model = QComboBox(self)
-        self.primary_model.setAccessibleName("Primary direct model")
+        self.primary_model.setAccessibleName("Ask: primary model")
         self.primary_model.addItems(REGISTRY.by_weight())
         self.comparison_model = QComboBox(self)
-        self.comparison_model.setAccessibleName("Comparison direct model")
+        self.comparison_model.setAccessibleName("Ask another: comparison model")
         self.comparison_model.addItem("None")
         self.comparison_model.addItems(REGISTRY.by_weight())
 
         model_row = QHBoxLayout()
-        model_row.addWidget(QLabel("Ask", self))
+        # Buddied labels: Alt+A / Alt+N reach the combos, and a screen reader reads the label.
+        self.primary_label = QLabel("&Ask", self)
+        self.primary_label.setBuddy(self.primary_model)
+        self.comparison_label = QLabel("Ask a&nother", self)
+        self.comparison_label.setBuddy(self.comparison_model)
+        model_row.addWidget(self.primary_label)
         model_row.addWidget(self.primary_model)
-        model_row.addWidget(QLabel("Ask another", self))
+        model_row.addWidget(self.comparison_label)
         model_row.addWidget(self.comparison_model)
 
         self.transcript = QTextBrowser(self)
@@ -152,7 +157,6 @@ class DirectLine(QWidget):
         self.prompt.setPlaceholderText("Ask one model directly…")
         self.prompt.returnPressed.connect(self.ask)
         self.ask_button = QPushButton("Ask", self)
-        self.ask_button.setAccessibleName("Ask direct model")
         self.ask_button.clicked.connect(self.ask)
         input_row = QHBoxLayout()
         input_row.addWidget(self.prompt, 1)

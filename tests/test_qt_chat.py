@@ -134,3 +134,28 @@ def test_default_runner_uses_the_given_cwd(qapp, monkeypatch):
 
     assert asyncio.run(chat._default_chat("/some/room")("m", "p")) == "ok"
     assert seen == ["/some/room"]
+
+
+def test_controls_are_named_by_their_visible_labels(qapp):
+    """WCAG 2.5.3: what a screen reader says must start with what the screen shows."""
+    from hexmind.qt.models import CalibrationRack
+    from hexmind.qt.settings import SettingsPage
+
+    line, rack, page = DirectLine(), CalibrationRack(), SettingsPage()
+
+    def spoken(w):
+        return w.accessibleName() or w.text()
+
+    assert line.primary_label.buddy() is line.primary_model
+    assert line.comparison_label.buddy() is line.comparison_model
+    assert spoken(line.primary_model).startswith("Ask")
+    assert spoken(line.comparison_model).startswith("Ask another")
+    assert spoken(line.ask_button) == "Ask"
+    assert spoken(rack.probe_button) == "Run probe"
+    assert spoken(page.team_button).startswith("Select Team…")
+    assert spoken(page.audit_checkbox) == page.audit_checkbox.text()
+    assert spoken(page.phone_buzz_checkbox) == page.phone_buzz_checkbox.text()
+    assert spoken(page.threshold_input).startswith("Notify after")
+    for w in (line, rack, page):
+        w.close()
+        w.deleteLater()

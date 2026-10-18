@@ -58,24 +58,22 @@ class SettingsPage(QWidget):
 
         # Team selector - button opens ModelSelectorDialog
         self.team_button = QPushButton("Select Team…", self)
-        self.team_button.setAccessibleName("Select default team")
+        self.team_button.setAccessibleName("Select Team… for the default roster")
         self.team_button.setToolTip("Choose which enabled models are in the default roster")
         self.team_button.clicked.connect(self._open_team_selector)
         self.team_label = QLabel(self._format_team_label(), self)
         self.team_label.setAccessibleName("Default roster preview")
 
         self.audit_checkbox = QCheckBox("Enable peer audit by default", self)
-        self.audit_checkbox.setAccessibleName("Default peer audit")
 
         self.theme_selector = QComboBox(self)
         self.theme_selector.setAccessibleName("Theme")
         self.theme_selector.addItem("measured-dark")
 
         self.phone_buzz_checkbox = QCheckBox("Send a completion ping", self)
-        self.phone_buzz_checkbox.setAccessibleName("Completion notification")
 
         self.threshold_input = QSpinBox(self)
-        self.threshold_input.setAccessibleName("Notification threshold seconds")
+        self.threshold_input.setAccessibleName("Notify after (seconds)")
         self.threshold_input.setRange(0, 86_400)
         self.threshold_input.setSuffix(" seconds")
 

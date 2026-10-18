@@ -368,6 +368,11 @@ def test_tab_order_follows_the_screen(room):
     assert seen == [widget.leadBox, widget.teamButton, widget.auditBox, widget.transcript]
 
 
+def test_the_lead_label_names_the_lead_box(room):
+    widget = room()
+    assert widget.leadLabel.buddy() is widget.leadBox
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):
