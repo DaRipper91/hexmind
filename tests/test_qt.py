@@ -856,3 +856,31 @@ def test_panel_spacing_stats_timeline_and_direct_line(qapp):
     assert chat.primary_output.height() > chat.transcript.height()
     assert chat.transcript.maximumHeight() <= 100
     chat.close()
+
+
+def test_transcript_renders_markdown_with_speaker_color(room):
+    """Task 4.1: transcript is a QTextBrowser that parses markdown and colors speakers."""
+    from hexmind.qt import theme
+
+    widget = room()
+    # 1. Lead speaker (claude is lead by default) gets VIOLET
+    widget._on_message("claude", "**t1** done")
+    plain = widget.transcript.toPlainText()
+    assert "t1 done" in plain
+    assert "**" not in plain
+
+    blk = widget.transcript.document().firstBlock()
+    frag = next(blk.begin()).fragment()
+    assert frag.text() == "claude: "
+    assert frag.charFormat().foreground().color().name().lower() == theme.VIOLET.lower()
+
+    # 2. Search finds t1 in rendered markdown
+    widget.searchBox.setText("t1")
+    widget._find_match()
+    assert widget.transcript.textCursor().selectedText() == "t1"
+
+    # 3. Non-lead member gets AGENT_COLOR
+    widget._on_message("agy", "working on it")
+    plain = widget.transcript.toPlainText()
+    assert "agy: working on it" in plain
+

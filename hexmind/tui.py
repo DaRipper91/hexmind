@@ -17,13 +17,17 @@ from textual.visual import VisualType
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
+from . import models
 from .core import BUSY_STATUSES, REGISTRY, TEXT_ONLY, Orchestrator, Task, TeamBusy, TeamError
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
+
 # Generated from the registry, so a newly registered model always has a colour instead of
 # silently falling through to white. "you" is the user, not a model.
-AGENT_COLOR: dict[str, str] = {**REGISTRY.colors(), "you": "bold white"}
+AGENT_COLOR: dict[str, str] = models.AGENT_COLOR
+
+
 
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact

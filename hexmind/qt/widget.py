@@ -31,7 +31,7 @@ import weakref
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QShortcut, QTextCursor, QTextDocument
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QShortcut, QTextCharFormat, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -42,7 +42,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QToolButton,
@@ -54,11 +53,28 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import models
+from ..backends import TERMINATE_GRACE_SECONDS, DirectBackend, available
+from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task
+from . import theme
+from .model_selector import load_enabled_from_config
+
 logger = logging.getLogger(__name__)
 
-from ..backends import TERMINATE_GRACE_SECONDS, DirectBackend, available
-from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task, REGISTRY
-from .model_selector import load_enabled_from_config
+
+def _speaker_color(color_name: str) -> QColor:
+    name = color_name.removeprefix("bold ").strip()
+    qc = QColor(name)
+    if qc.isValid():
+        return qc
+    try:
+        import rich.color
+
+        c = rich.color.Color.parse(name).get_truecolor()
+        return QColor(c.red, c.green, c.blue)
+    except Exception:
+        return QColor(theme.INK_DIM)
+
 
 TASK_COLUMNS = ("id", "agent", "status", "audit", "title")
 TEAM_COLUMNS = ("model", "state", "domains")
@@ -452,10 +468,10 @@ class HexmindWidget(QWidget):
         bar.addWidget(self.turnMeter)
         lay.addLayout(bar)
 
-        self.transcript = QPlainTextEdit()
+        self.transcript = QTextBrowser()
         self.transcript.setReadOnly(True)
         self.transcript.setAccessibleName("Conversation")
-        self.transcript.setMaximumBlockCount(2000)  # a long session must not grow without bound
+        self.transcript.document().setMaximumBlockCount(2000)  # a long session must not grow without bound
         self.transcript.setPlaceholderText(
             "Ask the team anything. The lead plans, members run tasks, verdicts land here.")
         from .live import LivePane
@@ -748,7 +764,28 @@ class HexmindWidget(QWidget):
     # ---------- what the room says back ----------
     def _on_message(self, who: str, text: str) -> None:
         label = "you" if who == "you" else (who or "hexmind")
-        self.transcript.appendPlainText(f"{label}: {text}")
+        cursor = QTextCursor(self.transcript.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        if not self.transcript.document().isEmpty():
+            cursor.insertBlock()
+
+        fmt = QTextCharFormat()
+        families = [f.strip(' "') for f in theme.FONT_MONO.split(",")]
+        fmt.setFontFamilies(families)
+        fmt.setFontPointSize(theme.FONT_SIZE_SMALL)
+
+        if not who or who == "hexmind":
+            fmt.setForeground(QColor(theme.INK_DIM))
+            fmt.setFontItalic(True)
+        elif who == self.lead:
+            fmt.setForeground(QColor(theme.VIOLET))
+        else:
+            raw_color = models.AGENT_COLOR.get(who, theme.INK_DIM)
+            fmt.setForeground(_speaker_color(raw_color))
+
+        cursor.insertText(f"{label}: ", fmt)
+        cursor.insertMarkdown(text)
+
         self.transcript.verticalScrollBar().setValue(self.transcript.verticalScrollBar().maximum())
         self.live_tap.append_message(label, text)
 
