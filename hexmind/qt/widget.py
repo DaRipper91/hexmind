@@ -466,8 +466,12 @@ class HexmindWidget(QWidget):
         row.addWidget(self.stopButton)
 
         self.tasks = _table(TASK_COLUMNS, "Tasks")
-        self.tasks.itemDoubleClicked.connect(self._on_task_activated)
+        # itemActivated, not itemDoubleClicked: it is also Enter, and it follows the desktop's
+        # single/double-click preference. Selection by arrow keys fills the detail pane too.
+        self.tasks.itemActivated.connect(self._on_task_activated)
         self.tasks.itemClicked.connect(self._on_task_selected)
+        self.tasks.currentItemChanged.connect(
+            lambda current, _previous: current is not None and self._on_task_selected(current))
         self.team = _table(TEAM_COLUMNS, "Team")
 
         # Advanced: dependency graph (pure QGraphicsScene, no new deps).

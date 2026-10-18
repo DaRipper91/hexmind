@@ -392,6 +392,18 @@ def test_prose_in_a_title_is_not_mistaken_for_a_path(room):
     assert seen == [], "a title that merely contains a slash-ish word is not a path"
 
 
+def test_keyboard_selection_fills_task_detail(room):
+    """Only mouse clicks used to fill the detail pane; arrow keys fire currentItemChanged."""
+    widget = room(backend=FakeBackend())
+    widget.input.setText("go")
+    widget.send()
+    pump()
+
+    widget.tasks.setCurrentCell(1, 1)
+    first = widget.tasks.item(1, 0).text()
+    assert first in widget.detail.toPlainText()
+
+
 # ---------- lifecycle ----------
 
 def test_closing_stops_the_room_thread(room):
