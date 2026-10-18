@@ -485,9 +485,9 @@ class SettingsPage(QWidget):
             return
         self.health_button.setEnabled(False)
         self._health_scanner = HealthScanner(self)
-        self._health_scanner.finished.connect(self._show_health)
+        self._health_scanner.results_ready.connect(self._show_health)
         self._health_scanner.finished.connect(self._health_scanner.deleteLater)
-        self._health_scanner.finished.connect(lambda _: setattr(self, "_health_scanner", None))
+        self._health_scanner.finished.connect(lambda: setattr(self, "_health_scanner", None))
         self._health_scanner.start()
 
     def keyPressEvent(self, event) -> None:  # Qt's spelling, not ours
