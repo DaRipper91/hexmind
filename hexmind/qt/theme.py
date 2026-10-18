@@ -43,6 +43,7 @@ INK_FAINT = "#7d8899"           # whisper-quiet labels that serve from below (st
 
 CYAN = "#39d0d8"                # motion and flow — running, streaming, in transit
 VIOLET = "#9d7cf0"              # structure and identity — lead, identity, selection
+FOCUS = "#d6c9ff"               # keyboard focus: violet's pale twin, >= 3:1 against CONTROL_EDGE
 GREEN = "#5fd68a"               # verification — done, passed, audited clean
 AMBER = "#e8b04b"               # warning — failed, gated, needs a human
 RED = "#f2686b"                 # failure — hard error, cancelled, contradicted
@@ -186,9 +187,9 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         border-top: 2px solid {VIOLET};
     }}
     QTabBar::tab:hover:!selected {{ color: {INK}; background: {PANEL_HOVER}; }}
-    QTabBar::tab:focus {{ border-bottom: 2px solid {VIOLET}; }}
+    QTabBar::tab:focus {{ border-bottom: 2px solid {FOCUS}; }}
     QTabBar QToolButton {{ min-width: 24px; }}
-    QToolButton:focus {{ border: 2px solid {VIOLET}; border-radius: {BORDER_RADIUS_SMALL}px; }}
+    QToolButton:focus {{ border: 2px solid {FOCUS}; border-radius: {BORDER_RADIUS_SMALL}px; }}
 
     /* --- the workspace rail: icons over short labels; violet marks where you are --- */
     #benchRail {{ background: {PANEL}; border-right: {BORDER_WIDTH}px solid {PANEL_EDGE}; }}
@@ -207,7 +208,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         background: {SUBSTRATE};
         border-left: 2px solid {VIOLET};
     }}
-    #benchRail QToolButton:focus {{ border: 2px solid {VIOLET}; }}
+    #benchRail QToolButton:focus {{ border: 2px solid {FOCUS}; }}
 
     /* --- inputs --- */
     QLineEdit, QPlainTextEdit, QTextBrowser, QTextEdit, QSpinBox, QDoubleSpinBox {{
@@ -220,7 +221,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         selection-color: {SUBSTRATE};
     }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
-        border: {BORDER_WIDTH}px solid {VIOLET};
+        border: {BORDER_WIDTH}px solid {FOCUS};
         background: {PANEL_HOVER};
     }}
     QSpinBox::up-button, QSpinBox::down-button,
@@ -306,7 +307,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     }}
     QPushButton:focus {{
         outline: none;
-        border: {BORDER_WIDTH}px solid {VIOLET};
+        border: {BORDER_WIDTH}px solid {FOCUS};
     }}
 
     QLabel#turnMeter {{
@@ -357,7 +358,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         height: 10px;
     }}
     QComboBox:focus {{
-        border: {BORDER_WIDTH}px solid {VIOLET};
+        border: {BORDER_WIDTH}px solid {FOCUS};
         background: {PANEL_HOVER};
     }}
 
@@ -383,7 +384,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     QCheckBox:focus {{
         outline: none;
     }}
-    QCheckBox::indicator:focus {{ border: 2px solid {VIOLET}; }}
+    QCheckBox::indicator:focus {{ border: 2px solid {FOCUS}; }}
 
     /* --- trees and tables --- */
     QTreeWidget, QTreeView, QTableWidget, QTableView, QListWidget, QListView {{
@@ -404,7 +405,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         border-left: 2px solid {VIOLET};
         border-radius: {BORDER_RADIUS_SMALL}px;
     }}
-    QTreeView:focus, QTableView:focus, QListView:focus {{ border: 2px solid {VIOLET}; }}
+    QTreeView:focus, QTableView:focus, QListView:focus {{ border: 2px solid {FOCUS}; }}
     QTableView::item:focus {{ border: 1px solid {CYAN}; }}
     QTreeWidget::item:hover, QTableWidget::item:hover,
     QListWidget::item:hover, QListView::item:hover {{ background: {PANEL_HOVER}; }}

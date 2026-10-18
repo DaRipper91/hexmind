@@ -146,3 +146,11 @@ def test_tab_bar_margins_and_alignment():
 
 
 
+
+
+def test_focus_ring_stands_out_from_an_unfocused_outline():
+    """WCAG 2.4.13: VIOLET was 1.6:1 against CONTROL_EDGE. Focus rules use the FOCUS hue."""
+    assert contrast(T.FOCUS, T.CONTROL_EDGE) >= 3.0
+    focus = [body for sel, body in _blocks(T.stylesheet()).items()
+             if ":focus" in sel and "item:focus" not in sel and "border" in body]
+    assert focus and all(T.FOCUS in body for body in focus)
