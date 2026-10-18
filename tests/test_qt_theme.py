@@ -64,3 +64,13 @@ def test_hover_never_uses_the_focus_hue():
               if ":hover" in sel and "border" in body}
     assert hovers
     assert [sel for sel, body in hovers.items() if T.VIOLET in body] == []
+
+
+def test_every_text_size_derives_from_the_base():
+    """The Text size setting scales the whole app: no font-size may stay pinned to 14px."""
+    import re
+
+    sizes = {int(px) for px in re.findall(r"font-size:\s*(\d+)px", T.stylesheet(20))}
+    assert sizes == {18, 20, 22}
+    assert T.base_text_px("16") == 16
+    assert T.base_text_px("nonsense") == T.FONT_SIZE

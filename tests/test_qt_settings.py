@@ -76,6 +76,7 @@ def test_settings_page_saves_all_configured_preferences(page, config_path):
         "members": ["nemotron-lightning", "big-pickle"],
         "audit": False,
         "theme": "measured-dark",
+        "text_size": "14",
     }
     assert data["server"] == {"host": "0.0.0.0", "port": 9000, "token": "secret"}
     assert data["notifications"] == {"phone_buzz": True, "threshold_seconds": 90}
@@ -256,3 +257,13 @@ def test_disabling_a_model_outside_the_team_is_dirty_and_revertible(page):
     page.revert()
     assert page._enabled_models[outsider] is True
     assert not page.is_dirty
+
+
+def test_text_size_round_trips_and_rejects_junk(page, config_path):
+    page.text_size_selector.setCurrentIndex(page.text_size_selector.findData("18"))
+    assert page.is_dirty
+    assert page.save()
+    assert config.get_defaults(config_path).text_size == "18"
+
+    config.save_section("room", {"text_size": "huge"}, config_path)
+    assert config.get_defaults(config_path).text_size == config.RoomDefaults().text_size

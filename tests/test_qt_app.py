@@ -167,6 +167,14 @@ def test_the_rail_comes_before_the_room_in_the_tab_chain(qapp, room):
     window.deleteLater()
 
 
+def test_saving_a_text_size_restyles_the_app_live(qapp, window, monkeypatch):
+    applied = []
+    monkeypatch.setattr(qapp, "setStyleSheet", applied.append)
+    monkeypatch.setattr(type(window.settings_page), "text_size", property(lambda self: "20"))
+    window._on_settings_saved()
+    assert applied and "font-size: 20px" in applied[-1]
+
+
 # ---------- menus are wired, and wired to duck-typed calls ----------
 
 

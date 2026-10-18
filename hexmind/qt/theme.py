@@ -98,14 +98,32 @@ def is_live(status: str) -> bool:
     return status in BUSY_HUES
 
 
-def stylesheet() -> str:
-    """App-wide QSS. Panels compose this rather than restating it, so a hue change is one edit."""
+def base_text_px(choice: str) -> int:
+    """The base text size for a `[room] text_size` setting. "system" reads the desktop's font (KDE's
+    setting, via the QApplication font), so the GUI scales with the rest of the desktop."""
+    if choice == "system":
+        from PySide6.QtGui import QFontInfo
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        return QFontInfo(app.font()).pixelSize() if app is not None else FONT_SIZE
+    try:
+        return int(choice)
+    except (TypeError, ValueError):
+        return FONT_SIZE
+
+
+def stylesheet(base: int = FONT_SIZE) -> str:
+    """App-wide QSS. Panels compose this rather than restating it, so a hue change is one edit.
+
+    Every text size derives from `base`, so the Text size setting scales the whole app at once."""
+    small, large = base - 2, base + 2
     return f"""
     QWidget {{
         background: {SUBSTRATE};
         color: {INK};
         font-family: {FONT_FAMILY};
-        font-size: {FONT_SIZE}px;
+        font-size: {base}px;
         font-weight: {FONT_WEIGHT};
         line-height: {LINE_HEIGHT};
     }}
@@ -120,7 +138,7 @@ def stylesheet() -> str:
         border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-radius: {BORDER_RADIUS_SMALL}px;
         padding: 6px 8px;
-        font-size: {FONT_SIZE_SMALL}px;
+        font-size: {small}px;
     }}
 
     /* --- structure: violet, because this is identity and selection --- */
@@ -207,7 +225,7 @@ def stylesheet() -> str:
         font-family: {FONT_MONO};
         font-weight: {FONT_WEIGHT_SEMIBOLD};
         padding: 0 6px;
-        font-size: {FONT_SIZE_SMALL}px;
+        font-size: {small}px;
     }}
 
     QComboBox {{
@@ -293,7 +311,7 @@ def stylesheet() -> str:
         border-bottom: {BORDER_WIDTH}px solid {PANEL_EDGE};
         padding: 6px 8px;
         font-weight: {FONT_WEIGHT_MEDIUM};
-        font-size: {FONT_SIZE_SMALL}px;
+        font-size: {small}px;
         border-top-left-radius: {BORDER_RADIUS_SMALL}px;
         border-top-right-radius: {BORDER_RADIUS_SMALL}px;
     }}
@@ -328,7 +346,7 @@ def stylesheet() -> str:
         border: none;
         border-bottom: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-radius: 0;
-        font-size: 16px;
+        font-size: {large}px;
         padding: 12px 14px;
     }}
     #paletteList::item {{ padding: 7px 10px; border: none; }}

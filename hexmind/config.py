@@ -49,6 +49,11 @@ class RoomDefaults:
     members: list[str] = field(default_factory=lambda: ["nemotron-lightning", "big-pickle"])
     audit: bool = True
     theme: str = "measured-dark"
+    # "system" follows the desktop font; a number is the GUI's base text size in px.
+    text_size: str = "14"
+
+
+TEXT_SIZES = ("system", "12", "14", "16", "18", "20")
 
 
 @dataclass
@@ -136,6 +141,8 @@ def get_defaults(path: str | Path | None = None) -> RoomDefaults:
         members=members,
         audit=bool(cfg.get("audit", defaults.audit)),
         theme=str(cfg.get("theme", defaults.theme)),
+        text_size=text_size if (text_size := str(cfg.get("text_size", defaults.text_size)))
+        in TEXT_SIZES else defaults.text_size,
     )
 
 

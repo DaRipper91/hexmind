@@ -297,6 +297,11 @@ class HexmindWindow(QMainWindow):
 
     def _on_settings_saved(self) -> None:
         self._notification_defaults = config.get_notification_defaults(self.settings_page.config_path)
+        # Text size is the one setting that applies live. Only the process that owns the
+        # application restyles it -- this window, never the embeddable widget.
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(theme.stylesheet(theme.base_text_px(self.settings_page.text_size)))
         self.statusBar().showMessage(f"Saved settings to {self.settings_page.config_path}")
 
     def _on_settings_dirty_changed(self, dirty: bool) -> None:
@@ -398,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName(ORG_NAME)
     # Applied once, by the process that owns the application. See the module docstring: the widget
     # must not do this, or it would repaint whatever host embedded it.
-    app.setStyleSheet(theme.stylesheet())
+    app.setStyleSheet(theme.stylesheet(theme.base_text_px(config.get_defaults().text_size)))
 
     if not members:
         # A window that opens with an empty roster and no explanation is the worst first run: the

@@ -70,6 +70,14 @@ class SettingsPage(QWidget):
         self.theme_selector.setAccessibleName("Theme")
         self.theme_selector.addItem("measured-dark")
 
+        self.text_size_selector = QComboBox(self)
+        for label, value in (("System font", "system"), ("Small (12 px)", "12"),
+                             ("Default (14 px)", "14"), ("Large (16 px)", "16"),
+                             ("Larger (18 px)", "18"), ("Largest (20 px)", "20")):
+            self.text_size_selector.addItem(label, value)
+        self.text_size_selector.setToolTip(
+            "System font follows your desktop's font size. Applies as soon as you save.")
+
         self.phone_buzz_checkbox = QCheckBox("Send a completion ping", self)
 
         self.threshold_input = QSpinBox(self)
@@ -94,6 +102,7 @@ class SettingsPage(QWidget):
         form.addRow("Default roster", self._team_row())
         form.addRow("", self.audit_checkbox)
         form.addRow("Theme", self.theme_selector)
+        form.addRow("Text size", self.text_size_selector)
         form.addRow("Server host", self.server_host_input)
         form.addRow("Server port", self.server_port_input)
         form.addRow("Server token", self.server_token_input)
@@ -222,6 +231,7 @@ class SettingsPage(QWidget):
         self.lead_combo.currentTextChanged.connect(self._on_form_edited)
         self.audit_checkbox.toggled.connect(self._on_form_edited)
         self.theme_selector.currentTextChanged.connect(self._on_form_edited)
+        self.text_size_selector.currentIndexChanged.connect(self._on_form_edited)
         self.server_host_input.textChanged.connect(self._on_form_edited)
         self.server_port_input.valueChanged.connect(self._on_form_edited)
         self.server_token_input.textChanged.connect(self._on_form_edited)
@@ -235,6 +245,7 @@ class SettingsPage(QWidget):
             "members": ", ".join(self._team),
             "audit": self.audit_checkbox.isChecked(),
             "theme": self.theme_selector.currentText(),
+            "text_size": self.text_size_selector.currentData(),
             "server_host": self.server_host_input.text(),
             "server_port": self.server_port_input.value(),
             "server_token": self.server_token_input.text(),
@@ -264,6 +275,7 @@ class SettingsPage(QWidget):
             if self.theme_selector.findText(theme) < 0:
                 self.theme_selector.addItem(theme)
             self.theme_selector.setCurrentText(theme)
+            self._select_text_size(str(state.get("text_size", config.RoomDefaults().text_size)))
             self.server_host_input.setText(str(state["server_host"]))
             self.server_port_input.setValue(int(state["server_port"]))
             self.server_token_input.setText(str(state["server_token"]))
@@ -300,6 +312,15 @@ class SettingsPage(QWidget):
         )
         return answer == QMessageBox.StandardButton.Discard
 
+    def _select_text_size(self, value: str) -> None:
+        index = self.text_size_selector.findData(value)
+        self.text_size_selector.setCurrentIndex(index if index >= 0 else
+                                                self.text_size_selector.findData("14"))
+
+    @property
+    def text_size(self) -> str:
+        return self.text_size_selector.currentData()
+
     def reset_to_defaults(self) -> None:
         """Restore the form to schema defaults without writing to disk."""
         room = config.RoomDefaults()
@@ -313,6 +334,7 @@ class SettingsPage(QWidget):
         if self.theme_selector.findText(room.theme) < 0:
             self.theme_selector.addItem(room.theme)
         self.theme_selector.setCurrentText(room.theme)
+        self._select_text_size(room.text_size)
         self.server_host_input.setText(server.host)
         self.server_port_input.setValue(server.port)
         self.server_token_input.setText(server.token)
@@ -352,6 +374,7 @@ class SettingsPage(QWidget):
                 "members": ", ".join(room.members),
                 "audit": room.audit,
                 "theme": room.theme,
+                "text_size": room.text_size,
                 "server_host": server.host,
                 "server_port": server.port,
                 "server_token": server.token,
@@ -397,6 +420,7 @@ class SettingsPage(QWidget):
                     "members": members,
                     "audit": self.audit_checkbox.isChecked(),
                     "theme": self.theme_selector.currentText(),
+                    "text_size": self.text_size_selector.currentData(),
                 },
                 self._config_path,
             )
@@ -443,6 +467,7 @@ class SettingsPage(QWidget):
                 "members": room.members,
                 "audit": room.audit,
                 "theme": room.theme,
+                "text_size": room.text_size,
             },
             path,
         )
