@@ -43,7 +43,7 @@ class SettingsPage(QWidget):
         self.setAccessibleName("Settings workspace")
 
         # Load enabled models and team from config
-        self._enabled_models = load_enabled_from_config()
+        self._enabled_models = load_enabled_from_config(self._config_path)
         self._team = config.get_defaults(self._config_path).members
         self._lead = config.get_defaults(self._config_path).lead
 
@@ -303,7 +303,6 @@ class SettingsPage(QWidget):
         server = config.ServerDefaults()
         notifications = config.NotificationDefaults()
         self._enabled_models = {name: True for name in REGISTRY.names()}
-        save_enabled_to_config(self._enabled_models)
         self._team = list(room.members)
         self._lead = room.lead
         self._populate_lead_combo()
@@ -339,7 +338,7 @@ class SettingsPage(QWidget):
         server = config.get_server_defaults(self._config_path)
         notifications = config.get_notification_defaults(self._config_path)
 
-        self._enabled_models = load_enabled_from_config()
+        self._enabled_models = load_enabled_from_config(self._config_path)
         self._team = list(room.members)
         self._lead = room.lead
         self._populate_lead_combo()
@@ -415,7 +414,7 @@ class SettingsPage(QWidget):
                 },
                 self._config_path,
             )
-            save_enabled_to_config(self._enabled_models)
+            save_enabled_to_config(self._enabled_models, self._config_path)
         except OSError as exc:
             self.status.setText(f"Could not save settings: {exc}")
             return False
@@ -462,7 +461,7 @@ class SettingsPage(QWidget):
             path,
         )
         # Also save enabled models defaults
-        save_enabled_to_config({name: True for name in REGISTRY.names()})
+        save_enabled_to_config({name: True for name in REGISTRY.names()}, path)
         return path
 
     def request_open_config_file(self) -> None:

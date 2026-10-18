@@ -227,3 +227,19 @@ def test_settings_page_requests_config_paths_and_bootstraps_missing_file(qapp, c
     assert opened_dirs == [str(config_path.parent)]
     page.close()
     page.deleteLater()
+
+def test_restore_defaults_writes_nothing_until_save(page, config_path):
+    """reset_to_defaults said "without writing to disk" and then rewrote [models] immediately --
+    into config.PATH, ignoring the page's own config_path."""
+    from pathlib import Path
+
+    def snapshot(p):
+        p = Path(p)
+        return p.read_bytes() if p.exists() else None
+
+    before = (snapshot(config_path), snapshot(config.PATH))
+    page.reset_to_defaults()
+    assert (snapshot(config_path), snapshot(config.PATH)) == before
+
+    page.save()
+    assert "[models]" in Path(config_path).read_text()

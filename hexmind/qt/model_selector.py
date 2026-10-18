@@ -271,9 +271,9 @@ class ModelSelectorDialog(QDialog):
         return self._enabled, self._team
 
 
-def load_enabled_from_config() -> dict[str, bool]:
+def load_enabled_from_config(path=None) -> dict[str, bool]:
     """Load enabled models from config.toml, with fallback to all True."""
-    enabled = config_module.get_enabled_models()
+    enabled = config_module.get_enabled_models(path)
     if not enabled:
         # Default: all models enabled
         return {name: True for name in REGISTRY.names()}
@@ -284,9 +284,9 @@ def load_enabled_from_config() -> dict[str, bool]:
     return result
 
 
-def save_enabled_to_config(enabled: dict[str, bool]) -> None:
+def save_enabled_to_config(enabled: dict[str, bool], path=None) -> None:
     """Save enabled models to config.toml."""
-    config_module.save_enabled_models(enabled)
+    config_module.save_enabled_models(enabled, path)
 
 
 __all__ = ["ModelSelectorDialog", "load_enabled_from_config", "save_enabled_to_config"]
