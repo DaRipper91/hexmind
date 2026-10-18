@@ -25,10 +25,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
+import shiboken6
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
+    QFrame,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -123,7 +126,7 @@ class CommandPalette(QDialog):
     def __init__(self, commands: Sequence[Command], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._commands = list(commands)
-        self.setObjectName("palette")
+        self.setObjectName("paletteDialog")
         self.setWindowTitle("Command palette")
         self.setModal(True)
         self.setWindowFlags(
@@ -131,29 +134,38 @@ class CommandPalette(QDialog):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.input = QLineEdit()
+        frame = QFrame(self)
+        frame.setObjectName("palette")
+
+        self.input = QLineEdit(frame)
         self.input.setObjectName("paletteInput")
         self.input.setAccessibleName("Command")
         self.input.setPlaceholderText("Type a command…")
         self.input.textChanged.connect(self._refresh)
         self.input.returnPressed.connect(self._accept_current)
 
-        self.list = QListWidget()
+        self.list = QListWidget(frame)
         self.list.setObjectName("paletteList")
         self.list.setAccessibleName("Matching commands")
         self.list.itemActivated.connect(self._accept_item)
         self.list.itemClicked.connect(self._accept_item)
 
-        self.hint = QLabel("")
+        self.hint = QLabel("", frame)
+        self.hint.setObjectName("paletteHint")
         self.hint.setAccessibleName("Command description")
         self.hint.setWordWrap(True)
+
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(0)
+        frame_layout.addWidget(self.input)
+        frame_layout.addWidget(self.list)
+        frame_layout.addWidget(self.hint)
 
         body = QVBoxLayout(self)
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
-        body.addWidget(self.input)
-        body.addWidget(self.list)
-        body.addWidget(self.hint)
+        body.addWidget(frame)
 
         self._shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
         self._shortcut.activated.connect(self.toggle)
@@ -179,6 +191,8 @@ class CommandPalette(QDialog):
 
     def open_palette(self) -> None:
         """Show over the host window, centred, focused on the input, with a clean slate."""
+        focused = QApplication.focusWidget()
+        self._return_to = focused if focused is not None and focused is not self.input else None
         self.input.clear()
         self._refresh("")
         self.show()
@@ -186,6 +200,14 @@ class CommandPalette(QDialog):
         self.input.setFocus()
         self.raise_()
         self.activateWindow()
+
+    def hideEvent(self, event) -> None:  # Qt's spelling, not ours
+        """Give focus back to whatever had it, or a keyboard user is left with focus nowhere."""
+        super().hideEvent(event)
+        target, self._return_to = getattr(self, "_return_to", None), None
+        if target is not None and shiboken6.isValid(target) and target.isVisible():
+            target.window().activateWindow()  # focus only lands in the active window
+            target.setFocus(Qt.FocusReason.PopupFocusReason)
 
     def _size_and_centre(self) -> None:
         """Size to the contents, then centre on the host if there is one.

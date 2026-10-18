@@ -50,8 +50,8 @@ def test_get_defaults_fallback_when_empty(tmp_path):
     p = tmp_path / "empty.toml"
     r = config.get_defaults(p)
     assert isinstance(r, config.RoomDefaults)
-    assert r.lead == ""
-    assert r.members == ["claude", "agy", "codex", "kimi"]
+    assert r.lead == "nemotron-lightning"
+    assert r.members == ["nemotron-lightning", "big-pickle"]
     assert r.audit is True
     assert r.theme == "measured-dark"
 

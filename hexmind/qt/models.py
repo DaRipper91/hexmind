@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -20,30 +20,33 @@ from PySide6.QtWidgets import (
 
 from ..backends import DirectBackend
 from ..core import REGISTRY
+from .chat import RunnerThread
 
-ProbeRunner = Callable[[str, str], str]
+ProbeRunner = Callable[[str, str], "str | Awaitable[str]"]
 
 
-class ProbeThread(QThread):
+class ProbeThread(RunnerThread):
     succeeded = Signal(str)
     failed = Signal(str)
 
     def __init__(self, runner: ProbeRunner, model: str, prompt: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._runner = runner
+        super().__init__(runner, parent)
         self._model = model
         self._prompt = prompt
 
     def run(self) -> None:
         try:
-            self.succeeded.emit(self._runner(self._model, self._prompt))
+            self.succeeded.emit(self._call(self._model, self._prompt))
+        except asyncio.CancelledError:
+            pass  # the window is closing
         except Exception as exc:  # noqa: BLE001 - probe errors belong in the visible result panel
             self.failed.emit(str(exc))
 
 
-def _default_probe(model: str, prompt: str) -> str:
-    backend = DirectBackend(os.getcwd(), timeout=60)
-    return asyncio.run(backend.run(model, prompt))
+def _default_probe(cwd: str) -> ProbeRunner:
+    async def probe(model: str, prompt: str) -> str:
+        return await DirectBackend(cwd, timeout=60).run(model, prompt)
+    return probe
 
 
 class CalibrationRack(QWidget):
@@ -53,10 +56,11 @@ class CalibrationRack(QWidget):
         self,
         parent: QWidget | None = None,
         probe_runner: ProbeRunner | None = None,
+        cwd: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setAccessibleName("Calibration Rack workspace")
-        self._probe_runner = probe_runner or _default_probe
+        self._probe_runner = probe_runner or _default_probe(cwd or os.getcwd())
         self._probe_thread: ProbeThread | None = None
 
         self.models = QListWidget(self)
@@ -83,7 +87,7 @@ class CalibrationRack(QWidget):
         self.probe_input.setAccessibleName("Model probe prompt")
         self.probe_input.setPlaceholderText("Ask this model a short test question…")
         self.probe_button = QPushButton("Run probe", self)
-        self.probe_button.setAccessibleName("Run model probe")
+        self.probe_button.setProperty("variant", "primary")
         self.probe_button.clicked.connect(self.run_probe)
         probe_row = QHBoxLayout()
         probe_row.addWidget(self.probe_input, 1)
@@ -99,12 +103,18 @@ class CalibrationRack(QWidget):
         self.status.setText("Select a model and enter a probe prompt to test it directly.")
 
         left = QVBoxLayout()
-        left.addWidget(QLabel("Registered models", self))
+        reg_models_title = QLabel("Registered models", self)
+        reg_models_title.setProperty("role", "heading")
+        left.addWidget(reg_models_title)
         left.addWidget(self.models)
         right = QVBoxLayout()
-        right.addWidget(QLabel("Model inspector", self))
+        inspector_title = QLabel("Model inspector", self)
+        inspector_title.setProperty("role", "heading")
+        right.addWidget(inspector_title)
         right.addLayout(details)
-        right.addWidget(QLabel("Single-model probe", self))
+        probe_title = QLabel("Single-model probe", self)
+        probe_title.setProperty("role", "heading")
+        right.addWidget(probe_title)
         right.addLayout(probe_row)
         right.addWidget(self.status)
         right.addWidget(self.probe_output, 1)
@@ -149,6 +159,10 @@ class CalibrationRack(QWidget):
 
     def _probe_failed(self, message: str) -> None:
         self.status.setText(f"Probe failed: {message}")
+
+    def shutdown(self) -> None:
+        if self._probe_thread is not None:
+            self._probe_thread.shutdown()
 
     def _probe_finished(self) -> None:
         if self._probe_thread is not None:

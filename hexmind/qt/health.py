@@ -34,7 +34,9 @@ class HealthResult:
 class HealthScanner(QThread):
     """Scan local executable and credential prerequisites without running models."""
 
-    finished = Signal(list)
+    # Not `finished`: that name shadowed QThread.finished, so deleteLater could fire from inside
+    # run() while the thread was still unwinding.
+    results_ready = Signal(list)
 
     def scan(self) -> list[HealthResult]:
         results: list[HealthResult] = []
@@ -54,7 +56,7 @@ class HealthScanner(QThread):
                     credential_status=credential_status,
                 )
             )
-        self.finished.emit(results)
+        self.results_ready.emit(results)
         return results
 
     def run(self) -> None:

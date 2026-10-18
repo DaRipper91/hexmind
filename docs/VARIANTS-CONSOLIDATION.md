@@ -1,7 +1,10 @@
 # Variants Consolidation — one `main`, not three forks
 
-Applies to: **Hexmind, agentdeck, Aether-Next** (same plan for each repo).
-Written 2026-09-26. Copy this same file into every clone; don't edit per clone.
+> **This is the canonical copy.** It was previously duplicated byte-for-byte into `agentdeck`
+> and `Aether`. Those clones now hold a short pointer to this file — edit it here, once.
+
+Applies to: **Hexmind, agentdeck, Aether** (same plan for each repo).
+Written 2026-09-26.
 
 ## The problem
 

@@ -2,8 +2,8 @@
 
 Governed by Phase 1 of the Flagship GUI Roadmap:
 [room]
-lead = ""                  # default lead model ID or empty
-members = ["claude", "agy", "codex", "kimi"]
+lead = "nemotron-lightning"                  # default lead model ID or empty
+members = ["nemotron-lightning", "big-pickle"]
 audit = true               # default peer audit toggle
 theme = "measured-dark"    # UI theme
 
@@ -18,54 +18,18 @@ threshold_seconds = 30     # only notify if turn took longer than 30s
 
 [models]
 # model-name = true/false  (enabled state controls UI visibility)
-claude = true
-agy = true
-codex = true
-kimi = true
+# Only free OpenCode models that opencode offers are enabled by default.
+# claude-code, agy, codex and other paid/non-opencode tools are disabled.
+beam-free = true
+big-pickle = true
+deepseek-v4-1-flash-free = true
+glm-5-3-flash-free = true
+longcat-preview = true
+mimo-flash = true
+nemotron-3-5-super-vl-free = true
 nemotron-lightning = true
 nemotron-ultra = true
-muse-spark = true
-mimo-flash = true
-big-pickle = true
-ling-flash = true
 space-bunny = true
-longcat-preview = true
-copilot = true
-jules = true
-qwen = true
-qwen-large = true
-deepseek-v4-pro = true
-deepseek-v4-1-flash = true
-deepseek-v4-flash = true
-deepseek-v4-vision = true
-gpt-6-luna = true
-gpt-5-6-luna = true
-grok-4-7 = true
-grok-4-6 = true
-qwen3-8-max = true
-qwen3-8-flash = true
-qwen3-7-plus = true
-kimi-k3 = true
-kimi-k2-7-code = true
-glm-5-3 = true
-glm-5-3-flash = true
-glm-5-2 = true
-mimo-v2-6-pro = true
-mimo-v2-6-flash = true
-mimo-v2-5-pro = true
-mimo-v2-5 = true
-minimax-m3 = true
-minimax-m2-7 = true
-hy4-preview = true
-hy3 = true
-longcat-2-0 = true
-longcat-go = true
-space-bunny-go = true
-muse-spark-contributor = true
-muse-spark-1-2 = true
-
-[nicknames]
-claude = "Rex"
 """
 from __future__ import annotations
 
@@ -81,10 +45,15 @@ PATH: str | Path = os.path.expanduser("~/.config/hexmind/config.toml")
 
 @dataclass
 class RoomDefaults:
-    lead: str = ""
-    members: list[str] = field(default_factory=lambda: ["claude", "agy", "codex", "kimi"])
+    lead: str = "nemotron-lightning"
+    members: list[str] = field(default_factory=lambda: ["nemotron-lightning", "big-pickle"])
     audit: bool = True
     theme: str = "measured-dark"
+    # "system" follows the desktop font; a number is the GUI's base text size in px.
+    text_size: str = "14"
+
+
+TEXT_SIZES = ("system", "12", "14", "16", "18", "20")
 
 
 @dataclass
@@ -163,14 +132,17 @@ def save_section(section: str, data: dict[str, Any], path: str | Path | None = N
 def get_defaults(path: str | Path | None = None) -> RoomDefaults:
     """Get validated RoomDefaults dataclass from config.toml [room] section."""
     cfg = load_config(path).get("room", {})
+    defaults = RoomDefaults()
     members = cfg.get("members")
     if not isinstance(members, list) or not all(isinstance(m, str) for m in members):
-        members = ["claude", "agy", "codex", "kimi"]
+        members = defaults.members
     return RoomDefaults(
-        lead=str(cfg.get("lead", "")),
+        lead=str(cfg.get("lead", defaults.lead)),
         members=members,
-        audit=bool(cfg.get("audit", True)),
-        theme=str(cfg.get("theme", "measured-dark")),
+        audit=bool(cfg.get("audit", defaults.audit)),
+        theme=str(cfg.get("theme", defaults.theme)),
+        text_size=text_size if (text_size := str(cfg.get("text_size", defaults.text_size)))
+        in TEXT_SIZES else defaults.text_size,
     )
 
 

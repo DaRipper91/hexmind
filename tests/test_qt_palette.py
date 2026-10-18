@@ -300,3 +300,54 @@ def test_a_teammate_is_findable_by_their_own_name():
 def test_a_room_with_no_members_still_has_its_actions():
     """`getattr(..., None) or []` — a room mid-startup has no roster yet and must not raise."""
     assert len(palette_commands(_Room(None))) == 3
+
+
+def test_escape_gives_focus_back_to_where_it_was(qapp, palette):
+    """After Esc focus used to be None: a keyboard user had to click to get anywhere."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLineEdit
+
+    host = QLineEdit()
+    host.show()
+    host.activateWindow()
+    host.setFocus()
+    qapp.processEvents()
+    assert QApplication.focusWidget() is host
+
+    palette.open_palette()
+    qapp.processEvents()
+    QTest.keyClick(palette, Qt.Key.Key_Escape)
+    qapp.processEvents()
+
+    assert not palette.isVisible()
+    assert QApplication.focusWidget() is host
+    host.close()
+    host.deleteLater()
+
+
+def test_palette_frame_and_border_styling(qapp, palette):
+    """Task 3.9: Palette has inner QFrame named 'palette' and paints VIOLET border."""
+    from hexmind.qt import theme
+    from PySide6.QtWidgets import QFrame
+
+    old_sheet = qapp.styleSheet()
+    qapp.setStyleSheet(theme.stylesheet())
+    try:
+        frame = palette.findChild(QFrame, "palette")
+        assert frame is not None, "palette must contain an inner QFrame named 'palette'"
+        assert palette.input.parent() is frame
+        assert palette.list.parent() is frame
+        assert palette.hint.parent() is frame
+        assert palette.hint.objectName() == "paletteHint"
+
+        palette.open_palette()
+        qapp.processEvents()
+
+        img = palette.grab().toImage()
+        border_pixel = img.pixelColor(palette.width() // 2, 0).name().lower()
+        assert border_pixel == theme.VIOLET.lower(), (
+            f"top border pixel ({border_pixel}) must match VIOLET ({theme.VIOLET})"
+        )
+    finally:
+        qapp.setStyleSheet(old_sheet)

@@ -54,14 +54,16 @@ class HexmindWindow(QMainWindow):
     def __init__(self, room: QWidget | None = None, **room_kwargs: Any) -> None:
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} — multi-model agent team")
-        self.resize(1280, 820)
+        self.resize(1400, 900)
+        self.setMinimumSize(1000, 700)
 
         # `room` is injectable so a test can stand a window up around a stub, and so the window is
         # never the reason a room fails to build.
         self.room = room if room is not None else self._build_room(**room_kwargs)
         self.settings_page = SettingsPage(parent=self)
-        self.calibration_rack = CalibrationRack(parent=self)
-        self.direct_line = DirectLine(parent=self)
+        room_cwd = getattr(self.room, "cwd", None)
+        self.calibration_rack = CalibrationRack(parent=self, cwd=room_cwd)
+        self.direct_line = DirectLine(parent=self, cwd=room_cwd)
         self.bench_rail = BenchRail(
             self.room,
             self,
@@ -72,11 +74,16 @@ class HexmindWindow(QMainWindow):
             },
         )
         self.setCentralWidget(self.bench_rail)
+        # The rail is leftmost, so it comes first in the Tab chain; built after the room, it was last.
+        first_in_room = getattr(self.room, "leadBox", None)
+        if first_in_room is not None:
+            QWidget.setTabOrder(list(self.bench_rail.buttons.values())[-1], first_in_room)
         self._turn_started_at: float | None = None
         self._notification_defaults = config.get_notification_defaults()
         self.tray_icon: QSystemTrayIcon | None = None
         self.settings_page.saved.connect(self._on_settings_saved)
         self.settings_page.dirty_changed.connect(self._on_settings_dirty_changed)
+        self.settings_page.closed.connect(self._close_settings)
         self.settings_page.config_file_requested.connect(self.open_path)
         self.settings_page.config_directory_requested.connect(self.open_path)
         self._setup_notifications()
@@ -261,6 +268,9 @@ class HexmindWindow(QMainWindow):
     def _open_settings(self) -> None:
         self.bench_rail.set_workspace("Settings")
 
+    def _close_settings(self) -> None:
+        self.bench_rail.set_workspace("Room")
+
     def _reload_settings(self) -> None:
         if not self.settings_page.reload():
             return
@@ -287,6 +297,11 @@ class HexmindWindow(QMainWindow):
 
     def _on_settings_saved(self) -> None:
         self._notification_defaults = config.get_notification_defaults(self.settings_page.config_path)
+        # Text size is the one setting that applies live. Only the process that owns the
+        # application restyles it -- this window, never the embeddable widget.
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(theme.stylesheet(theme.base_text_px(self.settings_page.text_size)))
         self.statusBar().showMessage(f"Saved settings to {self.settings_page.config_path}")
 
     def _on_settings_dirty_changed(self, dirty: bool) -> None:
@@ -306,7 +321,13 @@ class HexmindWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # Qt's spelling, not ours
         """The room is a QThread, and a QThread destroyed while running aborts the process. The
         widget's own `closeEvent` stops it, and Qt walks central widgets, so this only has to make
-        sure the widget actually gets the event."""
+        sure the widget actually gets the event. The Direct Line and Calibration Rack threads are
+        children of their pages for the same reason, so they are cancelled and joined first."""
+        if self.settings_page.is_dirty and not self.settings_page._confirm_discard("quit"):
+            event.ignore()
+            return
+        self.direct_line.shutdown()
+        self.calibration_rack.shutdown()
         self.room.close()
         try:
             from .. import config
@@ -382,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName(ORG_NAME)
     # Applied once, by the process that owns the application. See the module docstring: the widget
     # must not do this, or it would repaint whatever host embedded it.
-    app.setStyleSheet(theme.stylesheet())
+    app.setStyleSheet(theme.stylesheet(theme.base_text_px(config.get_defaults().text_size)))
 
     if not members:
         # A window that opens with an empty roster and no explanation is the worst first run: the

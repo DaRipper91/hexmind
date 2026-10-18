@@ -17,13 +17,17 @@ from textual.visual import VisualType
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
+from . import models
 from .core import BUSY_STATUSES, REGISTRY, TEXT_ONLY, Orchestrator, Task, TeamBusy, TeamError
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
+
 # Generated from the registry, so a newly registered model always has a colour instead of
 # silently falling through to white. "you" is the user, not a model.
-AGENT_COLOR: dict[str, str] = {**REGISTRY.colors(), "you": "bold white"}
+AGENT_COLOR: dict[str, str] = models.AGENT_COLOR
+
+
 
 BUSY, IDLE = ("*", ".") if os.environ.get("FORCE_ASCII") else ("●", "○")
 NARROW, SHORT, TINY = 80, 18, 10  # breakpoints: below NARROW cols -> tabbed single view; below SHORT/TINY rows -> compact
@@ -97,7 +101,8 @@ class TaskScreen(ModalScreen):
             self.app.copy_to_clipboard(self.output)  # OSC 52; Termux may not honour it, so also try termux-api
             if shutil.which("termux-clipboard-set"):
                 self.termux_copy()
-            self.notify("Copied task output")
+            # Don't notify here: termux_copy is fire-and-forget and notifies on success itself.
+            # Notifying now would claim success before the copy even starts.
         else:
             self.dismiss()
 
@@ -109,10 +114,15 @@ class TaskScreen(ModalScreen):
         try:
             await asyncio.wait_for(proc.communicate(self.output.encode()), 5)
         except asyncio.TimeoutError:
-            pass
+            self.app.notify("Termux clipboard copy timed out", severity="warning", timeout=3)
+            return
         finally:  # also runs if the sheet is closed and the worker cancelled
             if proc.returncode is None:
                 proc.kill()
+        if proc.returncode != 0:
+            self.app.notify("Termux clipboard copy failed", severity="warning", timeout=3)
+            return
+        self.notify("Copied task output")
 
 
 def labelled(content: VisualType, tooltip: str, classes: str = "") -> Static:

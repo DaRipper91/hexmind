@@ -14,7 +14,7 @@ for the roadmap.
 
 | file | responsibility |
 | :--- | :--- |
-| `models.toml` / `models.py` | **the source of truth for the roster.** All 16 members as structured fields |
+| `models.toml` / `models.py` | **the source of truth for the roster.** All roster members from models.toml (currently 45) as structured fields |
 | `core.py` | `Task`, `Orchestrator`, plan parsing, the task graph, team state (sleep/wake/lead) |
 | `relay.py` | chain loading, `from =` resolution, stage assignment, all `/commands` |
 | `auditor.py` | domains, verdict parsing, the bounded revise loop, `Stats` rankings |
@@ -24,12 +24,12 @@ for the roadmap.
 | `jules.py` | the Google Jules cloud member (works on the GitHub copy, not your tree) |
 | `reaping.py` | classifying a relay run's worktree as safe / dirty / unmerged / active, for `/relay clean` |
 | `notify.py` | come-back pings via KDE Connect when the room needs human intervention (Phase 9) |
-| `qt/app.py` | `hexmind-gui` standalone desktop application ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py), menus, shortcuts, status bar) |
-| `qt/widget.py` | the same room as a `QWidget` ([`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py), needs the `qt` extra). One brain with the TUI |
-| `qt/graph.py` | [`TaskGraphView`](file:///home/daripper/Projects/hexmind/hexmind/qt/graph.py) visual dependency DAG with in-place node update & layout |
-| `qt/palette.py` | [`CommandPalette`](file:///home/daripper/Projects/hexmind/hexmind/qt/palette.py) launcher (Ctrl+K) with fuzzy action matching |
-| `qt/stats.py` | [`StatsPanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/stats.py) audit scorecard & pyqtgraph visualization |
-| `qt/timeline.py` | [`TimelinePanel`](file:///home/daripper/Projects/hexmind/hexmind/qt/timeline.py) execution waterfall & task timing |
+| `qt/app.py` | `hexmind-gui` standalone desktop application ([`HexmindWindow`](../../../hexmind/qt/app.py), menus, shortcuts, status bar) |
+| `qt/widget.py` | the same room as a `QWidget` ([`HexmindWidget`](../../../hexmind/qt/widget.py), needs the `qt` extra). One brain with the TUI |
+| `qt/graph.py` | [`TaskGraphView`](../../../hexmind/qt/graph.py) visual dependency DAG with in-place node update & layout |
+| `qt/palette.py` | [`CommandPalette`](../../../hexmind/qt/palette.py) launcher (Ctrl+K) with fuzzy action matching |
+| `qt/stats.py` | [`StatsPanel`](../../../hexmind/qt/stats.py) audit scorecard & pyqtgraph visualization |
+| `qt/timeline.py` | [`TimelinePanel`](../../../hexmind/qt/timeline.py) execution waterfall & task timing |
 | `qt/theme.py` | dark pastel stylesheet applied at application level |
 
 ## Commands
@@ -93,7 +93,7 @@ what `/profile` uses.
 team-assembly flow keeps only a snapshot to diff against — never a second copy of the team to drift
 from the live one.
 
-**Host Isolation Invariant for Qt.** [`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py) is strictly an embeddable component. It must **never** call `QApplication.setStyleSheet`, alter the application-level palette, or assume ownership of the main window. All global theme stylesheets belong in [`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) or the embedding host (such as Aether).
+**Host Isolation Invariant for Qt.** [`HexmindWidget`](../../../hexmind/qt/widget.py) is strictly an embeddable component. It must **never** call `QApplication.setStyleSheet`, alter the application-level palette, or assume ownership of the main window. All global theme stylesheets belong in [`HexmindWindow`](../../../hexmind/qt/app.py) or the embedding host (such as Aether).
 
 **Server Loopback & Auth Invariant.** The headless server defaults to binding `127.0.0.1`. Any non-loopback `--host` (e.g. `0.0.0.0`) strictly requires `--token` or `HEXMIND_TOKEN`, enforced on all `/api/` REST endpoints and the `/ws/room` WebSocket. Default CORS is strictly confined to localhost.
 
@@ -102,7 +102,7 @@ from the live one.
 - `hexmind/qt/graph.py: select_task, fit, clear` (Phase 8: Wiring Diagram / P13)
 - `hexmind/notify.py` (Phase 9: Come-back notifications via KDE Connect)
 - `hexmind/qt/graph.py: update_task` (Phase 2: Live Wire in-place node update)
-Consult the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) before refactoring any of these.
+Consult the [Ponytail Master Implementation Handbook](../../../docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) before refactoring any of these.
 
 ## opencode traps
 
@@ -152,5 +152,5 @@ hand-written argv because their protocols genuinely differ.
 - Always test offscreen in headless CI/tests: `QT_QPA_PLATFORM=offscreen`.
 - `HexmindWidget` runs long turns on a `QThread` with its own `asyncio` event loop. GUI updates must arrive as Qt signals, never direct cross-thread widget calls.
 - `TaskGraphView` renders tasks as an interactive DAG. Never block graph layout or drop in-place node update signals (`update_task`).
-- The standalone desktop application is [`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) launched via `hexmind-gui`.
-- Refer to the [Ponytail Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and the [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) for all Phase 1–9 GUI milestones.
+- The standalone desktop application is [`HexmindWindow`](../../../hexmind/qt/app.py) launched via `hexmind-gui`.
+- Refer to the [Ponytail Master Implementation Handbook](../../../docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and the [Flagship GUI Roadmap](../../../docs/archive/plans/2026-09-28-gui-flagship-roadmap.md) for all Phase 1–9 GUI milestones.
