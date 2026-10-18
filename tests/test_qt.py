@@ -373,6 +373,21 @@ def test_the_lead_label_names_the_lead_box(room):
     assert widget.leadLabel.buddy() is widget.leadBox
 
 
+def test_top_bar_is_compact_and_steady(room):
+    widget = room()
+    widget.resize(1400, 900)
+    widget.show()
+    pump(50)
+    assert widget.leadBox.width() < 400
+
+    x = widget.teamButton.x()
+    widget._on_turn_state(True)
+    pump(50)
+    assert widget.turnMeter.text()
+    assert widget.teamButton.x() == x
+    widget._on_turn_state(False)
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

@@ -435,11 +435,20 @@ class HexmindWidget(QWidget):
         bar = QHBoxLayout()
         self.leadLabel = QLabel("&Lead:", self)
         self.leadLabel.setBuddy(self.leadBox)  # Alt+L, and the combo is announced as "Lead"
+        # The lead combo sizes to a model name instead of eating the bar (it was ~974px), and the
+        # turn meter reserves its width up front so Select Team does not jump when a turn starts.
+        self.leadBox.setMinimumContentsLength(16)
+        self.leadBox.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.turnMeter.setMinimumWidth(
+            self.turnMeter.fontMetrics().horizontalAdvance("[● opencode-ultra · working · 00:00]"))
         bar.addWidget(self.leadLabel)
-        bar.addWidget(self.leadBox, 1)
+        bar.addWidget(self.leadBox)
         bar.addWidget(self.teamButton)
         bar.addWidget(self.auditBox)
+        bar.addStretch(1)
         bar.addWidget(self.status)
+        bar.addSpacing(8)
         bar.addWidget(self.turnMeter)
         lay.addLayout(bar)
 
