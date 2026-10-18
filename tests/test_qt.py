@@ -215,23 +215,23 @@ def test_picking_a_lead_updates_the_room_and_the_roster(room):
     assert ["claude", "awake"] in team, team
 
 
-def test_team_save_serializes_with_orch_lock(room):
-    """_on_team_saved must take _orch_lock so a team save mid-turn cannot race submit()/change_lead(),
-    which hold the same lock while touching orchestrator state."""
-    from unittest.mock import MagicMock
+def test_team_save_does_not_deadlock(room):
+    """The save used to emit "team" while holding _orch_lock; the redraw it triggers calls snapshot(),
+    which takes the same lock, so the GUI hung forever. A MagicMock lock hid it. Use the real one."""
+    import faulthandler
 
     widget = room()
     widget._room.wait_until_ready()
 
-    mock_lock = MagicMock()
-    widget._room._orch_lock = mock_lock
+    faulthandler.dump_traceback_later(10, exit=True)
+    try:
+        widget._on_team_saved({"claude": True, "agy": True}, ["claude", "agy"])
+    finally:
+        faulthandler.cancel_dump_traceback_later()
 
-    widget._on_team_saved({"claude": True}, ["claude"])
-    pump()
-
-    # `with lock:` calls __enter__ on entry and __exit__ on exit.
-    mock_lock.__enter__.assert_called()
-    mock_lock.__exit__.assert_called()
+    assert not widget._room._orch_lock.locked()
+    names = {widget.team.item(r, 0).text() for r in range(widget.team.rowCount())}
+    assert names == {"claude", "agy"}
 
 
 # ---------- commands and the host signal ----------

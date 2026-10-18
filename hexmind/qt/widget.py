@@ -820,11 +820,12 @@ class HexmindWidget(QWidget):
         # Update room's members
         self.members = team
         if hasattr(self, "_room") and self._room is not None:
-            # Serialize with the room thread: `submit()`/`change_lead()` hold _orch_lock while
-            # touching the same orchestrator state, so a team save mid-turn must not race them.
+            # Only the mutation is locked. The emit is delivered synchronously on this thread and
+            # ends in `snapshot()`, which takes the same non-reentrant lock -- emitting inside the
+            # `with` deadlocked the GUI on every save.
             with self._room._orch_lock:
                 self._room.orch.members = team
-                self._room.orch.emit("team", {"action": "set", "models": team})
+            self._room.orch.emit("team", {"action": "set", "models": team})
         self.refresh_team()
 
     def refresh_team(self) -> None:
