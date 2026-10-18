@@ -136,3 +136,13 @@ def test_primary_button_variant_and_styling():
     m.close()
 
 
+def test_tab_bar_margins_and_alignment():
+    """Task 4.9: Tab bar margins and alignment to eliminate tick mark artifacts."""
+    sheet = T.stylesheet()
+    assert "QTabWidget::tab-bar" in sheet
+    assert "margin-right: 2px;" in sheet
+    assert "margin-top: 2px;" in sheet
+    assert "left: 8px;" in sheet
+
+
+

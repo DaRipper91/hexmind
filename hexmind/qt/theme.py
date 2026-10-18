@@ -164,14 +164,21 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         border-radius: {BORDER_RADIUS}px;
         background: {SUBSTRATE};
     }}
+    QTabWidget::tab-bar {{
+        left: 8px;
+    }}
     QTabBar::tab {{
         background: {PANEL};
         color: {INK_DIM};
         padding: 6px 12px;
+        margin-right: 2px;
         border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-bottom: none;
         border-top-left-radius: {BORDER_RADIUS}px;
         border-top-right-radius: {BORDER_RADIUS}px;
+    }}
+    QTabBar::tab:!selected {{
+        margin-top: 2px;
     }}
     QTabBar::tab:selected {{
         background: {SUBSTRATE};
