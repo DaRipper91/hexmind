@@ -98,3 +98,31 @@ def test_typography_tokens_and_roles():
     for needed in ('QLabel[role="title"]', 'QLabel[role="heading"]', 'QLabel[role="caption"]'):
         assert needed in selectors, f"{needed} selector must be present in stylesheet"
 
+
+def test_primary_button_variant_and_styling():
+    """Task 4.5: Primary button variant rule in stylesheet and set on primary actions."""
+    from hexmind.qt.chat import DirectLine
+    from hexmind.qt.models import CalibrationRack
+    from hexmind.qt.settings import SettingsPage
+    from hexmind.qt.widget import HexmindWidget
+
+    sheet = T.stylesheet()
+    assert 'QPushButton[variant="primary"]' in sheet
+
+    w = HexmindWidget()
+    assert w.sendButton.property("variant") == "primary"
+    w.close()
+
+    s = SettingsPage()
+    assert s.save_button.property("variant") == "primary"
+    s.close()
+
+    c = DirectLine()
+    assert c.ask_button.property("variant") == "primary"
+    c.close()
+
+    m = CalibrationRack()
+    assert m.probe_button.property("variant") == "primary"
+    m.close()
+
+

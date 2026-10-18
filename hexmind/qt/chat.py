@@ -158,6 +158,7 @@ class DirectLine(QWidget):
         self.prompt.setPlaceholderText("Ask one model directly…")
         self.prompt.returnPressed.connect(self.ask)
         self.ask_button = QPushButton("Ask", self)
+        self.ask_button.setProperty("variant", "primary")
         self.ask_button.clicked.connect(self.ask)
         input_row = QHBoxLayout()
         input_row.addWidget(self.prompt, 1)

@@ -87,6 +87,7 @@ class CalibrationRack(QWidget):
         self.probe_input.setAccessibleName("Model probe prompt")
         self.probe_input.setPlaceholderText("Ask this model a short test question…")
         self.probe_button = QPushButton("Run probe", self)
+        self.probe_button.setProperty("variant", "primary")
         self.probe_button.clicked.connect(self.run_probe)
         probe_row = QHBoxLayout()
         probe_row.addWidget(self.probe_input, 1)

@@ -259,6 +259,23 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         padding: 8px 16px;
         min-height: 32px;
     }}
+    QPushButton[variant="primary"] {{
+        background: {VIOLET};
+        color: {SUBSTRATE};
+        border: {BORDER_WIDTH}px solid {VIOLET};
+        font-weight: 600;
+    }}
+    QPushButton[variant="primary"]:hover {{
+        background: #af92f5;
+        border-color: #af92f5;
+        color: {SUBSTRATE};
+    }}
+    QPushButton[variant="primary"]:disabled {{
+        background: {GRID};
+        color: {INK_FAINT};
+        border: {BORDER_WIDTH}px solid {CONTROL_EDGE};
+        font-weight: 400;
+    }}
     /* Hover brightens the outline; violet is reserved for keyboard focus, so the two never look alike. */
     QPushButton:hover {{ border: {BORDER_WIDTH}px solid {INK_DIM}; color: {INK}; background: {PANEL_HOVER}; }}
     QPushButton:pressed {{ background: {GRID}; }}

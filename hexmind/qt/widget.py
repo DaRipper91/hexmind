@@ -483,6 +483,7 @@ class HexmindWidget(QWidget):
         self.input.setPlaceholderText("Ask the team anything…  (Enter to send, /help for commands)")
         self.input.returnPressed.connect(self.send)
         self.sendButton = QPushButton("Send")
+        self.sendButton.setProperty("variant", "primary")
         self.sendButton.clicked.connect(self.send)
         self.stopButton = QPushButton("Stop ■")
         self.stopButton.setObjectName("stopButton")

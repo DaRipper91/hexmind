@@ -134,6 +134,7 @@ class SettingsPage(QWidget):
         self.open_config_dir_button = QPushButton("Open config folder", self)
         self.open_config_dir_button.clicked.connect(self.request_open_config_directory)
         self.save_button = QPushButton("Save settings", self)
+        self.save_button.setProperty("variant", "primary")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save)
         self.close_button = QPushButton("Close Settings", self)
