@@ -280,7 +280,7 @@ class TimelinePanel(QWidget):
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         self.summary = QLabel()
-        self.summary.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+        self.summary.setProperty("role", "heading")
         head.addWidget(self.summary, 1)
         self.auditedOnly = QCheckBox("audited only")
         self.auditedOnly.setChecked(self._audited_only)
@@ -291,7 +291,7 @@ class TimelinePanel(QWidget):
 
         self.caption = QLabel(CAPTION)
         self.caption.setWordWrap(True)
-        self.caption.setStyleSheet(f"color: {theme.INK_FAINT}; font-size: 11px;")
+        self.caption.setProperty("role", "caption")
         lay.addWidget(self.caption)
 
         self.table = QTableWidget(0, len(COLUMNS))

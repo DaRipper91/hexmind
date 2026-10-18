@@ -274,10 +274,10 @@ def _chart(title: str, subtitle: str) -> tuple[QWidget, object]:
     lay.setContentsMargins(8, 8, 8, 4)
     lay.setSpacing(2)
     heading = QLabel(title)
-    heading.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+    heading.setProperty("role", "heading")
     note = QLabel(subtitle)
     note.setWordWrap(True)
-    note.setStyleSheet(f"color: {theme.INK_FAINT}; font-size: 11px;")
+    note.setProperty("role", "caption")
     lay.addWidget(heading)
     lay.addWidget(note)
     if not HAVE_PG:
@@ -286,7 +286,7 @@ def _chart(title: str, subtitle: str) -> tuple[QWidget, object]:
             "The ledger below is unaffected."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {theme.INK_FAINT}; font-style: italic;")
+        hint.setProperty("role", "caption")
         lay.addWidget(hint, 1)
         return box, None
     _config_pg()
@@ -320,7 +320,7 @@ class StatsPanel(QWidget):
         outer.setSpacing(6)
 
         self.summary = QLabel(NO_STATS)
-        self.summary.setStyleSheet(f"color: {theme.INK_DIM};")
+        self.summary.setProperty("role", "caption")
         outer.addWidget(self.summary)
 
         split = QSplitter(Qt.Orientation.Vertical)
@@ -345,7 +345,7 @@ class StatsPanel(QWidget):
         led_lay.setContentsMargins(8, 4, 8, 8)
         led_lay.setSpacing(2)
         led_title = QLabel("The ledger")
-        led_title.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+        led_title.setProperty("role", "heading")
         self.table = QTableWidget(0, 0)
         self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

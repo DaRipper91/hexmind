@@ -49,6 +49,7 @@ class SettingsPage(QWidget):
 
         title = QLabel("Settings", self)
         title.setAccessibleName("Settings heading")
+        title.setProperty("role", "title")
 
         # Lead selector - combo box populated from enabled models
         self.lead_combo = QComboBox(self)

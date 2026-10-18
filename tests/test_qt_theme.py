@@ -87,3 +87,14 @@ def test_every_url_in_stylesheet_points_to_existing_file():
         path = Path(raw.strip("\"'"))
         assert path.exists(), f"Asset {path} referenced in stylesheet must exist"
         assert path.is_file(), f"Asset {path} must be a file"
+
+
+def test_typography_tokens_and_roles():
+    """Task 4.4: role-based label rules are present, line-height is absent, no off-scale sizes."""
+    sheet = T.stylesheet()
+    assert "line-height" not in sheet, "line-height is not a valid QSS property"
+
+    selectors = " ".join(_blocks(sheet))
+    for needed in ('QLabel[role="title"]', 'QLabel[role="heading"]', 'QLabel[role="caption"]'):
+        assert needed in selectors, f"{needed} selector must be present in stylesheet"
+

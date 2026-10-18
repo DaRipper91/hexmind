@@ -129,7 +129,20 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         font-family: {FONT_FAMILY};
         font-size: {base}px;
         font-weight: {FONT_WEIGHT};
-        line-height: {LINE_HEIGHT};
+    }}
+    QLabel[role="title"] {{
+        font-size: {large}px;
+        font-weight: {FONT_WEIGHT_SEMIBOLD};
+        color: {INK};
+    }}
+    QLabel[role="heading"] {{
+        font-size: {base}px;
+        font-weight: {FONT_WEIGHT_SEMIBOLD};
+        color: {INK};
+    }}
+    QLabel[role="caption"] {{
+        font-size: {small}px;
+        color: {INK_DIM};
     }}
     QMainWindow::separator {{
         background: {PANEL_EDGE};
