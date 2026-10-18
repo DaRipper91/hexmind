@@ -313,6 +313,9 @@ class HexmindWindow(QMainWindow):
         widget's own `closeEvent` stops it, and Qt walks central widgets, so this only has to make
         sure the widget actually gets the event. The Direct Line and Calibration Rack threads are
         children of their pages for the same reason, so they are cancelled and joined first."""
+        if self.settings_page.is_dirty and not self.settings_page._confirm_discard("quit"):
+            event.ignore()
+            return
         self.direct_line.shutdown()
         self.calibration_rack.shutdown()
         self.room.close()

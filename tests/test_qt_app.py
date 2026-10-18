@@ -74,6 +74,8 @@ def room(qapp):
 def window(qapp, room):
     w = A.HexmindWindow(room=room)
     yield w
+    # A test that left Settings dirty would otherwise block teardown on a real "Discard?" dialog.
+    w.settings_page._confirm_discard = lambda action: True
     w.close()
     w.deleteLater()
 
@@ -139,6 +141,21 @@ def test_close_reaches_the_central_widget(qapp, room):
     room.closeEvent = lambda event: closed.append(event)
     A.HexmindWindow(room=room).close()
     assert len(closed) == 1
+
+
+def test_quitting_with_unsaved_settings_asks_first(qapp, room, monkeypatch):
+    window = A.HexmindWindow(room=room)
+    window.show()
+    window.settings_page.server_host_input.setText("0.0.0.0")
+    assert window.settings_page.is_dirty
+
+    monkeypatch.setattr(window.settings_page, "_confirm_discard", lambda action: False)
+    assert window.close() is False
+    assert window.isVisible()
+
+    monkeypatch.setattr(window.settings_page, "_confirm_discard", lambda action: True)
+    assert window.close() is True
+    window.deleteLater()
 
 
 # ---------- menus are wired, and wired to duck-typed calls ----------
