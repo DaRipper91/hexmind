@@ -913,3 +913,27 @@ def test_tasks_and_team_tables_show_state_hues(room):
     assert lead_state_item.foreground().color().name().lower() == theme.VIOLET.lower()
 
 
+def test_table_headers_are_left_aligned_and_not_scalloped(room):
+    """Task 4.6: Table headers are left-aligned and section border radii are removed."""
+    from PySide6.QtCore import Qt
+    from hexmind.qt import theme
+    from hexmind.qt.stats import StatsPanel
+    from hexmind.qt.timeline import TimelinePanel
+
+    widget = room()
+    assert widget.tasks.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+    assert widget.team.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    timeline = TimelinePanel()
+    assert timeline.table.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    stats = StatsPanel()
+    assert stats.table.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    sheet = theme.stylesheet()
+    header_section_rule = [part for part in sheet.split("QHeaderView::section") if "}" in part][0].split("}")[0]
+    assert "border-top-left-radius" not in header_section_rule
+    assert "border-top-right-radius" not in header_section_rule
+
+
+

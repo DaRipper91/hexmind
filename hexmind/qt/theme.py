@@ -397,8 +397,6 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         padding: 6px 8px;
         font-weight: {FONT_WEIGHT_MEDIUM};
         font-size: {small}px;
-        border-top-left-radius: {BORDER_RADIUS_SMALL}px;
-        border-top-right-radius: {BORDER_RADIUS_SMALL}px;
     }}
 
     /* --- scrollbars: present, never loud --- */

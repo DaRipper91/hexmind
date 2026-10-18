@@ -1082,6 +1082,7 @@ def _table(columns: tuple[str, ...], name: str, empty_text: str = "") -> QTableW
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.verticalHeader().hide()
+    table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
     table.horizontalHeader().setStretchLastSection(True)
     return table

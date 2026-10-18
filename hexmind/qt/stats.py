@@ -352,6 +352,7 @@ class StatsPanel(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         led_lay.addWidget(led_title)
         led_lay.addWidget(self.table, 1)
         split.addWidget(ledger)
