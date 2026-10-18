@@ -325,6 +325,33 @@ def test_room_survives_an_agentdeck_panel_error(room, monkeypatch):
     assert "Agentdeck" not in tabs and "Team" in tabs
 
 
+def test_tab_leaves_every_table(room):
+    """QTableWidget defaults to tabKeyNavigation=True: Tab cycled cells forever and the room's
+    focus chain dead-ended in the Team table."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QTableWidget
+
+    from hexmind.qt.agentdeck_panel import AgentdeckPanel
+    from hexmind.qt.model_selector import ModelSelectorDialog
+
+    widget = room()
+    widget.show()
+    widget.activateWindow()
+    widget.team.setFocus()
+    pump(50)
+    assert QApplication.focusWidget() is widget.team
+    QTest.keyClick(widget.team, Qt.Key.Key_Tab)
+    assert QApplication.focusWidget() is not widget.team
+
+    dialog, panel = ModelSelectorDialog(), AgentdeckPanel([])
+    tables = [*widget.findChildren(QTableWidget), dialog.table, panel.table]
+    assert len(tables) >= 5
+    assert [t for t in tables if t.tabKeyNavigation()] == []
+    dialog.deleteLater()
+    panel.deleteLater()
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

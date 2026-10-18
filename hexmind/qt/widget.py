@@ -950,6 +950,7 @@ def _domains(name: str) -> list[str]:
 
 def _table(columns: tuple[str, ...], name: str) -> QTableWidget:
     table = QTableWidget(0, len(columns))
+    table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
     table.setHorizontalHeaderLabels(list(columns))
     table.setAccessibleName(name)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

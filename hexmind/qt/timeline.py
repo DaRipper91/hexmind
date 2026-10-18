@@ -295,6 +295,7 @@ class TimelinePanel(QWidget):
         lay.addWidget(self.caption)
 
         self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

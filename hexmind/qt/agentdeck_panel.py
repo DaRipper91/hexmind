@@ -78,6 +78,7 @@ class AgentdeckPanel(QWidget):
 
         # ── Table view ─────────────────────────────────────────────────────
         self.table = QTableWidget(0, 7)
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setAlternatingRowColors(True)

@@ -347,6 +347,7 @@ class StatsPanel(QWidget):
         led_title = QLabel("The ledger")
         led_title.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
         self.table = QTableWidget(0, 0)
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)

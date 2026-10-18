@@ -70,6 +70,7 @@ class ModelSelectorDialog(QDialog):
 
         # Table
         self.table = QTableWidget(0, 4, self)
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setHorizontalHeaderLabels(["Enabled", "In Team", "Model", "Details"])
         self.table.setAccessibleName("Model selection")
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
