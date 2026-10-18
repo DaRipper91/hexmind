@@ -31,6 +31,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFrame,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -125,7 +126,7 @@ class CommandPalette(QDialog):
     def __init__(self, commands: Sequence[Command], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._commands = list(commands)
-        self.setObjectName("palette")
+        self.setObjectName("paletteDialog")
         self.setWindowTitle("Command palette")
         self.setModal(True)
         self.setWindowFlags(
@@ -133,29 +134,38 @@ class CommandPalette(QDialog):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.input = QLineEdit()
+        frame = QFrame(self)
+        frame.setObjectName("palette")
+
+        self.input = QLineEdit(frame)
         self.input.setObjectName("paletteInput")
         self.input.setAccessibleName("Command")
         self.input.setPlaceholderText("Type a command…")
         self.input.textChanged.connect(self._refresh)
         self.input.returnPressed.connect(self._accept_current)
 
-        self.list = QListWidget()
+        self.list = QListWidget(frame)
         self.list.setObjectName("paletteList")
         self.list.setAccessibleName("Matching commands")
         self.list.itemActivated.connect(self._accept_item)
         self.list.itemClicked.connect(self._accept_item)
 
-        self.hint = QLabel("")
+        self.hint = QLabel("", frame)
+        self.hint.setObjectName("paletteHint")
         self.hint.setAccessibleName("Command description")
         self.hint.setWordWrap(True)
+
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(0)
+        frame_layout.addWidget(self.input)
+        frame_layout.addWidget(self.list)
+        frame_layout.addWidget(self.hint)
 
         body = QVBoxLayout(self)
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
-        body.addWidget(self.input)
-        body.addWidget(self.list)
-        body.addWidget(self.hint)
+        body.addWidget(frame)
 
         self._shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
         self._shortcut.activated.connect(self.toggle)

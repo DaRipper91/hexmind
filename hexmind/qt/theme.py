@@ -406,6 +406,12 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     }}
     #paletteList::item {{ padding: 7px 10px; border: none; }}
     #paletteList::item:selected {{ background: {GRID}; color: {VIOLET}; }}
+    #paletteHint {{
+        color: {INK_DIM};
+        font-size: {small}px;
+        padding: 8px 14px;
+        border-top: {BORDER_WIDTH}px solid {PANEL_EDGE};
+    }}
 
     QSplitter::handle {{ background: {PANEL_EDGE}; }}
     QStatusBar {{ background: {PANEL}; color: {INK_DIM}; border-top: {BORDER_WIDTH}px solid {PANEL_EDGE}; }}
