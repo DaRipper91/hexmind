@@ -242,6 +242,9 @@ class SettingsPage(QWidget):
             "server_token": self.server_token_input.text(),
             "phone_buzz": self.phone_buzz_checkbox.isChecked(),
             "threshold": self.threshold_input.value(),
+            # Without this, toggling only a model outside the team never made the page dirty, so
+            # Save stayed disabled and the change could not be kept.
+            "disabled": tuple(sorted(name for name, on in self._enabled_models.items() if not on)),
         }
 
     def _apply_state(self, state: dict[str, object]) -> None:
@@ -268,6 +271,8 @@ class SettingsPage(QWidget):
             self.server_token_input.setText(str(state["server_token"]))
             self.phone_buzz_checkbox.setChecked(bool(state["phone_buzz"]))
             self.threshold_input.setValue(int(state["threshold"]))
+            disabled = set(state.get("disabled", ()))
+            self._enabled_models = {name: name not in disabled for name in self._enabled_models}
             self._update_team_label()
         finally:
             self._tracking_dirty = True

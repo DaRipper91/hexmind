@@ -243,3 +243,16 @@ def test_restore_defaults_writes_nothing_until_save(page, config_path):
 
     page.save()
     assert "[models]" in Path(config_path).read_text()
+
+
+def test_disabling_a_model_outside_the_team_is_dirty_and_revertible(page):
+    outsider = next(name for name in page._enabled_models if name not in page._team)
+    enabled = dict(page._enabled_models, **{outsider: False})
+
+    page._on_team_saved(enabled, list(page._team))
+    assert page.is_dirty
+    assert page.save_button.isEnabled()
+
+    page.revert()
+    assert page._enabled_models[outsider] is True
+    assert not page.is_dirty
