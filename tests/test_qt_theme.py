@@ -74,3 +74,16 @@ def test_every_text_size_derives_from_the_base():
     assert sizes == {18, 20, 22}
     assert T.base_text_px("16") == 16
     assert T.base_text_px("nonsense") == T.FONT_SIZE
+
+
+def test_every_url_in_stylesheet_points_to_existing_file():
+    """Task 3.6: Verify that every image: url(...) references an existing asset on disk."""
+    import re
+    from pathlib import Path
+
+    urls = re.findall(r"url\(([^)]+)\)", T.stylesheet())
+    assert urls, "stylesheet should reference icon URLs"
+    for raw in urls:
+        path = Path(raw.strip("\"'"))
+        assert path.exists(), f"Asset {path} referenced in stylesheet must exist"
+        assert path.is_file(), f"Asset {path} must be a file"

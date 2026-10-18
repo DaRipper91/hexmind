@@ -22,6 +22,10 @@ that panel's shape rather than the app's, but no panel may introduce a new colou
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+ICONS = (Path(__file__).parent / "icons").as_posix()
+
 # ---------- the signal palette ----------
 # Chosen once, obeyed absolutely. If a future state needs a hue, it is added *here* with a
 # meaning attached, not chosen at the call site.
@@ -195,8 +199,37 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         selection-background-color: {VIOLET};
         selection-color: {SUBSTRATE};
     }}
-    QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
+    QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
         border: {BORDER_WIDTH}px solid {VIOLET};
+        background: {PANEL_HOVER};
+    }}
+    QSpinBox::up-button, QSpinBox::down-button,
+    QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+        subcontrol-origin: border;
+        width: 22px;
+        border-left: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        background: {PANEL};
+    }}
+    QSpinBox::up-button, QDoubleSpinBox::up-button {{
+        subcontrol-position: top right;
+        border-top-right-radius: {BORDER_RADIUS}px;
+    }}
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+        subcontrol-position: bottom right;
+        border-bottom-right-radius: {BORDER_RADIUS}px;
+    }}
+    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+        image: url({ICONS}/chevron-up.svg);
+        width: 8px;
+        height: 8px;
+    }}
+    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+        image: url({ICONS}/chevron-down.svg);
+        width: 8px;
+        height: 8px;
+    }}
+    QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+    QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
         background: {PANEL_HOVER};
     }}
     QLineEdit:disabled, QPushButton:disabled, QComboBox:disabled {{
@@ -255,7 +288,12 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         padding: 8px 10px;
         min-height: 32px;
     }}
-    QComboBox::drop-down {{ border: none; width: 24px; }}
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: center right;
+        border-left: {BORDER_WIDTH}px solid {PANEL_EDGE};
+        width: 24px;
+    }}
     QComboBox QAbstractItemView {{
         background: {PANEL};
         color: {INK};
@@ -265,11 +303,9 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         border-radius: 0 0 {BORDER_RADIUS}px {BORDER_RADIUS}px;
     }}
     QComboBox::down-arrow {{
-        image: none;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-top: 5px solid {INK_DIM};
-        margin-right: 8px;
+        image: url({ICONS}/chevron-down.svg);
+        width: 10px;
+        height: 10px;
     }}
     QComboBox:focus {{
         border: {BORDER_WIDTH}px solid {VIOLET};
