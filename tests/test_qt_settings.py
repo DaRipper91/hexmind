@@ -267,3 +267,13 @@ def test_text_size_round_trips_and_rejects_junk(page, config_path):
 
     config.save_section("room", {"text_size": "huge"}, config_path)
     assert config.get_defaults(config_path).text_size == config.RoomDefaults().text_size
+
+
+def test_settings_form_layout_bounds_at_1400(page, qapp):
+    """Task 3.7: Settings form fields do not stretch across full width at 1400x900."""
+    page.resize(1400, 900)
+    page.show()
+    qapp.processEvents()
+
+    assert page.server_host_input.width() <= 480
+    assert page.health_button.width() < 400

@@ -97,7 +97,17 @@ class SettingsPage(QWidget):
         self.server_token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.server_token_input.setPlaceholderText("Optional unless serving off localhost")
 
+        self.lead_combo.setMinimumWidth(280)
+        self.theme_selector.setMinimumWidth(280)
+        self.text_size_selector.setMinimumWidth(280)
+        self.server_host_input.setMinimumWidth(280)
+        self.server_token_input.setMinimumWidth(280)
+        self.threshold_input.setMaximumWidth(160)
+        self.server_port_input.setMaximumWidth(160)
+
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow("Default lead", self.lead_combo)
         form.addRow("Default roster", self._team_row())
         form.addRow("", self.audit_checkbox)
@@ -139,25 +149,35 @@ class SettingsPage(QWidget):
         buttons.addWidget(self.save_button)
         buttons.addWidget(self.close_button)
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addWidget(
-            QLabel(
-                "These preferences apply when a new Hexmind GUI session starts. "
-                "They do not replace the active Room's team or audit state.",
-                self,
-            )
-        )
-        layout.addLayout(form)
-        layout.addWidget(self.status)
-        layout.addLayout(buttons)
         self.health_status = QLabel("", self)
         self.health_status.setAccessibleName("Agent health")
         self.health_button = QPushButton("Check agent health", self)
         self.health_button.setAccessibleName("Check agent health")
         self.health_button.clicked.connect(self.check_health)
-        layout.addWidget(self.health_button)
-        layout.addWidget(self.health_status)
+        health_row = QHBoxLayout()
+        health_row.addWidget(self.health_button)
+        health_row.addStretch()
+
+        page = QWidget(self)
+        page.setMaximumWidth(720)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.addWidget(title)
+        page_layout.addWidget(
+            QLabel(
+                "These preferences apply when a new Hexmind GUI session starts. "
+                "They do not replace the active Room's team or audit state.",
+                page,
+            )
+        )
+        page_layout.addLayout(form)
+        page_layout.addWidget(self.status)
+        page_layout.addLayout(buttons)
+        page_layout.addLayout(health_row)
+        page_layout.addWidget(self.health_status)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(page)
         layout.addStretch()
         self._connect_dirty_inputs()
         self.reload()
