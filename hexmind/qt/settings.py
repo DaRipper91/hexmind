@@ -141,15 +141,17 @@ class SettingsPage(QWidget):
         self.close_button.setAccessibleName("Close settings workspace")
         self.close_button.setToolTip("Return to the room (Escape)")
         self.close_button.clicked.connect(self.closed.emit)
+        # Three short rows by purpose. One row of seven needed ~1100px and the page is capped at
+        # 720, so every label was clipped. Save leads, being the action the page exists for.
         buttons = QHBoxLayout()
-        buttons.addWidget(self.reload_button)
-        buttons.addWidget(self.defaults_button)
-        buttons.addWidget(self.revert_button)
-        buttons.addWidget(self.open_config_button)
-        buttons.addWidget(self.open_config_dir_button)
-        buttons.addStretch()
         buttons.addWidget(self.save_button)
+        buttons.addWidget(self.revert_button)
         buttons.addWidget(self.close_button)
+        buttons.addStretch()
+        reset_row = QHBoxLayout()
+        reset_row.addWidget(self.reload_button)
+        reset_row.addWidget(self.defaults_button)
+        reset_row.addStretch()
 
         self.health_status = QLabel("", self)
         self.health_status.setAccessibleName("Agent health")
@@ -157,6 +159,8 @@ class SettingsPage(QWidget):
         self.health_button.setAccessibleName("Check agent health")
         self.health_button.clicked.connect(self.check_health)
         health_row = QHBoxLayout()
+        health_row.addWidget(self.open_config_button)
+        health_row.addWidget(self.open_config_dir_button)
         health_row.addWidget(self.health_button)
         health_row.addStretch()
 
@@ -165,16 +169,17 @@ class SettingsPage(QWidget):
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.addWidget(title)
-        page_layout.addWidget(
-            QLabel(
-                "These preferences apply when a new Hexmind GUI session starts. "
-                "They do not replace the active Room's team or audit state.",
-                page,
-            )
+        intro = QLabel(
+            "These preferences apply when a new Hexmind GUI session starts. "
+            "They do not replace the active Room's team or audit state.",
+            page,
         )
+        intro.setWordWrap(True)
+        page_layout.addWidget(intro)
         page_layout.addLayout(form)
         page_layout.addWidget(self.status)
         page_layout.addLayout(buttons)
+        page_layout.addLayout(reset_row)
         page_layout.addLayout(health_row)
         page_layout.addWidget(self.health_status)
 

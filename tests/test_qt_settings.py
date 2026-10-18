@@ -277,3 +277,22 @@ def test_settings_form_layout_bounds_at_1400(page, qapp):
 
     assert page.server_host_input.width() <= 480
     assert page.health_button.width() < 400
+
+
+@pytest.mark.parametrize("base", [14, 20])
+def test_no_settings_button_is_squeezed_below_its_label(qapp, page, base):
+    """Capping the page at 720px squeezed one row of seven buttons until every label was clipped."""
+    from PySide6.QtWidgets import QPushButton
+
+    from hexmind.qt import theme
+
+    qapp.setStyleSheet(theme.stylesheet(base))
+    try:
+        page.resize(1400, 900)
+        page.show()
+        qapp.processEvents()
+        squeezed = [b.text() for b in page.findChildren(QPushButton)
+                    if b.isVisible() and b.width() < b.sizeHint().width()]
+        assert squeezed == []
+    finally:
+        qapp.setStyleSheet("")
