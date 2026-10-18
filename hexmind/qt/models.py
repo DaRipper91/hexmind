@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -20,30 +20,32 @@ from PySide6.QtWidgets import (
 
 from ..backends import DirectBackend
 from ..core import REGISTRY
+from .chat import RunnerThread
 
-ProbeRunner = Callable[[str, str], str]
+ProbeRunner = Callable[[str, str], "str | Awaitable[str]"]
 
 
-class ProbeThread(QThread):
+class ProbeThread(RunnerThread):
     succeeded = Signal(str)
     failed = Signal(str)
 
     def __init__(self, runner: ProbeRunner, model: str, prompt: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._runner = runner
+        super().__init__(runner, parent)
         self._model = model
         self._prompt = prompt
 
     def run(self) -> None:
         try:
-            self.succeeded.emit(self._runner(self._model, self._prompt))
+            self.succeeded.emit(self._call(self._model, self._prompt))
+        except asyncio.CancelledError:
+            pass  # the window is closing
         except Exception as exc:  # noqa: BLE001 - probe errors belong in the visible result panel
             self.failed.emit(str(exc))
 
 
-def _default_probe(model: str, prompt: str) -> str:
+async def _default_probe(model: str, prompt: str) -> str:
     backend = DirectBackend(os.getcwd(), timeout=60)
-    return asyncio.run(backend.run(model, prompt))
+    return await backend.run(model, prompt)
 
 
 class CalibrationRack(QWidget):
@@ -149,6 +151,10 @@ class CalibrationRack(QWidget):
 
     def _probe_failed(self, message: str) -> None:
         self.status.setText(f"Probe failed: {message}")
+
+    def shutdown(self) -> None:
+        if self._probe_thread is not None:
+            self._probe_thread.shutdown()
 
     def _probe_finished(self) -> None:
         if self._probe_thread is not None:

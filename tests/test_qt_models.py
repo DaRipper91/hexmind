@@ -71,3 +71,25 @@ def test_calibration_rack_rejects_empty_probe(qapp):
     assert "Select a model" in rack.status.text()
     rack.close()
     rack.deleteLater()
+
+
+def test_shutdown_cancels_a_running_async_probe(qapp):
+    import asyncio
+
+    async def runner(model, prompt):
+        await asyncio.sleep(30)
+        return "never"
+
+    rack = CalibrationRack(probe_runner=runner)
+    rack.probe_input.setText("ping")
+    rack.run_probe()
+    thread = rack._probe_thread
+    wait = QEventLoop()
+    QTimer.singleShot(300, wait.quit)
+    wait.exec()
+    assert thread.isRunning()
+
+    rack.shutdown()
+    assert not thread.isRunning()
+    rack.close()
+    rack.deleteLater()

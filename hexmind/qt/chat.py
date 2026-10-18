@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import logging
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
@@ -20,10 +22,55 @@ from PySide6.QtWidgets import (
 from ..backends import DirectBackend
 from ..core import REGISTRY
 
-ChatRunner = Callable[[str, str], str]
+logger = logging.getLogger(__name__)
+
+# A runner may be sync (tests) or async (the real backend). Only an async one can be cancelled.
+ChatRunner = Callable[[str, str], "str | Awaitable[str]"]
 
 
-class ChatThread(QThread):
+class RunnerThread(QThread):
+    """Runs a model call on its own event loop so the window can cancel it on close.
+
+    A QThread destroyed while running aborts the process, and the default runners block for minutes,
+    so a plain wait() would hang the quit instead. Cancelling the task takes DirectBackend's
+    CancelledError path, which also kills the agent CLI's process group."""
+
+    def __init__(self, runner: Callable, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._runner = runner
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._task: asyncio.Task | None = None
+        self._stopping = False
+
+    def _call(self, model: str, prompt: str) -> str:
+        if self._stopping:
+            raise asyncio.CancelledError
+        if not inspect.iscoroutinefunction(self._runner):
+            return self._runner(model, prompt)
+        loop = self._loop = asyncio.new_event_loop()
+        try:
+            self._task = loop.create_task(self._runner(model, prompt))
+            return loop.run_until_complete(self._task)
+        finally:
+            self._task = self._loop = None
+            loop.close()
+
+    def shutdown(self, timeout_ms: int = 5000) -> bool:
+        """Cancel the call in flight and wait for the thread. True if it has finished."""
+        self._stopping = True
+        loop, task = self._loop, self._task
+        if loop is not None and task is not None:
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:  # the call finished and closed its loop meanwhile
+                pass
+        if self.wait(timeout_ms):
+            return True
+        logger.warning("%s did not stop within %d ms", type(self).__name__, timeout_ms)
+        return False
+
+
+class ChatThread(RunnerThread):
     succeeded = Signal(str, str)
     failed = Signal(str)
 
@@ -35,24 +82,25 @@ class ChatThread(QThread):
         prompt: str,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(parent)
-        self._runner = runner
+        super().__init__(runner, parent)
         self._primary = primary
         self._comparison = comparison
         self._prompt = prompt
 
     def run(self) -> None:
         try:
-            primary = self._runner(self._primary, self._prompt)
-            comparison = self._runner(self._comparison, self._prompt) if self._comparison else ""
+            primary = self._call(self._primary, self._prompt)
+            comparison = self._call(self._comparison, self._prompt) if self._comparison else ""
             self.succeeded.emit(primary, comparison)
+        except asyncio.CancelledError:
+            pass  # the window is closing; nobody is left to show the answer to
         except Exception as exc:  # noqa: BLE001 - direct model failures belong in the transcript
             self.failed.emit(str(exc))
 
 
-def _default_chat(model: str, prompt: str) -> str:
+async def _default_chat(model: str, prompt: str) -> str:
     backend = DirectBackend(os.getcwd(), timeout=1800)
-    return asyncio.run(backend.run(model, prompt))
+    return await backend.run(model, prompt)
 
 
 class DirectLine(QWidget):
@@ -161,6 +209,10 @@ class DirectLine(QWidget):
     def _show_error(self, message: str) -> None:
         self.status.setText(f"Direct request failed: {message}")
 
+    def shutdown(self) -> None:
+        if self._chat_thread is not None:
+            self._chat_thread.shutdown()
+
     def _chat_finished(self) -> None:
         if self._chat_thread is not None:
             self._chat_thread.deleteLater()
@@ -168,4 +220,4 @@ class DirectLine(QWidget):
         self.ask_button.setEnabled(True)
 
 
-__all__ = ["ChatThread", "DirectLine"]
+__all__ = ["ChatThread", "DirectLine", "RunnerThread"]

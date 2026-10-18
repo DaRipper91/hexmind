@@ -68,3 +68,29 @@ def test_direct_line_rejects_empty_prompt(qapp):
     assert "Enter a prompt" in line.status.text()
     line.close()
     line.deleteLater()
+
+
+def test_shutdown_cancels_a_running_async_request(qapp):
+    """Closing the window mid-request used to destroy a running QThread, which aborts the process."""
+    import asyncio
+
+    started = []
+
+    async def runner(model, prompt):
+        started.append(model)
+        await asyncio.sleep(30)
+        return "never"
+
+    line = DirectLine(chat_runner=runner)
+    line.prompt.setText("hello")
+    line.ask()
+    thread = line._chat_thread
+    deadline = QEventLoop()
+    QTimer.singleShot(300, deadline.quit)
+    deadline.exec()
+    assert started
+
+    line.shutdown()
+    assert not thread.isRunning()
+    line.close()
+    line.deleteLater()

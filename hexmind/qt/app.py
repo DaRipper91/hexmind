@@ -311,7 +311,10 @@ class HexmindWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # Qt's spelling, not ours
         """The room is a QThread, and a QThread destroyed while running aborts the process. The
         widget's own `closeEvent` stops it, and Qt walks central widgets, so this only has to make
-        sure the widget actually gets the event."""
+        sure the widget actually gets the event. The Direct Line and Calibration Rack threads are
+        children of their pages for the same reason, so they are cancelled and joined first."""
+        self.direct_line.shutdown()
+        self.calibration_rack.shutdown()
         self.room.close()
         try:
             from .. import config
