@@ -620,14 +620,31 @@ def test_palette_commands_refresh_with_the_live_roster(room):
     assert {command.name for command in calls[0]} >= {"lead: claude", "lead: agy"}
 
 
-def test_task_detail_drawer_can_be_collapsed(room):
+def test_task_detail_starts_collapsed_and_toggles(room):
+    """Two equal empty panes used to fill the left column on the first frame."""
     widget = room()
-
-    widget.detail_toggle.click()
     assert widget.detail.isHidden() is True
 
     widget.detail_toggle.click()
     assert widget.detail.isHidden() is False
+
+    widget.detail_toggle.click()
+    assert widget.detail.isHidden() is True
+
+
+def test_layout_of_the_left_column(room):
+    widget = room()
+    widget.resize(1400, 900)
+    widget.show()
+    pump(50)
+    assert widget.detail_toggle.width() < 200
+
+    widget._on_message("claude", "hi")
+    assert widget.detail.toPlainText() == "", "messages no longer mirror into Task detail"
+
+    widget.detail_toggle.setChecked(True)
+    pump(50)
+    assert widget.transcript.height() > widget.detail.height()
 
 
 def test_the_widget_hands_the_audit_ledger_to_the_orchestrator(room):

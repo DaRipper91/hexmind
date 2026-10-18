@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QToolButton,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -446,6 +447,8 @@ class HexmindWidget(QWidget):
         self.transcript.setReadOnly(True)
         self.transcript.setAccessibleName("Conversation")
         self.transcript.setMaximumBlockCount(2000)  # a long session must not grow without bound
+        self.transcript.setPlaceholderText(
+            "Ask the team anything. The lead plans, members run tasks, verdicts land here.")
         from .live import LivePane
 
         self.live_tap = LivePane()
@@ -488,11 +491,16 @@ class HexmindWidget(QWidget):
         self.detail.setAccessibleName("Task detail")
         self.detail.setToolTip("Selected task instructions + output, rendered as markdown.")
         self.detail.setOpenExternalLinks(False)
-        self.detail_toggle = QPushButton("Task detail", self)
-        self.detail_toggle.setAccessibleName("Toggle task detail")
+        self.detail.setPlaceholderText("Select a task to read its instructions and output.")
+        # A small disclosure control, not a full-width checked button (it was the loudest thing on
+        # screen). Collapsed until there is something to show; choosing a task opens it.
+        self.detail_toggle = QToolButton(self)
+        self.detail_toggle.setText("Task detail")
+        self.detail_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.detail_toggle.setAutoRaise(True)
         self.detail_toggle.setCheckable(True)
-        self.detail_toggle.setChecked(True)
-        self.detail_toggle.toggled.connect(self.detail.setVisible)
+        self.detail_toggle.toggled.connect(self._show_detail)
+        self._show_detail(False)
         # Advanced: transcript search (plain-text find, no new deps).
         self.searchBox = QLineEdit()
         self.searchBox.setAccessibleName("Search conversation")
@@ -510,6 +518,7 @@ class HexmindWidget(QWidget):
         search_row.addWidget(self.searchBox, 1)
         search_row.addWidget(self.search_previous)
         search_row.addWidget(self.search_next)
+        search_row.addWidget(self.detail_toggle)
 
         # Advanced: slash-command completer, same vocabulary as relay HELP + /team family.
         self._commands = ["/relay", "/chains", "/audit", "/ranks", "/drafts", "/approve",
@@ -569,10 +578,16 @@ class HexmindWidget(QWidget):
         left = QWidget()
         leftLayout = QVBoxLayout(left)
         leftLayout.setContentsMargins(0, 0, 0, 0)
-        leftLayout.addWidget(self.transcript, 1)
+        # Transcript over detail in a splitter: the conversation owns the column, and the detail pane
+        # takes a share only while it is open, instead of two equal empty boxes on the first frame.
+        self._left_split = QSplitter(Qt.Orientation.Vertical)
+        self._left_split.addWidget(self.transcript)
+        self._left_split.addWidget(self.detail)
+        self._left_split.setStretchFactor(0, 2)
+        self._left_split.setStretchFactor(1, 1)
+        self._left_split.setChildrenCollapsible(False)
+        leftLayout.addWidget(self._left_split, 1)
         leftLayout.addLayout(search_row)
-        leftLayout.addWidget(self.detail_toggle)
-        leftLayout.addWidget(self.detail, 1)
         leftLayout.addLayout(row)
         split.addWidget(left)
         split.addWidget(right)
@@ -720,11 +735,6 @@ class HexmindWidget(QWidget):
         self.transcript.appendPlainText(f"{label}: {text}")
         self.transcript.verticalScrollBar().setValue(self.transcript.verticalScrollBar().maximum())
         self.live_tap.append_message(label, text)
-        # Advanced: last message doubles as detail preview (markdown-rendered).
-        try:
-            self.detail.setMarkdown(f"**{label}**\n\n{text}")
-        except Exception:
-            self.detail.setPlainText(f"{label}: {text}")
 
     def _refresh_graph(self) -> None:
         if getattr(self, "graph", None) is None:
@@ -766,7 +776,14 @@ class HexmindWidget(QWidget):
         if not found.isNull():
             self.transcript.setTextCursor(found)
 
+    def _show_detail(self, shown: bool) -> None:
+        self.detail.setVisible(shown)
+        self.detail_toggle.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+        self.detail_toggle.setAccessibleName(f"Task detail ({'shown' if shown else 'hidden'})")
+
     def _on_task_selected(self, item: QTableWidgetItem) -> None:
+        if not self.detail_toggle.isChecked():
+            self.detail_toggle.setChecked(True)
         row = item.row()
         first = self.tasks.item(row, 0)
         if first is None:
