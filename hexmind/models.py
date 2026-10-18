@@ -249,7 +249,7 @@ class Registry:
 
     # ---------- loading ----------
     @classmethod
-    def load(cls, paths: list[Path] | None = None) -> "Registry":
+    def load(cls, paths: list[Path] | None = None) -> Registry:
         """The first path is the base registry and must exist; later paths are optional overlays.
 
         Bundled first, then the user's overrides, so a user table wins per model. A missing *base*

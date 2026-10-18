@@ -8,12 +8,23 @@ hexmind visual grammar (dark substrate, signal hues, measured restraint).
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QModelIndex, QSortFilterProxyModel, QEvent, QAbstractTableModel
-from PySide6.QtGui import QColor, QFont, QCursor, QAction
+from PySide6.QtCore import (
+    QEvent,
+    Qt,
+)
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLineEdit, QPushButton, QLabel, QAbstractItemView, QAbstractScrollArea,
-    QFrame, QSpacerItem, QSizePolicy, QSizeGrip, QMenu
+    QAbstractItemView,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -39,11 +50,21 @@ class AgentdeckPanel(QWidget):
 
     # ── Colours (hexmind visual grammar) ────────────────────────────────
 
-    from hexmind.qt.theme import (  # noqa: F811 — injected by host at runtime
-        SUBSTRATE, PANEL, PANEL_EDGE, GRID,
-        INK, INK_DIM, INK_FAINT,
-        CYAN, VIOLET, GREEN, AMBER, RED, SLATE,
+    from hexmind.qt.theme import (
+        AMBER,
+        CYAN,
+        GREEN,
+        GRID,
+        INK,
+        INK_DIM,
+        INK_FAINT,
+        PANEL,
+        PANEL_EDGE,
+        RED,
+        SLATE,
         STATE_HUE,
+        SUBSTRATE,
+        VIOLET,
     )
 
     # ── UI Construction ──────────────────────────────────────────────────
@@ -302,7 +323,6 @@ class AgentdeckPanel(QWidget):
             if index.isValid():
                 row = index.row()
                 # Could highlight row here
-                pass
         return super().eventFilter(obj, event)
 
     # ── Helper Methods ───────────────────────────────────────────────────

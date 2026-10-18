@@ -2,7 +2,7 @@
 import asyncio
 import json
 
-from hexmind.core import Orchestrator, clean_text, PLAN_SCHEMA
+from hexmind.core import PLAN_SCHEMA, Orchestrator, clean_text
 
 PLAN = json.dumps({"reply": "ok", "tasks": [{"id": "t1", "agent": "codex", "title": "build",
                                                "instructions": "do", "depends_on": []}]})

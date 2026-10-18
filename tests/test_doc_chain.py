@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-import hexmind.relay as relay
+from hexmind import relay
 from hexmind.relay import BrokenChain, list_chains, load_chain
 
 REPO = Path(relay.__file__).parent.parent          # hexmind/ -> repo root

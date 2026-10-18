@@ -20,8 +20,12 @@ from PySide6.QtWidgets import (
 
 from .. import config
 from ..core import REGISTRY
-from .model_selector import ModelSelectorDialog, load_enabled_from_config, save_enabled_to_config
 from .health import HealthScanner
+from .model_selector import (
+    ModelSelectorDialog,
+    load_enabled_from_config,
+    save_enabled_to_config,
+)
 
 
 class SettingsPage(QWidget):

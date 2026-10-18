@@ -127,7 +127,7 @@ def test_narrow_table_is_compact_and_rebuilds_on_resize():
 
 
 def test_task_sheet_copies_output(monkeypatch):
-    import hexmind.tui as tui
+    from hexmind import tui
     monkeypatch.setattr(tui.shutil, "which", lambda _: None)
     plan = json.dumps({"reply": "on it", "tasks": [{"id": "a", "agent": "claude", "title": "alpha"}]})
 

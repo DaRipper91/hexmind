@@ -1,6 +1,6 @@
 import asyncio
 
-import hexmind.config as config
+from hexmind import config
 from hexmind.core import Orchestrator
 
 

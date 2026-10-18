@@ -14,7 +14,8 @@ import logging
 import os
 import re
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .core import clip
 
@@ -79,7 +80,7 @@ class Stats:
         self.data: dict[str, dict[str, dict[str, int]]] = {}
         if os.path.exists(path):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     self.data = json.load(f)
             except Exception:
                 # Corrupt stats file: back it up and start fresh rather than wiping

@@ -5,8 +5,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPen
@@ -247,9 +247,7 @@ class TaskGraphView(QGraphicsView):
                     continue
                 x0, y0 = pos.get(dep, (40.0, 30.0))
                 reason = ""
-                if dst_id in skipped_by and skipped_by[dst_id] == dep:
-                    reason = f"{dep} failed → {dst_id} skipped"
-                elif _status_of(by_id.get(dep)) == "failed" and _status_of(t) == "skipped":
+                if dst_id in skipped_by and skipped_by[dst_id] == dep or _status_of(by_id.get(dep)) == "failed" and _status_of(t) == "skipped":
                     reason = f"{dep} failed → {dst_id} skipped"
                 edge = Edge(src, dst, reason)
                 edge.setLine(x0 + R, y0, x1 - R, y1)

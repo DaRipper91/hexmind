@@ -1,17 +1,18 @@
 import asyncio
-import pytest
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
+from hexmind.auditor import (
+    parse_verdict,
+)
 from hexmind.jules import (
-    parse_github_repo,
     get_github_repo,
     get_starting_branch,
     parse_activity,
+    parse_github_repo,
     run,
-)
-from hexmind.auditor import (
-    parse_verdict,
 )
 
 

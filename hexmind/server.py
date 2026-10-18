@@ -11,18 +11,19 @@ import logging
 import os
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from .auditor import DOMAINS, Stats
 from .backends import DirectBackend, HcomBackend, available
-from .core import ROSTER, OPT_IN, Orchestrator, Task
-from .auditor import Stats, DOMAINS
 from .config import save_nicknames
+from .core import OPT_IN, ROSTER, Orchestrator, Task
 from .relay import list_chains, load_chain
 
 logger = logging.getLogger(__name__)
@@ -30,13 +31,13 @@ logger = logging.getLogger(__name__)
 
 class PromptRequest(BaseModel):
     text: str
-    lead: Optional[str] = None
-    audit: Optional[bool] = None
-    approve_plans: Optional[bool] = None
+    lead: str | None = None
+    audit: bool | None = None
+    approve_plans: bool | None = None
 
 
 class NicknamesRequest(BaseModel):
-    nicknames: Dict[str, str]
+    nicknames: dict[str, str]
 
 
 class ChainRunRequest(BaseModel):
@@ -48,10 +49,10 @@ class ChainRunRequest(BaseModel):
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, subprotocol: Optional[str] = None):
+    async def connect(self, websocket: WebSocket, subprotocol: str | None = None):
         await websocket.accept(subprotocol=subprotocol)
         async with self._lock:
             self.active_connections.append(websocket)
@@ -114,7 +115,7 @@ def bearer_token(header: str) -> str:
     return value.strip()
 
 
-def extract_ws_token(websocket: WebSocket) -> Tuple[str, Optional[str]]:
+def extract_ws_token(websocket: WebSocket) -> tuple[str, str | None]:
     """Pull the token from the subprotocol, query string, or Authorization header.
 
     Returns (token, subprotocol_to_echo); the second element is set only when
@@ -138,7 +139,7 @@ def extract_ws_token(websocket: WebSocket) -> Tuple[str, Optional[str]]:
     return "", None
 
 
-def allowed_origins(host: str, port: int) -> List[str]:
+def allowed_origins(host: str, port: int) -> list[str]:
     """Origins a browser may connect from, derived from the bound host/port.
 
     Localhost aliases are always permitted; a concrete bind host (e.g. a LAN
@@ -147,7 +148,7 @@ def allowed_origins(host: str, port: int) -> List[str]:
     names = ["127.0.0.1", "localhost"]
     if host and host not in ("0.0.0.0", "::"):
         names.append(host)
-    origins: List[str] = []
+    origins: list[str] = []
     for name in dict.fromkeys(names):
         origins.append(f"http://{name}:{port}")
         origins.append(f"ws://{name}:{port}")
@@ -162,8 +163,8 @@ def ws_auth_disabled() -> bool:
 def authorize_ws(
     websocket: WebSocket,
     expected_token: str,
-    allowed: List[str],
-) -> Tuple[str, Optional[str], Optional[Tuple[int, str]]]:
+    allowed: list[str],
+) -> tuple[str, str | None, tuple[int, str] | None]:
     """Inspect a handshake before it is accepted.
 
     Returns (token, subprotocol, rejection); rejection is None when the
@@ -196,11 +197,11 @@ class HexmindServer:
         cwd: str,
         backend_name: str = "direct",
         lead: str = "nemotron-ultra",
-        without: Optional[List[str]] = None,
-        with_: Optional[List[str]] = None,
+        without: list[str] | None = None,
+        with_: list[str] | None = None,
         audit: bool = False,
         approve_plans: bool = False,
-        stats_path: Optional[str] = None,
+        stats_path: str | None = None,
         timeout: int = 1800,
     ):
         self.cwd = os.path.abspath(cwd)
@@ -225,11 +226,11 @@ class HexmindServer:
         self.stats = Stats(stats_file)
         
         self.manager = ConnectionManager()
-        self.messages: List[Dict[str, Any]] = []
-        self.active_tasks: List[Dict[str, Any]] = []
-        self.current_plan: List[Dict[str, Any]] = []
+        self.messages: list[dict[str, Any]] = []
+        self.active_tasks: list[dict[str, Any]] = []
+        self.current_plan: list[dict[str, Any]] = []
         self.is_busy = False
-        self.current_run_task: Optional[asyncio.Task] = None
+        self.current_run_task: asyncio.Task | None = None
 
         self.orch = Orchestrator(
             backend=self.backend,
@@ -258,7 +259,7 @@ class HexmindServer:
 
     async def _emit_async(self, kind: str, data: dict) -> None:
         timestamp = time.time()
-        payload: Dict[str, Any] = {"kind": kind, "timestamp": timestamp}
+        payload: dict[str, Any] = {"kind": kind, "timestamp": timestamp}
 
         if kind == "status":
             payload.update(data)
@@ -321,7 +322,7 @@ class HexmindServer:
             "active_tasks": self.active_tasks,
         }
 
-    async def handle_prompt(self, text: str, audit: Optional[bool] = None, approve_plans: Optional[bool] = None) -> str:
+    async def handle_prompt(self, text: str, audit: bool | None = None, approve_plans: bool | None = None) -> str:
         if audit is not None:
             self.orch.audit = audit
         if approve_plans is not None:
@@ -356,7 +357,7 @@ class HexmindServer:
             self.is_busy = False
             await self.manager.broadcast({"kind": "busy_state", "is_busy": False})
 
-    async def approve_pending(self) -> Optional[str]:
+    async def approve_pending(self) -> str | None:
         if not self.orch.pending:
             raise HTTPException(status_code=400, detail="No pending plan to approve")
         req, tasks = self.orch.pending
@@ -572,8 +573,8 @@ def run_server(
     port: int = 8765,
     backend: str = "direct",
     lead: str = "nemotron-ultra",
-    without: Optional[List[str]] = None,
-    with_: Optional[List[str]] = None,
+    without: list[str] | None = None,
+    with_: list[str] | None = None,
     audit: bool = False,
     approve_plans: bool = False,
     timeout: int = 1800,

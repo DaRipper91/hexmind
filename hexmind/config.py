@@ -69,11 +69,11 @@ claude = "Rex"
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import os
-from pathlib import Path
 import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 PATH: str | Path = os.path.expanduser("~/.config/hexmind/config.toml")

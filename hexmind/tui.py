@@ -17,7 +17,15 @@ from textual.visual import VisualType
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 
-from .core import BUSY_STATUSES, REGISTRY, TEXT_ONLY, Orchestrator, Task, TeamBusy, TeamError
+from .core import (
+    BUSY_STATUSES,
+    REGISTRY,
+    TEXT_ONLY,
+    Orchestrator,
+    Task,
+    TeamBusy,
+    TeamError,
+)
 
 STATUS_STYLE = {"pending": "dim", "running": "yellow", "done": "green", "failed": "red", "skipped": "dim strike",
                 "auditing": "magenta", "revising": "orange1"}
@@ -108,7 +116,7 @@ class TaskScreen(ModalScreen):
                                                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         try:
             await asyncio.wait_for(proc.communicate(self.output.encode()), 5)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         finally:  # also runs if the sheet is closed and the worker cancelled
             if proc.returncode is None:

@@ -222,8 +222,8 @@ def test_escape_closes_without_choosing_anything(palette):
     seen: list[str] = []
     palette.chosen.connect(seen.append)
     palette.open_palette()
-    from PySide6.QtGui import QKeyEvent
     from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
 
     palette.eventFilter(palette, QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
     assert seen == []

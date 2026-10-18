@@ -30,8 +30,9 @@ Every hue is a `theme` constant. There is no colour literal in this file.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -388,9 +389,9 @@ __all__ = [
     "NO_TASKS",
     "NO_VERDICTS",
     "PASS",
+    "UNKNOWN",
     "Row",
     "TimelinePanel",
-    "UNKNOWN",
     "event_key",
     "history_detail",
     "summary_line",

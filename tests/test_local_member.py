@@ -5,8 +5,8 @@ from unittest import mock
 
 import pytest
 
-import hexmind.backends as backends
-from hexmind.core import Orchestrator, TEXT_ONLY
+from hexmind import backends
+from hexmind.core import TEXT_ONLY, Orchestrator
 
 
 @pytest.fixture(autouse=True)

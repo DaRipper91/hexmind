@@ -11,7 +11,6 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from hexmind import config
-from hexmind.core import REGISTRY
 from hexmind.qt.settings import SettingsPage
 
 

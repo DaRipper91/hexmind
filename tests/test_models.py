@@ -7,7 +7,7 @@ import pytest
 
 from hexmind import backends
 from hexmind.auditor import DOMAINS
-from hexmind.core import OPT_IN, ROSTER, TEXT_ONLY, REGISTRY
+from hexmind.core import OPT_IN, REGISTRY, ROSTER, TEXT_ONLY
 from hexmind.models import BUNDLED, Registry
 
 ALL_OPENCODE = ["nemotron-lightning", "nemotron-ultra", "muse-spark", "mimo-flash",

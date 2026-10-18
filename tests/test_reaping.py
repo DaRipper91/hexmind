@@ -11,8 +11,19 @@ import sys
 
 import pytest
 
-from hexmind.reaping import (ACTIVE, DIRTY, MISSING, SAFE, UNMERGED, Candidate, GitUnavailable,
-                             classify, remove_one, status_paths, unmerged_commits)
+from hexmind.reaping import (
+    ACTIVE,
+    DIRTY,
+    MISSING,
+    SAFE,
+    UNMERGED,
+    Candidate,
+    GitUnavailable,
+    classify,
+    remove_one,
+    status_paths,
+    unmerged_commits,
+)
 
 
 def git(root, *args, check=True):

@@ -4,9 +4,9 @@ import json
 import subprocess
 from pathlib import Path
 
-from hexmind.core import Orchestrator
 import pytest
 
+from hexmind.core import Orchestrator
 from hexmind.relay import Chain, Stage, assign, read_agent_file, run_relay
 
 
@@ -115,7 +115,7 @@ def test_apostrophe_in_relay_goal_does_not_crash(tmp_path):
 
 
 def _chain_dir(tmp_path, monkeypatch):
-    import hexmind.relay as relay
+    from hexmind import relay
     d = tmp_path / "chains"
     d.mkdir()
     (d / "good.toml").write_text('description = "fine"\n[[stages]]\nname = "a"\ninstructions = "x"\n')

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -20,8 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import REGISTRY
 from .. import config as config_module
+from ..core import REGISTRY
 
 
 class ModelSelectorDialog(QDialog):

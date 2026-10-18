@@ -47,8 +47,7 @@ def parse_github_repo(url: str | None) -> str | None:
     m = re.search(r"github\.com[:/]([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?/?$", url)
     if m:
         owner, repo = m.group(1), m.group(2)
-        if repo.endswith(".git"):
-            repo = repo[:-4]
+        repo = repo.removesuffix(".git")
         return f"{owner}/{repo}"
     return None
 
@@ -218,7 +217,7 @@ def parse_activity(activity: dict[str, Any]) -> dict[str, Any]:
     created = activity.get("createTime", "")
     originator = activity.get("originator", "")
     known_keys = {"name", "createTime", "id", "originator", "artifacts"}
-    payload_keys = [k for k in activity.keys() if k not in known_keys]
+    payload_keys = [k for k in activity if k not in known_keys]
 
     if not payload_keys:
         return {

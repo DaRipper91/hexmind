@@ -124,7 +124,7 @@ async def _terminate_group(proc: asyncio.subprocess.Process) -> None:
     _signal_group(proc.pid, signal.SIGTERM)
     try:
         await asyncio.wait_for(proc.wait(), TERMINATE_GRACE_SECONDS)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass
     # A child may have exited while a descendant still holds inherited pipes.
     _signal_group(proc.pid, signal.SIGKILL)
@@ -204,9 +204,7 @@ class DirectBackend:
         with tempfile.TemporaryDirectory() as tmp:
             outfile = os.path.join(tmp, "last.txt")
             argv = [a.replace("{outfile}", outfile).replace("{prompt}", prompt) for a in DIRECT_CMDS[agent]]
-            if schema is not None and agent == "claude":
-                argv.extend(["--json-schema", json.dumps(schema, separators=(",", ":"))])
-            elif schema is not None and agent == "agy":
+            if schema is not None and agent == "claude" or schema is not None and agent == "agy":
                 argv.extend(["--json-schema", json.dumps(schema, separators=(",", ":"))])
             elif schema is not None and agent == "codex":
                 schemafile = os.path.join(tmp, "schema.json")
@@ -231,7 +229,7 @@ class DirectBackend:
                 await _terminate_group(proc)
                 await asyncio.gather(stdin_task, stdout_task, stderr_task, return_exceptions=True)
                 raise
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await _terminate_group(proc)
                 await asyncio.gather(stdin_task, stdout_task, stderr_task, return_exceptions=True)
                 raise RuntimeError(f"{agent} timed out after {self.timeout}s")
@@ -310,7 +308,7 @@ class HcomBackend:
         try:
             await asyncio.wait_for(asyncio.gather(proc.wait(), stdout_task, stderr_task),
                                    timeout or self.timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await _terminate_group(proc)
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
             raise RuntimeError(f"hcom {' '.join(args[:2])} timed out")

@@ -56,7 +56,7 @@ from PySide6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 from ..backends import DirectBackend, available
-from ..core import BUSY_STATUSES, OPT_IN, ROSTER, Orchestrator, Task, REGISTRY
+from ..core import BUSY_STATUSES, OPT_IN, REGISTRY, ROSTER, Orchestrator, Task
 from .model_selector import load_enabled_from_config
 
 TASK_COLUMNS = ("id", "agent", "status", "audit", "title")
@@ -92,10 +92,7 @@ def _load_agentdeck_items() -> tuple[bool, list]:
     with no degradation — the agentdeck import is wrapped in try/except.
     """
     try:
-        import agentdeck  # type: ignore
-        from agentdeck.model import Item, Kind, load as load_items  # type: ignore
-        from agentdeck.providers import PROVIDERS, resolve_provider  # type: ignore
-        from agentdeck.deck import search as deck_search  # type: ignore
+        from agentdeck.model import load as load_items
 
         items = load_items()
         return True, items
@@ -904,7 +901,6 @@ class HexmindWidget(QWidget):
 
 
 def _domains(name: str) -> list[str]:
-    from ..core import REGISTRY
     entry = REGISTRY.models.get(name)
     return list(entry.domains) if entry else []
 

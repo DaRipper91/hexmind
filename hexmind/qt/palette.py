@@ -22,8 +22,8 @@ appears here — the QSS resolves every one of them.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -268,7 +268,7 @@ def _clamp_origin(palette: QWidget, x: int, y: int) -> tuple[int, int]:
     return x, y
 
 
-def palette_commands(room: "PaletteHost") -> list[Command]:  # noqa: F821 - duck-typed on purpose
+def palette_commands(room: PaletteHost) -> list[Command]:  # noqa: F821 - duck-typed on purpose
     """The vocabulary for a live room: the room's own actions plus one entry per teammate.
 
     Written against a duck-typed host rather than a `HexmindWidget` import so this function can be
@@ -325,10 +325,10 @@ def install_palette(room: QWidget) -> CommandPalette | None:
 
 
 __all__ = [
+    "MIN_QUERY",
+    "PALETTE_LIMIT",
     "Command",
     "CommandPalette",
-    "PALETTE_LIMIT",
-    "MIN_QUERY",
     "as_commands",
     "filter_commands",
     "install_palette",
