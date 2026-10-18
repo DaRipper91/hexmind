@@ -374,13 +374,15 @@ def stylesheet(base: int = FONT_SIZE) -> str:
         border-radius: {BORDER_RADIUS}px;
         alternate-background-color: {GRID};
         gridline-color: {PANEL_EDGE};
-        selection-background-color: {PANEL};
-        selection-color: {VIOLET};
+        selection-background-color: {PANEL_HOVER};
+        selection-color: {INK};
     }}
+    QListWidget::item {{ padding: 6px 10px; }}
     QTreeWidget::item:selected, QTableWidget::item:selected,
     QListWidget::item:selected, QListView::item:selected {{
-        background: {GRID};
-        color: {VIOLET};
+        background: {PANEL_HOVER};
+        color: {INK};
+        border-left: 2px solid {VIOLET};
         border-radius: {BORDER_RADIUS_SMALL}px;
     }}
     QTreeView:focus, QTableView:focus, QListView:focus {{ border: 2px solid {VIOLET}; }}

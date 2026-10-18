@@ -5,7 +5,7 @@ import pytest
 
 from hexmind.qt import theme as T
 
-SURFACES = {"SUBSTRATE": T.SUBSTRATE, "PANEL": T.PANEL, "GRID": T.GRID}
+SURFACES = {"SUBSTRATE": T.SUBSTRATE, "PANEL": T.PANEL, "GRID": T.GRID, "PANEL_HOVER": T.PANEL_HOVER}
 
 
 def _luminance(hex_color: str) -> float:
@@ -37,9 +37,19 @@ def test_control_edges_meet_3_to_1(surface):
 
 
 def test_selected_text_meets_4_5_to_1():
-    """Selected text was INK on VIOLET, 2.71:1."""
-    assert "selection-color: {INK}".format(INK=T.INK) not in T.stylesheet()
+    """Selected text in input fields is SUBSTRATE on VIOLET (6.1:1); selection on PANEL_HOVER is INK (>=4.5:1)."""
     assert contrast(T.SUBSTRATE, T.VIOLET) >= 4.5
+    assert contrast(T.INK, T.PANEL_HOVER) >= 4.5
+
+
+def test_list_padding_and_row_selection_rules():
+    """Task 4.7: list padding and row selection rules in stylesheet."""
+    sheet = T.stylesheet()
+    assert "QListWidget::item" in sheet
+    assert "padding: 6px 10px;" in sheet
+    assert f"selection-background-color: {T.PANEL_HOVER};" in sheet
+    assert f"selection-color: {T.INK};" in sheet
+    assert f"border-left: 2px solid {T.VIOLET};" in sheet
 
 
 def _blocks(qss: str) -> dict[str, str]:
