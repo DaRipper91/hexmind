@@ -300,6 +300,12 @@ def test_closing_mid_turn_cancels_the_running_agent(room):
     assert backend.cancelled.is_set(), "a closed room left its agent running"
 
 
+def test_qsettings_is_hermetic(_hermetic_home):
+    from PySide6.QtCore import QSettings
+
+    assert QSettings("hexmind", "room").fileName().startswith(str(_hermetic_home))
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

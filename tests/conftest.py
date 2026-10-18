@@ -54,6 +54,15 @@ def _hermetic_home(tmp_path_factory):
     # test of `/chains` and `from =` would see an empty world.
     relay.CHAIN_DIRS = [config_home / "chains", *relay.CHAIN_DIRS[1:]]
     relay.AGENT_DIRS = [config_home / "agents", *relay.AGENT_DIRS[1:]]
+    # The room saves its splitter and tab through QSettings, which follows the real $HOME, not
+    # config.PATH -- so the suite was rewriting the user's ~/.config/hexmind/room.conf.
+    try:
+        from PySide6.QtCore import QSettings
+
+        for fmt in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
+            QSettings.setPath(fmt, QSettings.Scope.UserScope, str(home / ".config"))
+    except ImportError:
+        pass
     try:
         yield home
     finally:

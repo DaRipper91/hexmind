@@ -586,6 +586,7 @@ class HexmindWidget(QWidget):
             if index is not None and 0 <= index < right.count():
                 right.setCurrentIndex(index)
         except Exception:
+            logger.exception("room layout restore failed")
             self._settings = None
 
         # Ctrl+L clears the transcript, like the TUI. Connected rather than passed as a keyword,
@@ -932,7 +933,7 @@ class HexmindWidget(QWidget):
                 # The tab widget has no saveState(); its layout *is* its current index.
                 self._settings.setValue("qt/right", self._right.currentIndex())
         except Exception:
-            pass
+            logger.exception("room layout save failed")
         if self._room.isRunning():
             self._room.stop()
         super().closeEvent(event)
