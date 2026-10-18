@@ -863,7 +863,8 @@ class HexmindWidget(QWidget):
 
     def _on_task(self, task: Task) -> None:
         row = self._row_of(self.tasks, task.id)
-        values = (task.id, task.agent, task.status, task.audit or "", task.title)
+        status_text = f"● {task.status}" if task.status else ""
+        values = (task.id, task.agent, status_text, task.audit or "", task.title)
         if row < 0:
             row = self.tasks.rowCount()
             self.tasks.insertRow(row)
@@ -871,6 +872,17 @@ class HexmindWidget(QWidget):
             item = QTableWidgetItem(str(value))
             if column == 0:
                 item.setData(Qt.ItemDataRole.UserRole, task.id)
+            elif column == 2:
+                item.setData(Qt.ItemDataRole.UserRole, task.status)
+                item.setForeground(QColor(theme.state_hue(task.status)))
+            elif column == 3:
+                audit_color = {
+                    "pass": theme.GREEN,
+                    "fixed": theme.AMBER,
+                    "disputed": theme.RED,
+                }.get(task.audit or "")
+                if audit_color:
+                    item.setForeground(QColor(audit_color))
             self.tasks.setItem(row, column, item)
         if getattr(self, "graph", None) is not None and hasattr(self.graph, "update_task"):
             try:
@@ -999,7 +1011,16 @@ class HexmindWidget(QWidget):
         row = table.rowCount()
         table.insertRow(row)
         for column, value in enumerate(values):
-            table.setItem(row, column, QTableWidgetItem(value))
+            item = QTableWidgetItem(value)
+            if table is self.team and column == 1:
+                item.setData(Qt.ItemDataRole.UserRole, value)
+                if value == "lead":
+                    item.setForeground(QColor(theme.VIOLET))
+                elif value.startswith("busy"):
+                    item.setForeground(QColor(theme.CYAN))
+                elif value == "asleep":
+                    item.setForeground(QColor(theme.SLATE))
+            table.setItem(row, column, item)
 
     def _clear_transcript(self) -> None:
         self.transcript.clear()

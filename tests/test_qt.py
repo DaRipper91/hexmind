@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QTimer, Qt
 from PySide6.QtWidgets import QApplication
 
 from hexmind.qt import HexmindWidget
@@ -132,7 +132,8 @@ def test_a_request_is_planned_run_and_summarized(room):
     assert "all done" in said, "and the synthesis"
     assert widget.tasks.rowCount() == 2
     rows = [[widget.tasks.item(r, c).text() for c in range(5)] for r in range(2)]
-    assert rows[0][:4] == ["t1", "claude", "done", ""], rows
+    assert rows[0][:4] == ["t1", "claude", "● done", ""], rows
+    assert widget.tasks.item(0, 2).data(Qt.ItemDataRole.UserRole) == "done"
     assert {r[1] for r in rows} == {"claude", "agy"}, "both members should have been used"
     assert widget.status.text() == "ready" and widget.input.isEnabled()
 
@@ -883,4 +884,32 @@ def test_transcript_renders_markdown_with_speaker_color(room):
     widget._on_message("agy", "working on it")
     plain = widget.transcript.toPlainText()
     assert "agy: working on it" in plain
+
+
+def test_tasks_and_team_tables_show_state_hues(room):
+    """Task 4.2: Tasks and Team tables use STATE_HUE plus status glyph."""
+    from PySide6.QtCore import Qt
+    from hexmind.core import Task
+    from hexmind.qt import theme
+
+    widget = room()
+    # 1. Inject a failed task
+    failed_task = Task("t_fail", "broken task", "claude", "fix it", status="failed", audit="disputed")
+    widget._on_task(failed_task)
+
+    item = widget.tasks.item(0, 2)
+    assert item.text() == "● failed"
+    assert item.data(Qt.ItemDataRole.UserRole) == "failed"
+    assert item.foreground().color().name().lower() == theme.state_hue("failed").lower()
+
+    audit_item = widget.tasks.item(0, 3)
+    assert audit_item.text() == "disputed"
+    assert audit_item.foreground().color().name().lower() == theme.RED.lower()
+
+    # 2. Team state column colors
+    lead_row = [r for r in range(widget.team.rowCount()) if widget.team.item(r, 0).text() == "claude"][0]
+    lead_state_item = widget.team.item(lead_row, 1)
+    assert lead_state_item.text() == "lead"
+    assert lead_state_item.foreground().color().name().lower() == theme.VIOLET.lower()
+
 
