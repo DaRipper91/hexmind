@@ -225,3 +225,45 @@ def test_the_panel_is_offscreen_safe_and_paints(panel):
     p.resize(900, 600)
     p.view.fit()
     p.view.grab()  # forces a real render of every item
+
+
+def test_incremental_task_updates_layout_labels_and_glyphs(panel, qapp):
+    """Task 4.3: update_task incrementally lays out nodes, adds labels, and avoids overlap."""
+    from PySide6.QtWidgets import QGraphicsSimpleTextItem
+
+    view = panel().view
+    tasks = [
+        t("t1"),
+        t("t2", ["t1"]),
+        t("t3", ["t1"]),
+        t("t4", ["t2", "t3"]),
+    ]
+    for task in tasks:
+        view.update_task(task)
+
+    qapp.processEvents()
+
+    assert len(view._nodes) == 4
+    for tid, node in view._nodes.items():
+        assert any(
+            isinstance(child, QGraphicsSimpleTextItem) and child.text() == tid
+            for child in node.childItems()
+        ), f"node {tid} must have a label child"
+
+    # No two nodes' bounding rects intersect
+    nodes = list(view._nodes.values())
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            assert not nodes[i].sceneBoundingRect().intersects(nodes[j].sceneBoundingRect()), (
+                f"node {nodes[i].task.id} intersects node {nodes[j].task.id}"
+            )
+
+    # Node identity is preserved across a status update
+    n1 = view._nodes["t1"]
+    view.update_task(t("t1", status="done"))
+    assert view._nodes["t1"] is n1
+    assert n1.task.status == "done"
+
+    # Accessible description is set
+    assert "Task graph" in view.accessibleDescription()
+

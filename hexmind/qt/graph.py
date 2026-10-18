@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
@@ -27,6 +27,18 @@ except Exception:  # offscreen-safe fallback when theme is mid-edit
 
 X_GAP, Y_GAP = 170, 54
 R = 16
+
+STATUS_GLYPHS = {
+    "done": "✓",
+    "failed": "✗",
+    "cancelled": "✗",
+    "running": "◐",
+    "auditing": "◎",
+    "revising": "✎",
+    "skipped": "⊘",
+    "pending": "○",
+}
+
 
 
 def _deps_of(t) -> list[str]:
@@ -179,6 +191,7 @@ class Node(QGraphicsEllipseItem):
     def __init__(self, task, x: float, y: float) -> None:
         super().__init__(x - R, y - R, R * 2, R * 2)
         self.task = task
+        self.label: QGraphicsSimpleTextItem | None = None
         self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.recolor()
         self.setToolTip(f"{_id_of(task)} · {x:.0f},{y:.0f}")
@@ -186,6 +199,20 @@ class Node(QGraphicsEllipseItem):
     def recolor(self) -> None:
         self.setBrush(QColor(_hue(_status_of(self.task))))
         self.setToolTip(f"{_id_of(self.task)} · {_status_of(self.task)}")
+        self.update()
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        super().paint(painter, option, widget)
+        glyph = STATUS_GLYPHS.get(_status_of(self.task), "○")
+        painter.save()
+        painter.setPen(QColor(theme.SUBSTRATE if theme is not None else "#0a0d14"))
+        font = painter.font()
+        font.setPixelSize(14)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+        painter.restore()
+
 
 
 class Edge(QGraphicsLineItem):
@@ -211,10 +238,14 @@ class TaskGraphView(QGraphicsView):
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
         self.setAccessibleName("Task graph")
+        self.setAccessibleDescription(
+            "Task graph. The Tasks tab lists the same tasks for keyboard and screen readers."
+        )
         self.setToolTip("Task dependency graph: nodes are tasks, arrows are depends_on.")
         self.setMinimumHeight(120)
         self._nodes: dict[str, Node] = {}
         self._edges: list[Edge] = []
+        self._relayout_pending: bool = False
 
     def drawForeground(self, painter: QPainter, rect: QRectF) -> None:
         super().drawForeground(painter, rect)
@@ -244,14 +275,14 @@ class TaskGraphView(QGraphicsView):
             tid = _id_of(t)
             x, y = pos.get(tid, (40.0, 30.0))
             node = Node(t, x, y)
-            self._scene.addItem(node)
-            label = QGraphicsSimpleTextItem(f"{tid}")
+            label = QGraphicsSimpleTextItem(f"{tid}", parent=node)
             label.setPos(x + R + 6, y - 10)
             try:
                 label.setBrush(QColor(_ink()))
             except Exception:
                 pass
-            self._scene.addItem(label)
+            node.label = label
+            self._scene.addItem(node)
             self._nodes[tid] = node
         # edges only where the claim holds (dep really present)
         for t in items:
@@ -276,43 +307,87 @@ class TaskGraphView(QGraphicsView):
                 self._edges.append(edge)
         self._scene.setSceneRect(self._scene.itemsBoundingRect())
 
+    def _relayout(self) -> None:
+        self._relayout_pending = False
+        items = [n.task for n in self._nodes.values()]
+        if not items:
+            return
+        _, skipped_by = compute_layers(items)
+        by_id = {_id_of(t): t for t in items}
+        pos = {
+            p.task_id if hasattr(p, "task_id") else _id_of(p.task): (p.x, p.y)
+            for p in layer_positions(items)
+        }
+        for t in items:
+            tid = _id_of(t)
+            node = self._nodes.get(tid)
+            if node is None:
+                continue
+            x, y = pos.get(tid, (40.0, 30.0))
+            node.setRect(x - R, y - R, R * 2, R * 2)
+            node.recolor()
+            if getattr(node, "label", None) is not None:
+                node.label.setPos(x + R + 6, y - 10)
+            else:
+                label = QGraphicsSimpleTextItem(f"{tid}", parent=node)
+                label.setPos(x + R + 6, y - 10)
+                try:
+                    label.setBrush(QColor(_ink()))
+                except Exception:
+                    pass
+                node.label = label
+
+        # Rebuild edges
+        for e in self._edges:
+            try:
+                self._scene.removeItem(e)
+            except Exception:
+                pass
+        self._edges.clear()
+
+        for t in items:
+            dst_id = _id_of(t)
+            dst = self._nodes.get(dst_id)
+            if dst is None:
+                continue
+            x1, y1 = pos.get(dst_id, (40.0, 30.0))
+            for dep in _deps_of(t):
+                src = self._nodes.get(dep)
+                if src is None:
+                    continue
+                x0, y0 = pos.get(dep, (40.0, 30.0))
+                reason = ""
+                if dst_id in skipped_by and skipped_by[dst_id] == dep:
+                    reason = f"{dep} failed → {dst_id} skipped"
+                elif _status_of(by_id.get(dep)) == "failed" and _status_of(t) == "skipped":
+                    reason = f"{dep} failed → {dst_id} skipped"
+                edge = Edge(src, dst, reason)
+                edge.setLine(x0 + R, y0, x1 - R, y1)
+                self._scene.addItem(edge)
+                self._edges.append(edge)
+
+        self._scene.setSceneRect(self._scene.itemsBoundingRect())
+        self.fit()
+
     def update_task(self, task) -> None:
         tid = _id_of(task)
         node = self._nodes.get(tid)
         if node is None:
-            # extend: keep existing nodes, add one (positions recomputed cheaply)
-            current = [n.task for n in self._nodes.values()] + [task]
-            # preserve object identity for existing: rebuild edges only if needed.
-            # Simplest correct: full rebuild but restore identity for the updated one?
-            # Tests require identity preserved on update, and extension on unknown.
-            # So: add node at next slot without rebuilding others.
-            x = 40.0 + len(self._nodes) * 10
-            y = 30.0 + len(self._nodes) * Y_GAP
-            # place after deepest dep when known
+            node = Node(task, 40.0, 30.0)
+            label = QGraphicsSimpleTextItem(f"{tid}", parent=node)
+            label.setPos(40.0 + R + 6, 30.0 - 10)
             try:
-                depth, _ = compute_layers(current)
-                lv = depth.get(tid, 0)
-                x = 40.0 + lv * X_GAP
-                y = 30.0 + sum(1 for k in self._nodes) * 10
+                label.setBrush(QColor(_ink()))
             except Exception:
                 pass
-            node = Node(task, x, y)
+            node.label = label
             self._scene.addItem(node)
             self._nodes[tid] = node
-            # wire edges to real deps
-            for dep in _deps_of(task):
-                src = self._nodes.get(dep)
-                if src is None:
-                    continue
-                edge = Edge(src, node, "")
-                try:
-                    # straight stub; layout pass will correct on next set_tasks
-                    edge.setLine(0, 0, x - R, y)
-                except Exception:
-                    pass
-                self._scene.addItem(edge)
-                self._edges.append(edge)
+            if not getattr(self, "_relayout_pending", False):
+                self._relayout_pending = True
+                QTimer.singleShot(0, self._relayout)
             return
+
         node.task = task
         node.recolor()
         # refresh broken-edge reasons touching this node
