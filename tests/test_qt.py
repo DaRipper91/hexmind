@@ -352,6 +352,22 @@ def test_tab_leaves_every_table(room):
     panel.deleteLater()
 
 
+def test_tab_order_follows_the_screen(room):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    widget = room()
+    widget.show()
+    widget.activateWindow()
+    widget.leadBox.setFocus()
+    pump(50)
+    seen = [QApplication.focusWidget()]
+    for _ in range(3):
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Tab)
+        seen.append(QApplication.focusWidget())
+    assert seen == [widget.leadBox, widget.teamButton, widget.auditBox, widget.transcript]
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):

@@ -74,6 +74,10 @@ class HexmindWindow(QMainWindow):
             },
         )
         self.setCentralWidget(self.bench_rail)
+        # The rail is leftmost, so it comes first in the Tab chain; built after the room, it was last.
+        first_in_room = getattr(self.room, "leadBox", None)
+        if first_in_room is not None:
+            QWidget.setTabOrder(list(self.bench_rail.buttons.values())[-1], first_in_room)
         self._turn_started_at: float | None = None
         self._notification_defaults = config.get_notification_defaults()
         self.tray_icon: QSystemTrayIcon | None = None

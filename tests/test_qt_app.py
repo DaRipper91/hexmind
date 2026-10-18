@@ -19,7 +19,7 @@ import pytest
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from hexmind.qt import app as A
 from hexmind.qt import theme
@@ -155,6 +155,15 @@ def test_quitting_with_unsaved_settings_asks_first(qapp, room, monkeypatch):
 
     monkeypatch.setattr(window.settings_page, "_confirm_discard", lambda action: True)
     assert window.close() is True
+    window.deleteLater()
+
+
+def test_the_rail_comes_before_the_room_in_the_tab_chain(qapp, room):
+    room.leadBox = QComboBox(room)
+    window = A.HexmindWindow(room=room)
+    last_rail_button = list(window.bench_rail.buttons.values())[-1]
+    assert last_rail_button.nextInFocusChain() is room.leadBox
+    window.close()
     window.deleteLater()
 
 

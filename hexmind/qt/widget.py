@@ -579,6 +579,14 @@ class HexmindWidget(QWidget):
         self._split = split
 
         lay.addWidget(split, 1)
+        # Tab follows the screen: the top bar left to right, then the left column top to bottom,
+        # then the views. Creation order put Select Team before Lead, because only some of these
+        # were parented at construction.
+        order = [self.leadBox, self.teamButton, self.auditBox, self.transcript, self.searchBox,
+                 self.search_previous, self.search_next, self.detail_toggle, self.detail,
+                 self.input, self.sendButton, self.stopButton, right]
+        for before, after in zip(order, order[1:]):
+            QWidget.setTabOrder(before, after)
         # Persist splitter layout across restarts (local desktop nicety; embed-safe).
         try:
             from PySide6.QtCore import QSettings
