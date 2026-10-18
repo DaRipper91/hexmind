@@ -145,6 +145,8 @@ def stylesheet() -> str:
         border-top: 2px solid {VIOLET};
     }}
     QTabBar::tab:hover:!selected {{ color: {INK}; background: {PANEL_HOVER}; }}
+    QTabBar::tab:focus {{ border-bottom: 2px solid {VIOLET}; }}
+    QToolButton:focus {{ border: 2px solid {VIOLET}; border-radius: {BORDER_RADIUS_SMALL}px; }}
 
     /* --- inputs --- */
     QLineEdit, QPlainTextEdit, QTextBrowser, QTextEdit, QSpinBox, QDoubleSpinBox {{
@@ -174,7 +176,8 @@ def stylesheet() -> str:
         padding: 8px 16px;
         min-height: 32px;
     }}
-    QPushButton:hover {{ border: {BORDER_WIDTH}px solid {VIOLET}; color: {INK}; background: {PANEL_HOVER}; }}
+    /* Hover brightens the outline; violet is reserved for keyboard focus, so the two never look alike. */
+    QPushButton:hover {{ border: {BORDER_WIDTH}px solid {INK_DIM}; color: {INK}; background: {PANEL_HOVER}; }}
     QPushButton:pressed {{ background: {GRID}; }}
     QPushButton:checked {{
         border: {BORDER_WIDTH}px solid {CYAN};
@@ -245,7 +248,7 @@ def stylesheet() -> str:
         border-radius: {BORDER_RADIUS_SMALL}px;
         background: {PANEL};
     }}
-    QCheckBox::indicator:hover {{ border: {BORDER_WIDTH}px solid {VIOLET}; }}
+    QCheckBox::indicator:hover {{ border: {BORDER_WIDTH}px solid {INK_DIM}; }}
     QCheckBox::indicator:checked {{
         background: {GREEN};
         border: {BORDER_WIDTH}px solid {GREEN};
@@ -258,6 +261,7 @@ def stylesheet() -> str:
     QCheckBox:focus {{
         outline: none;
     }}
+    QCheckBox::indicator:focus {{ border: 2px solid {VIOLET}; }}
 
     /* --- trees and tables --- */
     QTreeWidget, QTreeView, QTableWidget, QTableView, QListWidget, QListView {{
@@ -276,6 +280,8 @@ def stylesheet() -> str:
         color: {VIOLET};
         border-radius: {BORDER_RADIUS_SMALL}px;
     }}
+    QTreeView:focus, QTableView:focus, QListView:focus {{ border: 2px solid {VIOLET}; }}
+    QTableView::item:focus {{ border: 1px solid {CYAN}; }}
     QTreeWidget::item:hover, QTableWidget::item:hover,
     QListWidget::item:hover, QListView::item:hover {{ background: {PANEL_HOVER}; }}
 

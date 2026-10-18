@@ -40,3 +40,27 @@ def test_selected_text_meets_4_5_to_1():
     """Selected text was INK on VIOLET, 2.71:1."""
     assert "selection-color: {INK}".format(INK=T.INK) not in T.stylesheet()
     assert contrast(T.SUBSTRATE, T.VIOLET) >= 4.5
+
+
+def _blocks(qss: str) -> dict[str, str]:
+    blocks = {}
+    for chunk in qss.split("}"):
+        if "{" in chunk:
+            selector, body = chunk.split("{", 1)
+            blocks[" ".join(selector.split()).split("*/")[-1].strip()] = body
+    return blocks
+
+
+def test_every_focusable_kind_has_a_visible_focus_rule():
+    """WCAG 2.4.7: checkboxes, tabs, rail buttons and tables showed no focus at all."""
+    selectors = " ".join(_blocks(T.stylesheet()))
+    for needed in ("QCheckBox::indicator:focus", "QTabBar::tab:focus", "QToolButton:focus",
+                   "QTableView:focus", "QTableView::item:focus"):
+        assert needed in selectors, needed
+
+
+def test_hover_never_uses_the_focus_hue():
+    hovers = {sel: body for sel, body in _blocks(T.stylesheet()).items()
+              if ":hover" in sel and "border" in body}
+    assert hovers
+    assert [sel for sel, body in hovers.items() if T.VIOLET in body] == []
