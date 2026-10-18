@@ -150,12 +150,11 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     QTabBar::tab {{
         background: {PANEL};
         color: {INK_DIM};
-        padding: 8px 14px;
+        padding: 6px 12px;
         border: {BORDER_WIDTH}px solid {PANEL_EDGE};
         border-bottom: none;
         border-top-left-radius: {BORDER_RADIUS}px;
         border-top-right-radius: {BORDER_RADIUS}px;
-        min-width: 70px;
     }}
     QTabBar::tab:selected {{
         background: {SUBSTRATE};
@@ -164,6 +163,7 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     }}
     QTabBar::tab:hover:!selected {{ color: {INK}; background: {PANEL_HOVER}; }}
     QTabBar::tab:focus {{ border-bottom: 2px solid {VIOLET}; }}
+    QTabBar QToolButton {{ min-width: 24px; }}
     QToolButton:focus {{ border: 2px solid {VIOLET}; border-radius: {BORDER_RADIUS_SMALL}px; }}
 
     /* --- the workspace rail: icons over short labels; violet marks where you are --- */

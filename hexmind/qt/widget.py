@@ -563,6 +563,8 @@ class HexmindWidget(QWidget):
         right = QTabWidget()
         right.setAccessibleName("Room views")
         right.setDocumentMode(True)
+        right.tabBar().setExpanding(False)
+        right.setElideMode(Qt.TextElideMode.ElideRight)
         right.addTab(self.team, "Team")
         right.addTab(self.tasks, "Tasks")
         right.addTab(self.live_tap, "Live Tap")
@@ -585,6 +587,7 @@ class HexmindWidget(QWidget):
 
         split = QSplitter(Qt.Orientation.Horizontal)
         left = QWidget()
+        left.setMinimumWidth(420)
         leftLayout = QVBoxLayout(left)
         leftLayout.setContentsMargins(0, 0, 0, 0)
         # Transcript over detail in a splitter: the conversation owns the column, and the detail pane
@@ -601,6 +604,8 @@ class HexmindWidget(QWidget):
         split.addWidget(left)
         split.addWidget(right)
         split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 1)
+        split.setSizes([620, 780])
         self._split = split
 
         lay.addWidget(split, 1)
@@ -619,6 +624,8 @@ class HexmindWidget(QWidget):
             geo = self._settings.value("qt/split")
             if geo is not None:
                 split.restoreState(geo)
+            else:
+                split.setSizes([620, 780])
             # A QTabWidget has no `saveState()` — a tab widget's layout is its tab order, not a
             # geometry — so the right side persists as the index the user last looked at. Clamped,
             # because an extension or a downgraded install can leave a stale index behind.

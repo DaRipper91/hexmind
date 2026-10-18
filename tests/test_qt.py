@@ -754,3 +754,34 @@ def test_hand_brake_cancellation_aborts_in_flight_turn(room, available_models):
     assert not widget.stopButton.isEnabled()
     assert widget.turnMeter.text() == ""
     assert "Turn cancelled" in widget.transcript.toPlainText()
+
+
+def test_tab_bar_fits_without_scroll_at_1400(room, qapp):
+    """Task 3.4: Splitter proportions and tab bar fit at 1400px without scroll arrows."""
+    from hexmind.qt import theme
+    from PySide6.QtCore import Qt
+
+    old_sheet = qapp.styleSheet()
+    qapp.setStyleSheet(theme.stylesheet())
+    try:
+        widget = room()
+        widget.resize(1400, 900)
+        widget.show()
+        pump(50)
+
+        assert widget._split.widget(0).minimumWidth() == 420
+        sizes = widget._split.sizes()
+        assert sizes[0] >= 420 and sizes[1] > 0
+
+        bar = widget._right.tabBar()
+        assert bar.expanding() is False
+        assert widget._right.elideMode() == Qt.TextElideMode.ElideRight
+
+        union = bar.tabRect(0)
+        for i in range(1, bar.count()):
+            union = union.united(bar.tabRect(i))
+        assert union.width() <= bar.width(), (
+            f"tab bar union width ({union.width()}px) must fit in bar width ({bar.width()}px)"
+        )
+    finally:
+        qapp.setStyleSheet(old_sheet)
