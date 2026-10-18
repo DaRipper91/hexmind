@@ -166,6 +166,25 @@ def stylesheet(base: int = FONT_SIZE) -> str:
     QTabBar::tab:focus {{ border-bottom: 2px solid {VIOLET}; }}
     QToolButton:focus {{ border: 2px solid {VIOLET}; border-radius: {BORDER_RADIUS_SMALL}px; }}
 
+    /* --- the workspace rail: icons over short labels; violet marks where you are --- */
+    #benchRail {{ background: {PANEL}; border-right: {BORDER_WIDTH}px solid {PANEL_EDGE}; }}
+    #benchRail QToolButton {{
+        background: transparent;
+        color: {INK_DIM};
+        border: none;
+        border-left: 2px solid transparent;
+        border-radius: {BORDER_RADIUS_SMALL}px;
+        padding: 8px 4px 6px 4px;
+        font-size: {small}px;
+    }}
+    #benchRail QToolButton:hover {{ color: {INK}; background: {PANEL_HOVER}; }}
+    #benchRail QToolButton:checked {{
+        color: {VIOLET};
+        background: {SUBSTRATE};
+        border-left: 2px solid {VIOLET};
+    }}
+    #benchRail QToolButton:focus {{ border: 2px solid {VIOLET}; }}
+
     /* --- inputs --- */
     QLineEdit, QPlainTextEdit, QTextBrowser, QTextEdit, QSpinBox, QDoubleSpinBox {{
         background: {PANEL};
