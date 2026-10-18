@@ -972,5 +972,26 @@ def test_status_pill_styling_and_accessibility_announcement(room, monkeypatch):
         assert announcements[1].message() == "ready"
 
 
+def test_swallowed_exceptions_are_logged_in_room(room, monkeypatch, caplog):
+    """Task 4.11: Swallowed exceptions in room panels log via logger.exception."""
+    import logging
+
+    widget = room()
+    assert widget.graph is not None
+
+    def bad_set_tasks(_tasks):
+        raise RuntimeError("boom graph failure")
+
+    monkeypatch.setattr(widget.graph, "set_tasks", bad_set_tasks)
+    with caplog.at_level(logging.ERROR):
+        widget._refresh_graph()
+
+    assert any(
+        "task graph refresh failed" in record.message or "boom graph failure" in str(record.exc_info)
+        for record in caplog.records
+    )
+
+
+
 
 

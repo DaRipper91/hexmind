@@ -808,7 +808,7 @@ class HexmindWidget(QWidget):
             snap = self.snapshot()
             self.graph.set_tasks(list(snap.get("tasks", {}).values()))
         except Exception:
-            pass
+            logger.exception("task graph refresh failed")
 
     def _on_search(self, needle: str) -> None:
         # Plain-text find + first-hit jump. No new deps, offscreen-safe.
@@ -817,7 +817,7 @@ class HexmindWidget(QWidget):
                 return
             self._find_match()
         except Exception:
-            pass
+            logger.exception("search match failed")
 
     def _focus_search(self) -> None:
         self.searchBox.setFocus()
@@ -865,13 +865,14 @@ class HexmindWidget(QWidget):
             try:
                 self.detail.setMarkdown(body)
             except Exception:
+                logger.exception("detail markdown render failed, falling back to plaintext")
                 self.detail.setPlainText(body)
             if getattr(self, "graph", None) is not None and hasattr(self.graph, "select_task"):
                 self.graph.select_task(tid)
                 if hasattr(self.graph, "fit"):
                     self.graph.fit()
         except Exception:
-            pass
+            logger.exception("task detail selection failed")
 
     def _on_task(self, task: Task) -> None:
         row = self._row_of(self.tasks, task.id)
@@ -900,6 +901,7 @@ class HexmindWidget(QWidget):
             try:
                 self.graph.update_task(task)
             except Exception:  # noqa: BLE001
+                logger.exception("incremental graph update failed, falling back to full refresh")
                 self._refresh_graph()
         else:
             self._refresh_graph()
@@ -925,6 +927,7 @@ class HexmindWidget(QWidget):
 
             palette.set_commands(palette_commands(self))
         except Exception:
+            logger.exception("palette commands refresh failed")
             return
 
     def _row_of(self, table: QTableWidget, key: str) -> int:
@@ -1017,7 +1020,7 @@ class HexmindWidget(QWidget):
         try:
             self.timeline.refresh()
         except Exception:
-            pass
+            logger.exception("timeline refresh failed")
 
     def _add_row(self, table: QTableWidget, values: tuple[str, ...]) -> None:
         row = table.rowCount()
@@ -1040,7 +1043,7 @@ class HexmindWidget(QWidget):
         try:
             self.detail.clear()
         except Exception:
-            pass
+            logger.exception("detail clear failed")
 
     # ---------- teardown ----------
     def closeEvent(self, event) -> None:  # Qt's spelling, not ours
