@@ -37,7 +37,8 @@ def page(qapp, config_path):
 def test_settings_page_loads_schema_defaults(page):
     # Lead combo should have "(no lead — parallel turn)" as first item
     assert page.lead_combo.itemText(0) == "(no lead — parallel turn)"
-    assert page.lead_combo.currentIndex() == 0
+    # Default lead is nemotron-lightning (first free opencode model)
+    assert page.lead_combo.currentData() == "nemotron-lightning"
     # Team should default to RoomDefaults
     assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
@@ -53,11 +54,11 @@ def test_settings_page_loads_schema_defaults(page):
 
 def test_settings_page_saves_all_configured_preferences(page, config_path):
     # Select lead from combo
-    idx = page.lead_combo.findData("codex")
+    idx = page.lead_combo.findData("nemotron-lightning")
     page.lead_combo.setCurrentIndex(idx)
     # Set team directly
-    page._team = ["codex", "claude"]
-    page._lead = "codex"
+    page._team = ["nemotron-lightning", "big-pickle"]
+    page._lead = "nemotron-lightning"
     page._populate_lead_combo()
     page._update_team_label()
 
@@ -71,17 +72,18 @@ def test_settings_page_saves_all_configured_preferences(page, config_path):
     assert page.save() is True
     data = config.load_config(config_path)
     assert data["room"] == {
-        "lead": "codex",
-        "members": ["codex", "claude"],
+        "lead": "nemotron-lightning",
+        "members": ["nemotron-lightning", "big-pickle"],
         "audit": False,
         "theme": "measured-dark",
+        "text_size": "14",
     }
     assert data["server"] == {"host": "0.0.0.0", "port": 9000, "token": "secret"}
     assert data["notifications"] == {"phone_buzz": True, "threshold_seconds": 90}
     assert "Changes apply to new GUI sessions" in page.status.text()
 
 
-@pytest.mark.parametrize("team, message", [([], "at least one"), (["codex", "codex"], "unique")])
+@pytest.mark.parametrize("team, message", [([], "at least one"), (["nemotron-lightning", "nemotron-lightning"], "unique")])
 def test_settings_page_rejects_invalid_rosters(page, team, message):
     page._team = team
     page._populate_lead_combo()
@@ -92,8 +94,8 @@ def test_settings_page_rejects_invalid_rosters(page, team, message):
 
 
 def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
-    page._lead = "qwen"
-    page._team = ["codex", "claude"]
+    page._lead = "deepseek-v4-1-flash-free"
+    page._team = ["nemotron-lightning", "big-pickle"]
     page._populate_lead_combo()
     page._update_team_label()
 
@@ -104,7 +106,7 @@ def test_settings_page_rejects_a_lead_outside_the_default_roster(page):
 def test_settings_page_loads_saved_values(qapp, config_path):
     config.save_section(
         "room",
-        {"lead": "kimi", "members": ["kimi"], "audit": False, "theme": "measured-dark"},
+        {"lead": "nemotron-ultra", "members": ["nemotron-ultra"], "audit": False, "theme": "measured-dark"},
         config_path,
     )
     config.save_section(
@@ -120,12 +122,12 @@ def test_settings_page_loads_saved_values(qapp, config_path):
 
     page = SettingsPage(config_path)
 
-    # Lead should be kimi
-    idx = page.lead_combo.findData("kimi")
+    # Lead should be nemotron-ultra
+    idx = page.lead_combo.findData("nemotron-ultra")
     assert idx >= 0
     assert page.lead_combo.currentIndex() == idx
-    # Team should be kimi
-    assert page._team == ["kimi"]
+    # Team should be nemotron-ultra
+    assert page._team == ["nemotron-ultra"]
     assert page.audit_checkbox.isChecked() is False
     assert page.server_host_input.text() == "192.168.1.5"
     assert page.server_port_input.value() == 8888
@@ -155,8 +157,8 @@ def test_settings_page_reports_agent_health(page, monkeypatch):
 
 
 def test_settings_page_can_restore_defaults_without_saving(page):
-    page._lead = "codex"
-    page._team = ["codex", "claude"]
+    page._lead = "nemotron-lightning"
+    page._team = ["nemotron-lightning", "big-pickle"]
     page._populate_lead_combo()
     page._update_team_label()
 
@@ -169,7 +171,8 @@ def test_settings_page_can_restore_defaults_without_saving(page):
 
     page.reset_to_defaults()
 
-    assert page.lead_combo.currentIndex() == 0  # no lead
+    # Default lead is nemotron-lightning, not "(no lead)"
+    assert page.lead_combo.currentData() == "nemotron-lightning"
     assert page._team == config.RoomDefaults().members
     assert page.audit_checkbox.isChecked() is config.RoomDefaults().audit
     assert page.server_host_input.text() == config.ServerDefaults().host
@@ -178,8 +181,6 @@ def test_settings_page_can_restore_defaults_without_saving(page):
     assert page.phone_buzz_checkbox.isChecked() is config.NotificationDefaults().phone_buzz
     assert page.threshold_input.value() == config.NotificationDefaults().threshold_seconds
     assert "Restored defaults" in page.status.text()
-    assert page.save_button.isEnabled() is False
-    assert page.revert_button.isEnabled() is False
 
 
 def test_settings_page_marks_dirty_and_can_revert_unsaved_changes(page):
@@ -227,3 +228,71 @@ def test_settings_page_requests_config_paths_and_bootstraps_missing_file(qapp, c
     assert opened_dirs == [str(config_path.parent)]
     page.close()
     page.deleteLater()
+
+def test_restore_defaults_writes_nothing_until_save(page, config_path):
+    """reset_to_defaults said "without writing to disk" and then rewrote [models] immediately --
+    into config.PATH, ignoring the page's own config_path."""
+    from pathlib import Path
+
+    def snapshot(p):
+        p = Path(p)
+        return p.read_bytes() if p.exists() else None
+
+    before = (snapshot(config_path), snapshot(config.PATH))
+    page.reset_to_defaults()
+    assert (snapshot(config_path), snapshot(config.PATH)) == before
+
+    page.save()
+    assert "[models]" in Path(config_path).read_text()
+
+
+def test_disabling_a_model_outside_the_team_is_dirty_and_revertible(page):
+    outsider = next(name for name in page._enabled_models if name not in page._team)
+    enabled = dict(page._enabled_models, **{outsider: False})
+
+    page._on_team_saved(enabled, list(page._team))
+    assert page.is_dirty
+    assert page.save_button.isEnabled()
+
+    page.revert()
+    assert page._enabled_models[outsider] is True
+    assert not page.is_dirty
+
+
+def test_text_size_round_trips_and_rejects_junk(page, config_path):
+    page.text_size_selector.setCurrentIndex(page.text_size_selector.findData("18"))
+    assert page.is_dirty
+    assert page.save()
+    assert config.get_defaults(config_path).text_size == "18"
+
+    config.save_section("room", {"text_size": "huge"}, config_path)
+    assert config.get_defaults(config_path).text_size == config.RoomDefaults().text_size
+
+
+def test_settings_form_layout_bounds_at_1400(page, qapp):
+    """Task 3.7: Settings form fields do not stretch across full width at 1400x900."""
+    page.resize(1400, 900)
+    page.show()
+    qapp.processEvents()
+
+    assert page.server_host_input.width() <= 480
+    assert page.health_button.width() < 400
+
+
+@pytest.mark.parametrize("base", [14, 20])
+def test_no_settings_button_is_squeezed_below_its_label(qapp, page, base):
+    """Capping the page at 720px squeezed one row of seven buttons until every label was clipped."""
+    from PySide6.QtWidgets import QPushButton
+
+    from hexmind.qt import theme
+
+    qapp.setStyleSheet(theme.stylesheet(base))
+    try:
+        page.resize(1400, 900)
+        page.show()
+        qapp.processEvents()
+        squeezed = [b.text() for b in page.findChildren(QPushButton)
+                    if b.isVisible() and b.width() < b.sizeHint().width()]
+        assert squeezed == []
+    finally:
+        qapp.setStyleSheet("")

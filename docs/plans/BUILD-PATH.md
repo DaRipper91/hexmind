@@ -1,15 +1,15 @@
 # Build Path Map
 
-Where every planned operation actually stands. Re-checked 2026-09-29 against the current worktree
-(**uncommitted**), **708 tests passing** (Qt runs offscreen; all surfaces exercised with
+Where every planned operation actually stands. Re-checked 2026-09-29 against `main` at `044bd4f`
+(clean tree), **727 tests passing** (Qt runs offscreen; all surfaces exercised with
 `.[qt,server,dev]`).
 
 Derived from the commit history and the code, not from intention, and **re-checked rather than
 carried forward** — which is how the previous version came to claim `/add` and `/remove` worked when
 neither command existed. Where a workstream is partly built, it says which half.
 
-The design documents are [`OPENCODE-TEAM-PLAN.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/OPENCODE-TEAM-PLAN.md) (the original R1–R11
-requirements), [`TEAM-ASSEMBLY.md`](file:///home/daripper/Projects/hexmind/docs/TEAM-ASSEMBLY.md) (the pre-flight flow), and the [Flagship GUI Roadmap](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) (Phases 0–9).
+The design documents are [`OPENCODE-TEAM-PLAN.md`](../handbooks/OPENCODE-TEAM-PLAN.md) (the original R1–R11
+requirements), [`TEAM-ASSEMBLY.md`](../TEAM-ASSEMBLY.md) (the pre-flight flow), and the [Flagship GUI Roadmap](../archive/plans/2026-09-28-gui-flagship-roadmap.md) (Phases 0–9).
 This file is the state; those are the reason.
 
 Legend: **DONE** shipped · **PART** part built, gap named · **TODO** not started · **BLOCKED** cannot
@@ -35,7 +35,7 @@ proceed until something else lands.
 | P8 | WS-11 journals | **TODO** | nothing built |
 | P9 | WS-12 `/relay clean` | **DONE** | `reaping.py`; pushed, and used for real: it reaped the merged chain's worktree and kept the stage reports |
 | P10 | Qt front-end suite (`hexmind.qt`) | **DONE** | `HexmindWidget` (embeddable), `HexmindWindow` (`hexmind-gui` standalone workbench), `TaskGraphView` DAG visualizer, `CommandPalette`, `TimelinePanel`, `StatsPanel`; worker-threaded, zero style pollution; unblocks Aether's Room tab |
-| P11 / F0 | Security & Reliability (11 tasks) | **DONE** | Loopback `127.0.0.1` default, token auth for REST/WS, restricted CORS, directive validation, gate warning, Jules branch detection, corrupt stats recovery, turn serialization (see [2026-09-28-hexmind-fixes.md](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-hexmind-fixes.md)) |
+| P11 / F0 | Security & Reliability (11 tasks) | **DONE** | Loopback `127.0.0.1` default, token auth for REST/WS, restricted CORS, directive validation, gate warning, Jules branch detection, corrupt stats recovery, turn serialization (see [2026-09-28-hexmind-fixes.md](../archive/plans/2026-09-28-hexmind-fixes.md)) |
 
 Team Assembly steps 1–7 in `TEAM-ASSEMBLY.md`: **steps 1–5 DONE** — no default lead, mount-safe
 emits, the startup `LeadPicker`, the `Assembly` flow (`/recommend` → edit the room → `/go` →
@@ -198,23 +198,23 @@ that now exists.
 
 ## Flagship GUI Roadmap (Phases 0–9)
 
-The project's desktop GUI surface is organized into 10 phases governed by the [D3F Master Implementation Handbook](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and detailed plans in `docs/plans/`:
+The project's desktop GUI surface is organized into 10 phases governed by the [D3F Master Implementation Handbook](../handbooks/PONYTAIL-MASTER-HANDBOOK.md) and detailed plans in `docs/plans/`:
 
 | Phase | Title | Status | Scope & Deliverables | Document |
 | :--- | :--- | :--- | :--- | :--- |
-| **0** | **Honest Instruments** | **DONE** | Lead/audit truth, contrast-safe controls, palette activation | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **1** | **Shared Config** | **DONE** | Central TOML configuration and CLI/GUI defaults | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **2** | **Live Wire & Hand Brake** | **DONE** | Turn lifecycle, live meter, process-group cancellation | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **3** | **Bench Rail** | **DONE** | Room, Direct Line, Calibration Rack, and Settings navigation | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **4** | **Settings Page** | **DONE** | Persisted roster, audit, theme, and notification preferences | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **5** | **Agent Health** | **DONE** | Executable, declared-credential, startup-latency, and explicitly allowlisted read-only auth checks; unsupported providers are reported as not checked | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **6** | **Calibration Rack** | **DONE** | Registry metadata and threaded model probe | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **7** | **Direct Line** | **DONE** | Direct one-to-one chat and Ask Another comparison | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **8** | **Polish & Hook Activation** | **DONE** | Palette refresh, graph selection, search, drawer, and WCAG AA assertions | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
-| **9** | **Flagship Backlog** | **DONE** | Notifications, Live Tap streaming, and multi-round audit history | [`2026-09-28-gui-flagship-roadmap.md`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **0** | **Honest Instruments** | **DONE** | Lead/audit truth, contrast-safe controls, palette activation | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **1** | **Shared Config** | **DONE** | Central TOML configuration and CLI/GUI defaults | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **2** | **Live Wire & Hand Brake** | **DONE** | Turn lifecycle, live meter, process-group cancellation | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **3** | **Bench Rail** | **DONE** | Room, Direct Line, Calibration Rack, and Settings navigation | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **4** | **Settings Page** | **DONE** | Persisted roster, audit, theme, and notification preferences | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **5** | **Agent Health** | **DONE** | Executable, declared-credential, startup-latency, and explicitly allowlisted read-only auth checks; unsupported providers are reported as not checked | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **6** | **Calibration Rack** | **DONE** | Registry metadata and threaded model probe | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **7** | **Direct Line** | **DONE** | Direct one-to-one chat and Ask Another comparison | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **8** | **Polish & Hook Activation** | **DONE** | Palette refresh, graph selection, search, drawer, and WCAG AA assertions | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
+| **9** | **Flagship Backlog** | **DONE** | Notifications, Live Tap streaming, and multi-round audit history | [`2026-09-28-gui-flagship-roadmap.md`](../archive/plans/2026-09-28-gui-flagship-roadmap.md) |
 
 ### Preserved Roadmap Assets Invariant
-Static code audits (such as [`docs/audits/PONYTAIL-2026-09-28.md`](file:///home/daripper/Projects/hexmind/docs/audits/PONYTAIL-2026-09-28.md)) must **never** strip the following hooks as dead code:
+Static code audits (such as [`docs/audits/PONYTAIL-2026-09-28.md`](../audits/PONYTAIL-2026-09-28.md)) must **never** strip the following hooks as dead code:
 1. `hexmind/qt/palette.py: set_commands` & `Command.haystack` (Phase 8: Palette 2.0 / P10)
 2. `hexmind/qt/graph.py: select_task, fit, clear` (Phase 8: Wiring Diagram / P13)
 3. `hexmind/notify.py` (Phase 9: Come-back notifications via KDE Connect)

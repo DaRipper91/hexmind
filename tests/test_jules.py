@@ -335,6 +335,41 @@ def test_get_starting_branch_fallbacks(tmp_path):
     assert len(branch) > 0
 
 
+def test_get_starting_branch_returns_pushed_branch(tmp_path):
+    """When the current branch is pushed to origin, get_starting_branch returns it
+    instead of falling back to origin's default branch or 'main'."""
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    origin_dir = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", str(origin_dir)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "init", "-b", "feature-y"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "config", "user.email", "t@t"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "config", "user.name", "t"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "remote", "add", "origin", str(origin_dir)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "commit", "--allow-empty", "-qm", "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "push", "-u", "origin", "feature-y"], check=True, capture_output=True)
+
+    branch = get_starting_branch(str(repo_dir))
+    assert branch == "feature-y"
+
+
+def test_get_starting_branch_unreachable_origin_defaults_to_main(tmp_path, caplog):
+    """When origin is unreachable, get_starting_branch falls back to 'main' with a warning."""
+    repo_dir = tmp_path / "no_origin"
+    repo_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "dev", str(repo_dir)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "config", "user.email", "t@t"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "config", "user.name", "t"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_dir), "commit", "--allow-empty", "-qm", "init"], check=True, capture_output=True)
+    # No remote configured → ls-remote fails → fallback to 'main' with a warning
+
+    with caplog.at_level("WARNING", logger="hexmind.jules"):
+        branch = get_starting_branch(str(repo_dir))
+
+    assert branch == "main"
+    assert "defaulting to 'main'" in caplog.text
+
+
 def test_auditor_json_verdict_parsing():
     json_pass = '{"verdict": "PASS", "issues": []}'
     p, issues = parse_verdict(json_pass)

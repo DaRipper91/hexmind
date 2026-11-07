@@ -32,9 +32,12 @@ def rail(qapp, room):
     shell.deleteLater()
 
 
-def test_rail_is_fixed_width_and_starts_in_the_room(rail, room):
-    assert rail.navigation.minimumWidth() == 56
-    assert rail.navigation.maximumWidth() == 56
+def test_rail_fits_its_labels_and_starts_in_the_room(rail, room):
+    """A fixed 56px used to elide "Direct Line" to "Dir…ine" and "Calibration Rack" to "Ca…ck"."""
+    assert rail.navigation.minimumWidth() == rail.navigation.maximumWidth()
+    for button in rail.buttons.values():
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+        assert not button.icon().isNull()
     assert rail.stack.currentWidget() is room
     assert rail.current_workspace == "Room"
     assert rail.buttons["Room"].isChecked()
@@ -50,9 +53,11 @@ def test_rail_pages_are_in_roadmap_order(rail, room):
     ]
     navigation_layout = rail.navigation.layout()
     assert [
-        navigation_layout.itemAt(index).widget().text()
+        navigation_layout.itemAt(index).widget().toolTip()
         for index in range(len(rail.page_names))
     ] == list(rail.page_names)
+    assert [rail.buttons[name].text() for name in rail.page_names] == [
+        "Room", "Direct", "Models", "Settings"]
 
 
 @pytest.mark.parametrize("name", ("Direct Line", "Calibration Rack", "Settings"))
@@ -85,7 +90,9 @@ def test_workspace_api_selects_a_page_and_rejects_unknown_names(rail):
 
 def test_navigation_buttons_are_accessible(rail):
     for name, button in rail.buttons.items():
-        assert button.accessibleName() == f"Open {name} workspace"
+        # WCAG 2.5.3: the spoken name starts with the visible short label and still names the page.
+        assert button.accessibleName().startswith(button.text())
+        assert name in button.accessibleName()
         assert button.toolTip() == name
 
 
@@ -103,3 +110,19 @@ def test_rail_accepts_a_real_future_workspace(room):
 def test_rail_rejects_invalid_workspace_replacements(room, name):
     with pytest.raises(ValueError, match="Unsupported workspace pages"):
         BenchRail(room, workspace_pages={name: QWidget()})
+
+
+def test_the_selected_workspace_is_styled_and_named(rail):
+    from hexmind.qt import theme
+
+    assert "#benchRail QToolButton:checked" in theme.stylesheet()
+    models = rail.buttons["Calibration Rack"]
+    assert models.accessibleName().startswith(models.text())
+    assert models.toolTip() == "Calibration Rack"
+
+
+def test_every_rail_icon_ships_and_tints():
+    from hexmind.qt.rail import ICONS, RAIL
+
+    for _short, filename in RAIL.values():
+        assert "currentColor" in (ICONS / filename).read_text()

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -32,6 +32,7 @@ class SettingsPage(QWidget):
     config_file_requested = Signal(str)
     config_directory_requested = Signal(str)
     dirty_changed = Signal(bool)
+    closed = Signal()
 
     def __init__(self, config_path: str | Path | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -42,12 +43,13 @@ class SettingsPage(QWidget):
         self.setAccessibleName("Settings workspace")
 
         # Load enabled models and team from config
-        self._enabled_models = load_enabled_from_config()
+        self._enabled_models = load_enabled_from_config(self._config_path)
         self._team = config.get_defaults(self._config_path).members
         self._lead = config.get_defaults(self._config_path).lead
 
         title = QLabel("Settings", self)
         title.setAccessibleName("Settings heading")
+        title.setProperty("role", "title")
 
         # Lead selector - combo box populated from enabled models
         self.lead_combo = QComboBox(self)
@@ -57,24 +59,30 @@ class SettingsPage(QWidget):
 
         # Team selector - button opens ModelSelectorDialog
         self.team_button = QPushButton("Select Team…", self)
-        self.team_button.setAccessibleName("Select default team")
+        self.team_button.setAccessibleName("Select Team… for the default roster")
         self.team_button.setToolTip("Choose which enabled models are in the default roster")
         self.team_button.clicked.connect(self._open_team_selector)
         self.team_label = QLabel(self._format_team_label(), self)
         self.team_label.setAccessibleName("Default roster preview")
 
         self.audit_checkbox = QCheckBox("Enable peer audit by default", self)
-        self.audit_checkbox.setAccessibleName("Default peer audit")
 
         self.theme_selector = QComboBox(self)
         self.theme_selector.setAccessibleName("Theme")
         self.theme_selector.addItem("measured-dark")
 
+        self.text_size_selector = QComboBox(self)
+        for label, value in (("System font", "system"), ("Small (12 px)", "12"),
+                             ("Default (14 px)", "14"), ("Large (16 px)", "16"),
+                             ("Larger (18 px)", "18"), ("Largest (20 px)", "20")):
+            self.text_size_selector.addItem(label, value)
+        self.text_size_selector.setToolTip(
+            "System font follows your desktop's font size. Applies as soon as you save.")
+
         self.phone_buzz_checkbox = QCheckBox("Send a completion ping", self)
-        self.phone_buzz_checkbox.setAccessibleName("Completion notification")
 
         self.threshold_input = QSpinBox(self)
-        self.threshold_input.setAccessibleName("Notification threshold seconds")
+        self.threshold_input.setAccessibleName("Notify after (seconds)")
         self.threshold_input.setRange(0, 86_400)
         self.threshold_input.setSuffix(" seconds")
 
@@ -90,11 +98,22 @@ class SettingsPage(QWidget):
         self.server_token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.server_token_input.setPlaceholderText("Optional unless serving off localhost")
 
+        self.lead_combo.setMinimumWidth(280)
+        self.theme_selector.setMinimumWidth(280)
+        self.text_size_selector.setMinimumWidth(280)
+        self.server_host_input.setMinimumWidth(280)
+        self.server_token_input.setMinimumWidth(280)
+        self.threshold_input.setMaximumWidth(160)
+        self.server_port_input.setMaximumWidth(160)
+
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow("Default lead", self.lead_combo)
         form.addRow("Default roster", self._team_row())
         form.addRow("", self.audit_checkbox)
         form.addRow("Theme", self.theme_selector)
+        form.addRow("Text size", self.text_size_selector)
         form.addRow("Server host", self.server_host_input)
         form.addRow("Server port", self.server_port_input)
         form.addRow("Server token", self.server_token_input)
@@ -115,36 +134,57 @@ class SettingsPage(QWidget):
         self.open_config_dir_button = QPushButton("Open config folder", self)
         self.open_config_dir_button.clicked.connect(self.request_open_config_directory)
         self.save_button = QPushButton("Save settings", self)
+        self.save_button.setProperty("variant", "primary")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save)
+        self.close_button = QPushButton("Close Settings", self)
+        self.close_button.setAccessibleName("Close settings workspace")
+        self.close_button.setToolTip("Return to the room (Escape)")
+        self.close_button.clicked.connect(self.closed.emit)
+        # Three short rows by purpose. One row of seven needed ~1100px and the page is capped at
+        # 720, so every label was clipped. Save leads, being the action the page exists for.
         buttons = QHBoxLayout()
-        buttons.addWidget(self.reload_button)
-        buttons.addWidget(self.defaults_button)
-        buttons.addWidget(self.revert_button)
-        buttons.addWidget(self.open_config_button)
-        buttons.addWidget(self.open_config_dir_button)
-        buttons.addStretch()
         buttons.addWidget(self.save_button)
+        buttons.addWidget(self.revert_button)
+        buttons.addWidget(self.close_button)
+        buttons.addStretch()
+        reset_row = QHBoxLayout()
+        reset_row.addWidget(self.reload_button)
+        reset_row.addWidget(self.defaults_button)
+        reset_row.addStretch()
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addWidget(
-            QLabel(
-                "These preferences apply when a new Hexmind GUI session starts. "
-                "They do not replace the active Room's team or audit state.",
-                self,
-            )
-        )
-        layout.addLayout(form)
-        layout.addWidget(self.status)
-        layout.addLayout(buttons)
         self.health_status = QLabel("", self)
         self.health_status.setAccessibleName("Agent health")
         self.health_button = QPushButton("Check agent health", self)
         self.health_button.setAccessibleName("Check agent health")
         self.health_button.clicked.connect(self.check_health)
-        layout.addWidget(self.health_button)
-        layout.addWidget(self.health_status)
+        health_row = QHBoxLayout()
+        health_row.addWidget(self.open_config_button)
+        health_row.addWidget(self.open_config_dir_button)
+        health_row.addWidget(self.health_button)
+        health_row.addStretch()
+
+        page = QWidget(self)
+        page.setMaximumWidth(720)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.addWidget(title)
+        intro = QLabel(
+            "These preferences apply when a new Hexmind GUI session starts. "
+            "They do not replace the active Room's team or audit state.",
+            page,
+        )
+        intro.setWordWrap(True)
+        page_layout.addWidget(intro)
+        page_layout.addLayout(form)
+        page_layout.addWidget(self.status)
+        page_layout.addLayout(buttons)
+        page_layout.addLayout(reset_row)
+        page_layout.addLayout(health_row)
+        page_layout.addWidget(self.health_status)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(page)
         layout.addStretch()
         self._connect_dirty_inputs()
         self.reload()
@@ -218,6 +258,7 @@ class SettingsPage(QWidget):
         self.lead_combo.currentTextChanged.connect(self._on_form_edited)
         self.audit_checkbox.toggled.connect(self._on_form_edited)
         self.theme_selector.currentTextChanged.connect(self._on_form_edited)
+        self.text_size_selector.currentIndexChanged.connect(self._on_form_edited)
         self.server_host_input.textChanged.connect(self._on_form_edited)
         self.server_port_input.valueChanged.connect(self._on_form_edited)
         self.server_token_input.textChanged.connect(self._on_form_edited)
@@ -231,11 +272,15 @@ class SettingsPage(QWidget):
             "members": ", ".join(self._team),
             "audit": self.audit_checkbox.isChecked(),
             "theme": self.theme_selector.currentText(),
+            "text_size": self.text_size_selector.currentData(),
             "server_host": self.server_host_input.text(),
             "server_port": self.server_port_input.value(),
             "server_token": self.server_token_input.text(),
             "phone_buzz": self.phone_buzz_checkbox.isChecked(),
             "threshold": self.threshold_input.value(),
+            # Without this, toggling only a model outside the team never made the page dirty, so
+            # Save stayed disabled and the change could not be kept.
+            "disabled": tuple(sorted(name for name, on in self._enabled_models.items() if not on)),
         }
 
     def _apply_state(self, state: dict[str, object]) -> None:
@@ -257,11 +302,14 @@ class SettingsPage(QWidget):
             if self.theme_selector.findText(theme) < 0:
                 self.theme_selector.addItem(theme)
             self.theme_selector.setCurrentText(theme)
+            self._select_text_size(str(state.get("text_size", config.RoomDefaults().text_size)))
             self.server_host_input.setText(str(state["server_host"]))
             self.server_port_input.setValue(int(state["server_port"]))
             self.server_token_input.setText(str(state["server_token"]))
             self.phone_buzz_checkbox.setChecked(bool(state["phone_buzz"]))
             self.threshold_input.setValue(int(state["threshold"]))
+            disabled = set(state.get("disabled", ()))
+            self._enabled_models = {name: name not in disabled for name in self._enabled_models}
             self._update_team_label()
         finally:
             self._tracking_dirty = True
@@ -291,13 +339,21 @@ class SettingsPage(QWidget):
         )
         return answer == QMessageBox.StandardButton.Discard
 
+    def _select_text_size(self, value: str) -> None:
+        index = self.text_size_selector.findData(value)
+        self.text_size_selector.setCurrentIndex(index if index >= 0 else
+                                                self.text_size_selector.findData("14"))
+
+    @property
+    def text_size(self) -> str:
+        return self.text_size_selector.currentData()
+
     def reset_to_defaults(self) -> None:
         """Restore the form to schema defaults without writing to disk."""
         room = config.RoomDefaults()
         server = config.ServerDefaults()
         notifications = config.NotificationDefaults()
         self._enabled_models = {name: True for name in REGISTRY.names()}
-        save_enabled_to_config(self._enabled_models)
         self._team = list(room.members)
         self._lead = room.lead
         self._populate_lead_combo()
@@ -305,6 +361,7 @@ class SettingsPage(QWidget):
         if self.theme_selector.findText(room.theme) < 0:
             self.theme_selector.addItem(room.theme)
         self.theme_selector.setCurrentText(room.theme)
+        self._select_text_size(room.text_size)
         self.server_host_input.setText(server.host)
         self.server_port_input.setValue(server.port)
         self.server_token_input.setText(server.token)
@@ -333,7 +390,7 @@ class SettingsPage(QWidget):
         server = config.get_server_defaults(self._config_path)
         notifications = config.get_notification_defaults(self._config_path)
 
-        self._enabled_models = load_enabled_from_config()
+        self._enabled_models = load_enabled_from_config(self._config_path)
         self._team = list(room.members)
         self._lead = room.lead
         self._populate_lead_combo()
@@ -344,6 +401,7 @@ class SettingsPage(QWidget):
                 "members": ", ".join(room.members),
                 "audit": room.audit,
                 "theme": room.theme,
+                "text_size": room.text_size,
                 "server_host": server.host,
                 "server_port": server.port,
                 "server_token": server.token,
@@ -389,6 +447,7 @@ class SettingsPage(QWidget):
                     "members": members,
                     "audit": self.audit_checkbox.isChecked(),
                     "theme": self.theme_selector.currentText(),
+                    "text_size": self.text_size_selector.currentData(),
                 },
                 self._config_path,
             )
@@ -409,7 +468,7 @@ class SettingsPage(QWidget):
                 },
                 self._config_path,
             )
-            save_enabled_to_config(self._enabled_models)
+            save_enabled_to_config(self._enabled_models, self._config_path)
         except OSError as exc:
             self.status.setText(f"Could not save settings: {exc}")
             return False
@@ -435,6 +494,7 @@ class SettingsPage(QWidget):
                 "members": room.members,
                 "audit": room.audit,
                 "theme": room.theme,
+                "text_size": room.text_size,
             },
             path,
         )
@@ -456,7 +516,7 @@ class SettingsPage(QWidget):
             path,
         )
         # Also save enabled models defaults
-        save_enabled_to_config({name: True for name in REGISTRY.names()})
+        save_enabled_to_config({name: True for name in REGISTRY.names()}, path)
         return path
 
     def request_open_config_file(self) -> None:
@@ -475,10 +535,17 @@ class SettingsPage(QWidget):
             return
         self.health_button.setEnabled(False)
         self._health_scanner = HealthScanner(self)
-        self._health_scanner.finished.connect(self._show_health)
+        self._health_scanner.results_ready.connect(self._show_health)
         self._health_scanner.finished.connect(self._health_scanner.deleteLater)
-        self._health_scanner.finished.connect(lambda _: setattr(self, "_health_scanner", None))
+        self._health_scanner.finished.connect(lambda: setattr(self, "_health_scanner", None))
         self._health_scanner.start()
+
+    def keyPressEvent(self, event) -> None:  # Qt's spelling, not ours
+        """Escape closes the settings workspace and returns to the room."""
+        if event.key() == Qt.Key.Key_Escape:
+            self.closed.emit()
+        else:
+            super().keyPressEvent(event)
 
     def _show_health(self, results: list) -> None:
         ready = sum(result.available and result.credential_ready for result in results)

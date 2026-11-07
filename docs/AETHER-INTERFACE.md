@@ -1,12 +1,13 @@
 # Aether Integration — Shipped Interface Contract
 
-Aether (`~/Projects/Aether`) is a PySide6 host whose three tabs are **Room** (Hexmind),
-**Deck** (agentdeck) and Workspace. Deck and Workspace are shipped. **Room is unblocked**:
-the `hexmind.qt` module is implemented, tested (60 Qt tests pass), and shipped in `hexmind`.
+[Aether](https://github.com/DaRipper91/Aether) is a PySide6 host whose three tabs are **Room**
+(Hexmind), **Deck** (agentdeck) and **Workspace**. All three are shipped and embedding. The
+`hexmind.qt` module is implemented, tested (**242 Qt tests pass** across `tests/test_qt*.py`),
+and shipped in `hexmind`.
 
 ## The Shipped Interface
 
-The Qt front-end module [`hexmind.qt`](file:///home/daripper/Projects/hexmind/hexmind/qt/__init__.py) exports [`HexmindWidget`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py):
+The Qt front-end module [`hexmind.qt`](../hexmind/qt/__init__.py) exports [`HexmindWidget`](../hexmind/qt/widget.py):
 
 ```python
 from hexmind.qt import HexmindWidget
@@ -44,28 +45,20 @@ So the contract is exactly:
   are the two deck uses. Absent signals, the embed still works; they only matter if the
   Hexmind UI wants to open/dock workspace files.
 
-## Packaging changes this repo must make
+## Packaging — shipped
 
-Hexmind's only dependency today is `textual>=0.80`
-(`pyproject.toml` → `dependencies`). PySide6 is not present.
+Both of the packaging gaps this doc originally warned about are closed.
 
-- Add a `qt` extra, keep the base lean:
+- The `qt` extra exists and keeps the base lean. Base `dependencies` is still just
+  `textual>=0.80`; the extra is
+  `qt = ["PySide6>=6.5", "pyqtgraph>=0.13", "numpy>=1.26", "qtawesome>=1.3", "qdarkstyle>=3.2"]`.
+  PySide6 is a ~100 MB download that every Textual TUI user would otherwise be forced to take.
+- `[tool.setuptools] packages = ["hexmind", "hexmind.qt"]` — the subpackage is listed explicitly,
+  so a new one has to be a deliberate edit rather than a silent omission.
+- Aether's `room` extra already reads `room = ["hexmind[qt]"]` (`Aether/pyproject.toml:16`).
 
-  ```toml
-  [project.optional-dependencies]
-  qt = ["PySide6>=6.5"]
-  ```
-
-  Pulling PySide6 into base `dependencies` would force it on every Textual TUI user; the
-  QT work is strictly opt-in. (Deck's own `agentdeck[qt]` works the same way.)
-- **Wheel packaging is explicit in this repo**: `[tool.setuptools] packages = ["hexmind"]`.
-  A new `hexmind/qt/` subpackage will silently not ship unless it is added there. This is
-  the kind of gap that passes everything locally and fails on a fresh install — verify
-  with a clean wheel install, not the editable `.venv`.
-
-Once the `qt` extra exists, the Aether side flips `room = ["hexmind"]`
-(`Aether/pyproject.toml:16`) to `room = ["hexmind[qt]"]` and its README follows. That is
-Aether's problem, not this repo's — included here so the timing is understood.
+**Still verify packaging with a clean wheel install, not the editable `.venv`.** The silent-omission
+failure mode this doc describes has already bitten once in this repo.
 
 ## Definition of done for this repo — **all three met**
 
@@ -77,9 +70,9 @@ Aether's problem, not this repo's — included here so the timing is understood.
    `HexmindWidget(parent)` also works the way `RoomView` calls it (`widget_cls(self)`).
 2. **The clean wheel includes `hexmind/qt/`.** Verified by building a wheel and listing it:
    `hexmind/qt/__init__.py` and `hexmind/qt/widget.py` are both in the archive, alongside
-   `models.toml` and the four chain files.
-3. **`tests/test_qt.py` — 14 tests**, offscreen, mirroring Aether's own PySide6 test style, and
-   skipped wholesale when PySide6 is absent.
+   `models.toml` and the five chain files.
+3. **The Qt suite is green** — 242 tests across the eleven `tests/test_qt*.py` modules, offscreen,
+   skipped wholesale when PySide6 is absent. `tests/test_qt.py` alone is 29 of them.
 
    Two things the smoke line needs cannot be true in-process — this suite already owns a
    `QApplication` and always closes its widgets — so it runs as a subprocess test. It failed twice
@@ -91,7 +84,7 @@ Aether's problem, not this repo's — included here so the timing is understood.
 
 ## What shipped
 
-`hexmind/qt/widget.py`, a [`HexmindWidget(QWidget)`](file:///home/daripper/Projects/hexmind/hexmind/qt/widget.py) with:
+`hexmind/qt/widget.py`, a [`HexmindWidget(QWidget)`](../hexmind/qt/widget.py) with:
 
 | surface | notes |
 | :--- | :--- |
@@ -133,7 +126,7 @@ is the same default `--once` and the TUI use.
 
 ## Notes
 
-- Tracked as **P10** in [`docs/plans/BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/plans/BUILD-PATH.md).
-- Hexmind also ships a standalone desktop window ([`HexmindWindow`](file:///home/daripper/Projects/hexmind/hexmind/qt/app.py) via `hexmind-gui`).
+- Tracked as **P10** in [`docs/plans/BUILD-PATH.md`](plans/BUILD-PATH.md).
+- Hexmind also ships a standalone desktop window ([`HexmindWindow`](../hexmind/qt/app.py) via `hexmind-gui`).
 - The TUI and server keep working untouched — Qt is purely additive.
 - The Flagship GUI Roadmap (Phases 0–9) extends this foundation with interactive DAG graph views, command palette, and timeline drawers while preserving the one-way embedding contract.

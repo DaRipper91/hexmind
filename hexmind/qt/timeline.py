@@ -280,7 +280,7 @@ class TimelinePanel(QWidget):
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         self.summary = QLabel()
-        self.summary.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+        self.summary.setProperty("role", "heading")
         head.addWidget(self.summary, 1)
         self.auditedOnly = QCheckBox("audited only")
         self.auditedOnly.setChecked(self._audited_only)
@@ -291,15 +291,18 @@ class TimelinePanel(QWidget):
 
         self.caption = QLabel(CAPTION)
         self.caption.setWordWrap(True)
-        self.caption.setStyleSheet(f"color: {theme.INK_FAINT}; font-size: 11px;")
+        self.caption.setProperty("role", "caption")
         lay.addWidget(self.caption)
 
         self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._size_columns()
         lay.addWidget(self.table, 1)
 
     # -- data
@@ -374,11 +377,12 @@ class TimelinePanel(QWidget):
 
     def _size_columns(self) -> None:
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setMinimumSectionSize(64)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(0, 160)
         for column in (1, 2, 3, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-        self.table.resizeColumnsToContents()
 
 
 __all__ = [

@@ -146,6 +146,93 @@ def test_task_sheet_copies_output(monkeypatch):
     asyncio.run(go())
 
 
+def test_task_sheet_termux_copy_notifies_only_after_success(monkeypatch):
+    """termux_copy is fire-and-forget; 'Copied task output' must not fire until the copy
+    actually succeeds, and never before it starts (regression for the premature notify bug)."""
+    import hexmind.tui as tui
+
+    # termux-clipboard-set exists → termux_copy will be called
+    monkeypatch.setattr(tui.shutil, "which", lambda cmd: "/usr/bin/termux-clipboard-set" if cmd == "termux-clipboard-set" else None)
+
+    plan = json.dumps({"reply": "on it", "tasks": [{"id": "a", "agent": "claude", "title": "alpha"}]})
+
+    notifications = []
+    copied = []
+
+    class FakeProc:
+        returncode = 0
+
+        async def communicate(self, data=None):
+            await asyncio.sleep(0.2)  # delay so the copy is visibly in progress
+            return (b"", b"")
+
+        def kill(self):
+            self.returncode = -1
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProc()
+
+    monkeypatch.setattr(tui.asyncio, "create_subprocess_exec", fake_exec)
+
+    async def go():
+        app = HexmindApp(FakeBackend(plan), ["claude"], "claude", "test")
+        app.notify = lambda message, **kwargs: notifications.append(message)
+        app.copy_to_clipboard = copied.append
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.press(*"go", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.press("escape", "v", "enter")
+            await pilot.click("#copy")
+            # notify must NOT have fired yet — termux_copy is still running
+            assert notifications == [], f"notify must not fire before copy completes: {notifications}"
+            await app.workers.wait_for_complete()
+            assert "Copied task output" in notifications, notifications
+            assert copied == [app.tasks["1.a"].output]
+
+    asyncio.run(go())
+
+
+def test_task_sheet_termux_copy_warns_on_timeout(monkeypatch):
+    """A termux-clipboard-set timeout must surface a warning, not silently pass (regression
+    for the swallowed TimeoutError)."""
+    import hexmind.tui as tui
+
+    monkeypatch.setattr(tui.shutil, "which", lambda cmd: "/usr/bin/termux-clipboard-set" if cmd == "termux-clipboard-set" else None)
+
+    plan = json.dumps({"reply": "on it", "tasks": [{"id": "a", "agent": "claude", "title": "alpha"}]})
+
+    notifications = []
+
+    class FakeProc:
+        returncode = None  # process still running
+
+        async def communicate(self, data=None):
+            await asyncio.sleep(60)  # never completes → timeout
+
+        def kill(self):
+            self.returncode = -1
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProc()
+
+    monkeypatch.setattr(tui.asyncio, "create_subprocess_exec", fake_exec)
+
+    async def go():
+        app = HexmindApp(FakeBackend(plan), ["claude"], "claude", "test")
+        app.notify = lambda message, **kwargs: notifications.append(message)
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.press(*"go", "enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.press("escape", "v", "enter")
+            await pilot.click("#copy")
+            await app.workers.wait_for_complete()
+            assert any("timed out" in n for n in notifications), f"expected timeout warning, got: {notifications}"
+
+    asyncio.run(go())
+
+
 # ---------- /team roster (WS-10) ----------
 # One control surface for sleep / wake / lead, over the same state the /sleep, /wake and /lead
 # commands change. INVARIANT S-1: a model holding a live task cannot be slept, so the control is

@@ -13,9 +13,12 @@ not freeze while a model thinks.
 Aether (`~/Projects/Aether`) embeds this in its Room tab. The import is one-way: Hexmind never
 imports Aether, and this widget runs standalone.
 """
+import logging
 from importlib import import_module
 
 from .widget import HexmindWidget
+
+logger = logging.getLogger(__name__)
 
 # Each panel is guarded separately rather than in one try/except. They are presentation only, but they
 # fail for different reasons -- graph and timeline need nothing beyond PySide6, stats optionally
@@ -32,5 +35,5 @@ for _module, _names in (
         globals().update({_name: getattr(import_module(_module, __name__), _name) for _name in _names})
         __all__.extend(_names)
     except Exception:  # pragma: no cover - panels are presentation only
-        pass
+        logger.exception("Failed to import optional panel %s", _module)
 del _module, _names

@@ -68,3 +68,94 @@ def test_direct_line_rejects_empty_prompt(qapp):
     assert "Enter a prompt" in line.status.text()
     line.close()
     line.deleteLater()
+
+
+def test_shutdown_cancels_a_running_async_request(qapp):
+    """Closing the window mid-request used to destroy a running QThread, which aborts the process."""
+    import asyncio
+
+    started = []
+
+    async def runner(model, prompt):
+        started.append(model)
+        await asyncio.sleep(30)
+        return "never"
+
+    line = DirectLine(chat_runner=runner)
+    line.prompt.setText("hello")
+    line.ask()
+    thread = line._chat_thread
+    deadline = QEventLoop()
+    QTimer.singleShot(300, deadline.quit)
+    deadline.exec()
+    assert started
+
+    line.shutdown()
+    assert not thread.isRunning()
+    line.close()
+    line.deleteLater()
+
+
+def test_output_is_text_and_labelled_with_the_model_asked(qapp):
+    answer = "<b>x</b> & <script>"
+
+    def runner(model, prompt):
+        return answer
+
+    line = DirectLine(chat_runner=runner)
+    asked = line.primary_model.currentText()
+    line.prompt.setText("<i>hi</i>")
+    line.ask()
+    line.primary_model.setCurrentIndex(line.primary_model.count() - 1)  # changed while waiting
+    _wait_for_response(line)
+
+    text = line.transcript.toPlainText()
+    assert "<i>hi</i>" in text
+    assert answer in text
+    assert f"{asked}\n{answer}" in text
+    line.close()
+    line.deleteLater()
+
+
+def test_default_runner_uses_the_given_cwd(qapp, monkeypatch):
+    from hexmind.qt import chat
+
+    seen = []
+
+    class Backend:
+        def __init__(self, cwd, timeout):
+            seen.append(cwd)
+
+        async def run(self, model, prompt):
+            return "ok"
+
+    monkeypatch.setattr(chat, "DirectBackend", Backend)
+    import asyncio
+
+    assert asyncio.run(chat._default_chat("/some/room")("m", "p")) == "ok"
+    assert seen == ["/some/room"]
+
+
+def test_controls_are_named_by_their_visible_labels(qapp):
+    """WCAG 2.5.3: what a screen reader says must start with what the screen shows."""
+    from hexmind.qt.models import CalibrationRack
+    from hexmind.qt.settings import SettingsPage
+
+    line, rack, page = DirectLine(), CalibrationRack(), SettingsPage()
+
+    def spoken(w):
+        return w.accessibleName() or w.text()
+
+    assert line.primary_label.buddy() is line.primary_model
+    assert line.comparison_label.buddy() is line.comparison_model
+    assert spoken(line.primary_model).startswith("Ask")
+    assert spoken(line.comparison_model).startswith("Ask another")
+    assert spoken(line.ask_button) == "Ask"
+    assert spoken(rack.probe_button) == "Run probe"
+    assert spoken(page.team_button).startswith("Select Team…")
+    assert spoken(page.audit_checkbox) == page.audit_checkbox.text()
+    assert spoken(page.phone_buzz_checkbox) == page.phone_buzz_checkbox.text()
+    assert spoken(page.threshold_input).startswith("Notify after")
+    for w in (line, rack, page):
+        w.close()
+        w.deleteLater()

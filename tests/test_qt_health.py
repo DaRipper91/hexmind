@@ -112,3 +112,26 @@ def test_health_scanner_reports_declared_environment_readiness(monkeypatch):
     ready = health.HealthScanner().scan()[0]
     assert ready.credential_ready is True
     assert ready.credential_status == "declared"
+
+
+def test_scanner_reports_results_before_qthread_finished(monkeypatch):
+    """`finished = Signal(list)` used to shadow QThread.finished; deleteLater hung off it fired
+    from inside run(). Results now arrive on their own signal, and finished is Qt's."""
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    monkeypatch.setattr(health.shutil, "which", lambda cli: None)
+    scanner = health.HealthScanner()
+    order = []
+    scanner.results_ready.connect(lambda results: order.append(("results", len(results))))
+    scanner.finished.connect(lambda: order.append(("finished", scanner.isRunning())))
+
+    loop = QEventLoop()
+    scanner.finished.connect(loop.quit)
+    QTimer.singleShot(5_000, loop.quit)
+    scanner.start()
+    loop.exec()
+
+    assert [kind for kind, _ in order] == ["results", "finished"]
+    assert order[1][1] is False

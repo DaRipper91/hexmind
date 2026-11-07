@@ -12,6 +12,7 @@ class LivePane(QPlainTextEdit):
         self.setReadOnly(True)
         self.setAccessibleName("Live Tap")
         self.setToolTip("Turn lifecycle and response events as they arrive.")
+        self.setPlaceholderText("Live tap output appears during a turn.")
         self.setMaximumBlockCount(2000)
 
     def append_event(self, agent: str, line: str) -> None:
