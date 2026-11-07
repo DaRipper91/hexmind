@@ -1,4 +1,4 @@
-# AGENTS.md
+# Hexmind — agent instructions
 
 Hexmind is a Python 3.11+ package: a multi-model agent orchestrator where a lead model plans a
 task graph, tasks fan out across real AI CLIs, and a peer auditor reviews each task. Three
@@ -42,7 +42,7 @@ Baseline without ling-flash: **725 passed, 2 failed, 727 collected.**
 
 ## Source of truth and layout
 
-- `hexmind/models.toml` is THE roster (45 models; `jules`, `qwen`, `qwen-large` are opt-in via
+- `hexmind/models.toml` is THE roster (`jules`, `qwen`, `qwen-large` are opt-in via
   `--with`). `models.py` generates the prose the lead reads, the per-CLI argv, the TUI colours
   and the hcom exclusion from it. **Never hand-write prose about a model — edit `models.toml`.**
   `test_roster_is_generated_from_the_registry_not_hand_written` guards this.
