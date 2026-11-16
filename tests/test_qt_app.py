@@ -19,7 +19,7 @@ import pytest
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from hexmind.qt import app as A
 from hexmind.qt import theme
@@ -74,6 +74,8 @@ def room(qapp):
 def window(qapp, room):
     w = A.HexmindWindow(room=room)
     yield w
+    # A test that left Settings dirty would otherwise block teardown on a real "Discard?" dialog.
+    w.settings_page._confirm_discard = lambda action: True
     w.close()
     w.deleteLater()
 
@@ -139,6 +141,38 @@ def test_close_reaches_the_central_widget(qapp, room):
     room.closeEvent = lambda event: closed.append(event)
     A.HexmindWindow(room=room).close()
     assert len(closed) == 1
+
+
+def test_quitting_with_unsaved_settings_asks_first(qapp, room, monkeypatch):
+    window = A.HexmindWindow(room=room)
+    window.show()
+    window.settings_page.server_host_input.setText("0.0.0.0")
+    assert window.settings_page.is_dirty
+
+    monkeypatch.setattr(window.settings_page, "_confirm_discard", lambda action: False)
+    assert window.close() is False
+    assert window.isVisible()
+
+    monkeypatch.setattr(window.settings_page, "_confirm_discard", lambda action: True)
+    assert window.close() is True
+    window.deleteLater()
+
+
+def test_the_rail_comes_before_the_room_in_the_tab_chain(qapp, room):
+    room.leadBox = QComboBox(room)
+    window = A.HexmindWindow(room=room)
+    last_rail_button = list(window.bench_rail.buttons.values())[-1]
+    assert last_rail_button.nextInFocusChain() is room.leadBox
+    window.close()
+    window.deleteLater()
+
+
+def test_saving_a_text_size_restyles_the_app_live(qapp, window, monkeypatch):
+    applied = []
+    monkeypatch.setattr(qapp, "setStyleSheet", applied.append)
+    monkeypatch.setattr(type(window.settings_page), "text_size", property(lambda self: "20"))
+    window._on_settings_saved()
+    assert applied and "font-size: 20px" in applied[-1]
 
 
 # ---------- menus are wired, and wired to duck-typed calls ----------

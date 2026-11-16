@@ -106,6 +106,53 @@ def test_reads_claude_and_codex_agent_files(tmp_path):
     assert read_agent_file(str(tm)) == "Codex thing."
 
 
+# ---------- resolve_agent_file: path-shaped refs are read as written (trust boundary) ----------
+
+def test_resolve_agent_file_reads_existing_outside_agent_dirs(tmp_path, monkeypatch):
+    """Path-shaped `from =` references are read verbatim wherever they point — this is the
+    documented trust boundary: chain files are user-authored and stages run as the user."""
+    import hexmind.relay as relay
+
+    outside = tmp_path / "secrets" / "agent.toml"
+    outside.parent.mkdir()
+    outside.write_text('instructions = "read me"\n')
+
+    assert relay.resolve_agent_file(str(outside)) == outside
+
+
+def test_from_path_outside_agent_dirs_loads_in_chain(tmp_path, monkeypatch):
+    """A chain whose `from =` names an existing file outside AGENT_DIRS loads that file as the
+    stage's instructions (documented trust boundary, not a sandbox escape)."""
+    import hexmind.relay as relay
+
+    outside = tmp_path / "outside_agent.toml"
+    outside.write_text('instructions = "read me"\n')
+
+    d = tmp_path / "chains"
+    d.mkdir()
+    (d / "evil.toml").write_text(f'[[stages]]\nname = "a"\nfrom = "{outside}"\n')
+    monkeypatch.setattr(relay, "CHAIN_DIRS", [d])
+
+    found = relay.resolve_agent_file(str(outside))
+    assert found == outside
+
+
+def test_from_path_inside_agent_dirs_still_works(tmp_path, monkeypatch):
+    """A path-shaped `from =` that resolves inside AGENT_DIRS still loads (confinement is not
+    a blanket rejection of paths)."""
+    import hexmind.relay as relay
+
+    inside_dir = relay.AGENT_DIRS[0]
+    inside_dir.mkdir(parents=True, exist_ok=True)
+    inside = inside_dir / "recon.md"
+    inside.write_text("---\nname: recon\n---\n\ngenuine recon instructions\n")
+
+    try:
+        assert relay.resolve_agent_file(str(inside)) == inside
+    finally:
+        inside.unlink(missing_ok=True)
+
+
 def test_apostrophe_in_relay_goal_does_not_crash(tmp_path):
     backend = RelayFake(str(tmp_path))
     orch = Orchestrator(backend, ["claude", "agy"], "claude")

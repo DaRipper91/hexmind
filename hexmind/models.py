@@ -419,6 +419,14 @@ class Registry:
         return await asyncio.to_thread(self.available)
 
 
+AGENT_COLOR: dict[str, str] = {}
+try:
+    AGENT_COLOR.update(Registry.load().colors())
+    AGENT_COLOR["you"] = "bold white"
+except Exception:
+    pass
+
+
 def publish(registry: Registry, paths: list[Path] | None = None) -> list[str]:
     """Re-read the registry and republish every value derived from it at import time. Returns the
     member names that changed.
@@ -449,7 +457,11 @@ def publish(registry: Registry, paths: list[Path] | None = None) -> list[str]:
             backends.GENERATED.add(name)
     backends.LOCAL_MODELS.clear()
     backends.LOCAL_MODELS.update({n: m.model for n, m in registry.models.items() if m.verify == "ollama"})
-    tui.AGENT_COLOR.clear()
-    tui.AGENT_COLOR.update(registry.colors())
-    tui.AGENT_COLOR["you"] = "bold white"
+    AGENT_COLOR.clear()
+    AGENT_COLOR.update(registry.colors())
+    AGENT_COLOR["you"] = "bold white"
+    if tui.AGENT_COLOR is not AGENT_COLOR:
+        tui.AGENT_COLOR.clear()
+        tui.AGENT_COLOR.update(AGENT_COLOR)
     return changed
+

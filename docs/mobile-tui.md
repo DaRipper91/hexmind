@@ -16,22 +16,22 @@ Hexmind's current TUI implementation lives entirely in `hexmind/tui.py`. While f
 ### 1.1 Layout & Widget Sizing Issues
 
 1. **Fixed Horizontal Split Ratio (`#left` 2fr vs `#right` 1fr)**
-   - **Location:** [`hexmind/tui.py:30-31`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L30-L31), [`hexmind/tui.py:51-59`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L51-L59)
+   - **Location:** [`hexmind/tui.py:30-31`](../hexmind/tui.py#L30-L31), [`hexmind/tui.py:51-59`](../hexmind/tui.py#L51-L59)
    - **Problem:** At 48 columns (typical Pixel portrait terminal), `#left` receives ~31 columns and `#right` receives only ~16 columns (minus 1 for the vertical border). Inside a 15-column width:
-     - `#team` ([`hexmind/tui.py:56`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L56)) wraps each member entry into 3–4 fragmented lines.
-     - `#tasks` DataTable ([`hexmind/tui.py:57`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L57)) attempts to render 5 columns (`task`, `agent`, `status`, `audit`, `title`). Only the first column and half of the second column are visible; the rest is clipped or forces horizontal scrolling.
-     - `#detail` RichLog ([`hexmind/tui.py:58`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L58)) receives 15 columns, rendering Markdown output as a tall, 1-word-per-line vertical sliver.
+     - `#team` ([`hexmind/tui.py:56`](../hexmind/tui.py#L56)) wraps each member entry into 3–4 fragmented lines.
+     - `#tasks` DataTable ([`hexmind/tui.py:57`](../hexmind/tui.py#L57)) attempts to render 5 columns (`task`, `agent`, `status`, `audit`, `title`). Only the first column and half of the second column are visible; the rest is clipped or forces horizontal scrolling.
+     - `#detail` RichLog ([`hexmind/tui.py:58`](../hexmind/tui.py#L58)) receives 15 columns, rendering Markdown output as a tall, 1-word-per-line vertical sliver.
      - `#left` (chat) receives only ~31 columns, severely truncating code snippets, bullet lists, and escalation panels.
 
 2. **Vertical Stack Collapse under Soft Keyboard**
-   - **Location:** [`hexmind/tui.py:32-35`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L32-L35)
+   - **Location:** [`hexmind/tui.py:32-35`](../hexmind/tui.py#L32-L35)
    - **Problem:** When the on-screen keyboard (Gboard) opens, available rows drop to 12–18 in portrait (and 4–8 in landscape).
-     - `#team` has `height: auto` ([`line 33`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L33)), which occupies 4–6 rows depending on team size and wrapping.
+     - `#team` has `height: auto` ([`line 33`](../hexmind/tui.py#L33)), which occupies 4–6 rows depending on team size and wrapping.
      - Together with Header (1 row), Footer (1 row), and input borders, the remaining height for `#tasks` (1fr) and `#detail` (1fr) drops to 1–2 rows each. Neither widget can display content or scroll meaningfully.
      - In landscape with keyboard (4–8 rows), the app attempts to render Header, Footer, Input, Team, Tasks, and Detail simultaneously, overflowing the screen and clipping the input field entirely.
 
 3. **DataTable Column Definition Overload**
-   - **Location:** [`hexmind/tui.py:63-64`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L63-L64), [`hexmind/tui.py:113`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L113)
+   - **Location:** [`hexmind/tui.py:63-64`](../hexmind/tui.py#L63-L64), [`hexmind/tui.py:113`](../hexmind/tui.py#L113)
    - **Problem:** Columns are added unconditionally:
      ```python
      for col in ("task", "agent", "status", "audit", "title"):
@@ -40,11 +40,11 @@ Hexmind's current TUI implementation lives entirely in `hexmind/tui.py`. While f
      At 40–60 columns, 5 columns cannot fit even if `#right` occupied 100% width. Minimum readable widths (`task`: 5, `agent`: 8, `status`: 9, `audit`: 12, `title`: 25) require at least 65 columns including cell borders and padding.
 
 4. **Header Subtitle Truncation**
-   - **Location:** [`hexmind/tui.py:42`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L42)
+   - **Location:** [`hexmind/tui.py:42`](../hexmind/tui.py#L42)
    - **Problem:** `self.sub_title = f"{backend_name} backend · lead: {lead} · audit: {'on' if audit else 'off'}"` is 45–55 characters long. On 40–50 column displays, Textual's Header truncates this string or overlaps with the title `"Hexmind"`.
 
 5. **Input Field Placeholder Overflow**
-   - **Location:** [`hexmind/tui.py:54`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L54)
+   - **Location:** [`hexmind/tui.py:54`](../hexmind/tui.py#L54)
    - **Problem:** `placeholder="Ask the team anything…"` (24 characters) fits in 40 columns when full-width, but in the current 2fr split (~27 usable columns inside borders and margins), it leaves barely any room before user input scrolls horizontally.
 
 ---
@@ -52,7 +52,7 @@ Hexmind's current TUI implementation lives entirely in `hexmind/tui.py`. While f
 ### 1.2 Keybindings & Soft Keyboard Friction
 
 1. **Reliance on Multi-Key Modifier Chords**
-   - **Location:** [`hexmind/tui.py:37`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L37)
+   - **Location:** [`hexmind/tui.py:37`](../hexmind/tui.py#L37)
      ```python
      BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+l", "clear", "Clear chat")]
      ```
@@ -63,7 +63,7 @@ Hexmind's current TUI implementation lives entirely in `hexmind/tui.py`. While f
    - There are zero single-key alternatives for quitting or clearing.
 
 2. **Input Focus Trapping**
-   - **Location:** [`hexmind/tui.py:67`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L67)
+   - **Location:** [`hexmind/tui.py:67`](../hexmind/tui.py#L67)
      ```python
      self.query_one("#input").focus()
      ```
@@ -82,7 +82,7 @@ Hexmind's current TUI implementation lives entirely in `hexmind/tui.py`. While f
 2. **Textual Mouse Mode Reliance**
    - **Problem:** Textual enables xterm mouse reporting (mode 1000/1002/1006) by default. Tapping on `#input` or a row in `#tasks` focuses or highlights it. However, because `#tasks` is squished into 15 columns, tapping a specific task row with a finger frequently hits the wrong row due to sub-pixel misalignment and character cell density (~18px cell height on 440 dpi screens).
 3. **Task Detail Inaccessibility on Touch**
-   - **Location:** [`hexmind/tui.py:144-146`](file:///data/data/com.termux/files/home/Projects/hexmind/hexmind/tui.py#L144-L146)
+   - **Location:** [`hexmind/tui.py:144-146`](../hexmind/tui.py#L144-L146)
    - **Problem:** Task details appear in `#detail` only when a row is highlighted. In the 15-column pane, scrolling `#detail` with finger drags is awkward because the scrollable area is narrow and easily triggers parent container scrolling.
 
 ---

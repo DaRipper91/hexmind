@@ -4,9 +4,9 @@
 
 It was written 2026-09-27 against commit `0897b1c` (baseline `107 passed, 1 skipped`) and its
 R1–R11 requirements are still the reason any of this exists. For *what is actually built*, read
-[`BUILD-PATH.md`](file:///home/daripper/Projects/hexmind/docs/plans/BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
+[`BUILD-PATH.md`](../plans/BUILD-PATH.md) — that is re-derived from the code and is the document to trust on
 state. For the desktop graphical workstation and preserved assets, consult the
-[`PONYTAIL-MASTER-HANDBOOK.md`](file:///home/daripper/Projects/hexmind/docs/handbooks/PONYTAIL-MASTER-HANDBOOK.md) and [`Flagship GUI Roadmap`](file:///home/daripper/Projects/hexmind/docs/plans/2026-09-28-gui-flagship-roadmap.md). Where documents disagree, this file describes intent and BUILD-PATH describes reality.
+[`PONYTAIL-MASTER-HANDBOOK.md`](PONYTAIL-MASTER-HANDBOOK.md) and [`Flagship GUI Roadmap`](../archive/plans/2026-09-28-gui-flagship-roadmap.md). Where documents disagree, this file describes intent and BUILD-PATH describes reality.
 
 **Baseline when written:** `107 passed, 1 skipped` (Python 3.14.7, textual 8.2.7).
 **Current worktree:** `705 passed` on 2026-09-29 (full PySide6 Qt GUI suite, headless server loopback/auth hardening, and the completed safe GUI roadmap increments). The historical `main` baseline below remains `619 passed`.
@@ -18,7 +18,7 @@ Two places below are known to be superseded, and are marked as such where they a
   headless surfaces that have nobody to ask.
 - **`/scan` does not add members.** WS-2 planned discovery to *join* the roster. It writes a
   catalogue instead, and `/profile` is the deliberate act that promotes one — see
-  [`TEAM-ASSEMBLY.md`](TEAM-ASSEMBLY.md) §2 for the measurement that changed this.
+  [`TEAM-ASSEMBLY.md`](../TEAM-ASSEMBLY.md) §2 for the measurement that changed this.
 
 ## Goal
 

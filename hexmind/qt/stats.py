@@ -253,7 +253,9 @@ def _stack_bars(plot, labels: Sequence[str], passed: Sequence[int], failed: Sequ
     axis = plot.getAxis("left")
     axis.setTicks([[(i, labels[i]) for i in range(n)]])
     axis.setTextPen(pg.mkPen(theme.INK))
-    plot.getAxis("bottom").setTextPen(pg.mkPen(theme.INK_DIM))
+    bottom_axis = plot.getAxis("bottom")
+    bottom_axis.setTextPen(pg.mkPen(theme.INK_DIM))
+    bottom_axis.setTickSpacing(1, 1)
     plot.setMouseEnabled(x=False, y=False)
     plot.setMenuEnabled(False)
     plot.showGrid(x=True, y=False, alpha=0.14)
@@ -274,10 +276,10 @@ def _chart(title: str, subtitle: str) -> tuple[QWidget, object]:
     lay.setContentsMargins(8, 8, 8, 4)
     lay.setSpacing(2)
     heading = QLabel(title)
-    heading.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+    heading.setProperty("role", "heading")
     note = QLabel(subtitle)
     note.setWordWrap(True)
-    note.setStyleSheet(f"color: {theme.INK_FAINT}; font-size: 11px;")
+    note.setProperty("role", "caption")
     lay.addWidget(heading)
     lay.addWidget(note)
     if not HAVE_PG:
@@ -286,7 +288,7 @@ def _chart(title: str, subtitle: str) -> tuple[QWidget, object]:
             "The ledger below is unaffected."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {theme.INK_FAINT}; font-style: italic;")
+        hint.setProperty("role", "caption")
         lay.addWidget(hint, 1)
         return box, None
     _config_pg()
@@ -316,11 +318,11 @@ class StatsPanel(QWidget):
         self._explicit_agents = bool(agents)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
         self.summary = QLabel(NO_STATS)
-        self.summary.setStyleSheet(f"color: {theme.INK_DIM};")
+        self.summary.setProperty("role", "caption")
         outer.addWidget(self.summary)
 
         split = QSplitter(Qt.Orientation.Vertical)
@@ -335,6 +337,15 @@ class StatsPanel(QWidget):
             "Where the team hurts",
             "Worst domains first. This is the one to route work away from.",
         )
+        self.hurts_plot = self.trouble_plot
+        self.trouble_caption = QLabel("No failures recorded yet.")
+        self.trouble_caption.setProperty("role", "caption")
+        self.trouble_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.trouble_caption.hide()
+        trouble_box.layout().addWidget(self.trouble_caption, 1)
+        self.hurts_caption = self.trouble_caption
+        self.trouble_empty = self.trouble_caption
+        self.hurts_empty = self.trouble_caption
         top.addWidget(agent_box)
         top.addWidget(trouble_box)
         top.setSizes([400, 400])
@@ -345,12 +356,14 @@ class StatsPanel(QWidget):
         led_lay.setContentsMargins(8, 4, 8, 8)
         led_lay.setSpacing(2)
         led_title = QLabel("The ledger")
-        led_title.setStyleSheet(f"color: {theme.INK}; font-weight: 600;")
+        led_title.setProperty("role", "heading")
         self.table = QTableWidget(0, 0)
+        self.table.setTabKeyNavigation(False)  # Tab leaves the table; arrows still move between cells
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         led_lay.addWidget(led_title)
         led_lay.addWidget(self.table, 1)
         split.addWidget(ledger)
@@ -405,6 +418,9 @@ class StatsPanel(QWidget):
                     plot.clear()
                 except Exception:  # pragma: no cover
                     pass
+        if self.trouble_plot is not None:
+            self.trouble_plot.show()
+        self.trouble_caption.hide()
         self.table.setRowCount(0)
         self.table.setColumnCount(0)
 
@@ -422,8 +438,17 @@ class StatsPanel(QWidget):
             logger.warning("Agent chart failed to draw", exc_info=True)
 
     def _draw_trouble(self, rows: Sequence[tuple[str, int, int]]) -> None:
+        total_failed = sum(f for _, _, f in rows)
+        if total_failed == 0:
+            if self.trouble_plot is not None:
+                self.trouble_plot.hide()
+            self.trouble_caption.show()
+            return
+
+        self.trouble_caption.hide()
         if self.trouble_plot is None:
             return
+        self.trouble_plot.show()
         try:
             _stack_bars(
                 self.trouble_plot,

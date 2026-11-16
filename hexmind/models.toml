@@ -29,7 +29,7 @@ tier = "cloud"
 weight = 60
 color = "orange1"
 footprint = "cloud · careful and thorough"
-enabled = true
+enabled = false
 
 [models.agy]
 label = "Google Gemini"
@@ -41,7 +41,7 @@ tier = "cloud"
 weight = 60
 color = "cyan"
 footprint = "cloud · large context"
-enabled = true
+enabled = false
 
 [models.codex]
 label = "OpenAI Codex"
@@ -53,7 +53,7 @@ tier = "cloud"
 weight = 60
 color = "green"
 footprint = "cloud · fast and focused"
-enabled = true
+enabled = false
 
 # ── free OpenCode Zen models: all eight verified present in `opencode models` on 2026-09-27 ──
 # No `variant` on these: opencode 2.0.18 rejects `#minimal` and `#high` on both nemotron models
@@ -99,7 +99,7 @@ tier = "cloud"
 weight = 90
 color = "sky_blue1"
 footprint = "cloud · precision syntax"
-enabled = true
+enabled = false
 
 [models.mimo-flash]
 label = "Xiaomi MiMo-V2.6-Flash (Free)"
@@ -141,7 +141,7 @@ tier = "cloud"
 weight = 80
 color = "green3"
 footprint = "cloud · low latency"
-enabled = true
+enabled = false
 
 [models.space-bunny]
 label = "Space Bunny (Free)"
@@ -182,7 +182,7 @@ tier = "cloud"
 weight = 40
 color = "white"
 footprint = "cloud · edits only, no shell"
-enabled = true
+enabled = false
 
 [models.jules]
 label = "Google Jules"
@@ -198,7 +198,7 @@ tier = "cloud"
 weight = 30
 color = "magenta"
 footprint = "cloud · minutes to hours, returns a PR"
-enabled = true
+enabled = false
 
 [models.qwen]
 label = "local qwen2.5-coder:7b via Ollama"
@@ -214,7 +214,7 @@ text_only = true
 weight = 20
 color = "yellow"
 footprint = "local · shares one Ollama slot with qwen-large"
-enabled = true
+enabled = false
 
 [models.qwen-large]
 label = "local qwen2.5-coder:latest via Ollama"
@@ -230,7 +230,7 @@ text_only = true
 weight = 20
 color = "gold1"
 footprint = "local · shares one Ollama slot with qwen"
-enabled = true
+enabled = false
 
 [models.kimi]
 label = "Moonshot AI Kimi Code"
@@ -244,7 +244,7 @@ weight = 50
 color = "red"
 footprint = "cloud · 1M context"
 variant = "max"
-enabled = true
+enabled = false
 
 # ── OpenCode Go & Contributor tier models: from OpenCode Model Master Handbook ──
 # 27 Go models + 2 Contributor models. All verified in `opencode models`.
@@ -264,7 +264,7 @@ variant = "high"
 think = true
 color = "royal_blue1"
 footprint = "cloud · deep architecture & algorithms, $0.66/M"
-enabled = true
+enabled = false
 
 [models.deepseek-v4-1-flash]
 label = "DeepSeek V4.1 Flash"
@@ -279,7 +279,7 @@ weight = 75
 variant = "high"
 color = "deep_sky_blue1"
 footprint = "cloud · fast autonomous coder, $0.15/M"
-enabled = true
+enabled = false
 
 [models.deepseek-v4-flash]
 label = "DeepSeek V4 Flash"
@@ -293,7 +293,7 @@ tier = "cloud"
 weight = 65
 color = "steel_blue"
 footprint = "cloud · fast inline patches"
-enabled = true
+enabled = false
 
 [models.deepseek-v4-vision]
 label = "DeepSeek V4 Flash Vision Exp"
@@ -307,7 +307,7 @@ tier = "cloud"
 weight = 65
 color = "cornflower_blue"
 footprint = "cloud · multimodal UI vision"
-enabled = true
+enabled = false
 
 [models.gpt-6-luna]
 label = "OpenAI GPT-6 Luna"
@@ -322,7 +322,7 @@ weight = 70
 variant = "high"
 color = "light_sky_blue1"
 footprint = "cloud · 272K context, $0.10/M"
-enabled = true
+enabled = false
 
 [models.gpt-5-6-luna]
 label = "OpenAI GPT-5.6 Luna"
@@ -336,7 +336,7 @@ tier = "cloud"
 weight = 65
 color = "sky_blue2"
 footprint = "cloud · PR reviews & doc scaffolding"
-enabled = true
+enabled = false
 
 [models.grok-4-7]
 label = "xAI Grok 4.7"
@@ -351,7 +351,7 @@ weight = 75
 variant = "high"
 color = "bright_magenta"
 footprint = "cloud · 200K context, adversarial audit, $2.00/M"
-enabled = true
+enabled = false
 
 [models.grok-4-6]
 label = "xAI Grok 4.6"
@@ -365,7 +365,7 @@ tier = "cloud"
 weight = 65
 color = "magenta3"
 footprint = "cloud · fallback diagnostician"
-enabled = true
+enabled = false
 
 [models.qwen3-8-max]
 label = "Alibaba Qwen3.8 Max"
@@ -380,7 +380,7 @@ weight = 75
 variant = "xhigh"
 color = "dark_orange"
 footprint = "cloud · systems programming, deep logic, $2.00/M"
-enabled = true
+enabled = false
 
 [models.qwen3-8-flash]
 label = "Alibaba Qwen3.8 Flash"
@@ -395,7 +395,7 @@ weight = 70
 variant = "medium"
 color = "orange3"
 footprint = "cloud · fast shell automation, $0.15/M"
-enabled = true
+enabled = false
 
 [models.qwen3-7-plus]
 label = "Alibaba Qwen3.7 Plus"
@@ -409,7 +409,7 @@ tier = "cloud"
 weight = 60
 color = "tan"
 footprint = "cloud · 256K context generalist, $0.40/M"
-enabled = true
+enabled = false
 
 [models.kimi-k3]
 label = "Moonshot AI Kimi K3"
@@ -425,7 +425,7 @@ variant = "max"
 think = true
 color = "indian_red1"
 footprint = "cloud · 1M context deep reasoning, $3.00/M"
-enabled = true
+enabled = false
 
 [models.kimi-k2-7-code]
 label = "Moonshot AI Kimi K2.7 Code"
@@ -439,7 +439,7 @@ tier = "cloud"
 weight = 65
 color = "light_salmon1"
 footprint = "cloud · code refactoring, $0.95/M"
-enabled = true
+enabled = false
 
 [models.glm-5-3]
 label = "Zhipu GLM-5.3"
@@ -454,7 +454,7 @@ weight = 70
 variant = "high"
 color = "medium_spring_green"
 footprint = "cloud · function orchestration, $1.40/M"
-enabled = true
+enabled = false
 
 [models.glm-5-3-flash]
 label = "Zhipu GLM-5.3-Flash"
@@ -469,7 +469,7 @@ weight = 70
 variant = "high"
 color = "light_green"
 footprint = "cloud · tool dispatcher, $0.15/M"
-enabled = true
+enabled = false
 
 [models.glm-5-2]
 label = "Zhipu GLM-5.2"
@@ -483,7 +483,7 @@ tier = "cloud"
 weight = 55
 color = "sea_green3"
 footprint = "cloud · backup function-calling"
-enabled = true
+enabled = false
 
 [models.mimo-v2-6-pro]
 label = "Xiaomi MiMo-V2.6-Pro"
@@ -497,7 +497,7 @@ tier = "cloud"
 weight = 70
 color = "dark_turquoise"
 footprint = "cloud · balanced coding, $0.435/M"
-enabled = true
+enabled = false
 
 [models.mimo-v2-6-flash]
 label = "Xiaomi MiMo-V2.6-Flash (Go)"
@@ -511,7 +511,7 @@ tier = "cloud"
 weight = 65
 color = "turquoise2"
 footprint = "cloud · high throughput, Go tier"
-enabled = true
+enabled = false
 
 [models.mimo-v2-5-pro]
 label = "Xiaomi MiMo V2.5 Pro"
@@ -525,7 +525,7 @@ tier = "cloud"
 weight = 55
 color = "cadet_blue"
 footprint = "cloud · legacy testing pro, $0.435/M"
-enabled = true
+enabled = false
 
 [models.mimo-v2-5]
 label = "Xiaomi MiMo V2.5"
@@ -539,7 +539,7 @@ tier = "cloud"
 weight = 55
 color = "medium_turquoise"
 footprint = "cloud · low latency legacy testing, $0.14/M"
-enabled = true
+enabled = false
 
 [models.minimax-m3]
 label = "MiniMax-M3"
@@ -555,7 +555,7 @@ variant = "thinking"
 think = true
 color = "dark_goldenrod"
 footprint = "cloud · 512K context doc parser, $0.30/M"
-enabled = true
+enabled = false
 
 [models.minimax-m2-7]
 label = "MiniMax-M2.7"
@@ -569,7 +569,7 @@ tier = "cloud"
 weight = 60
 color = "khaki3"
 footprint = "cloud · long-form markdown docs, $0.30/M"
-enabled = true
+enabled = false
 
 [models.hy4-preview]
 label = "Tencent Hy4 Preview"
@@ -584,7 +584,7 @@ weight = 60
 variant = "high"
 color = "plum1"
 footprint = "cloud · experimental speculative synthesis, $0.834/M"
-enabled = true
+enabled = false
 
 [models.hy3]
 label = "Tencent Hy3"
@@ -598,7 +598,7 @@ tier = "cloud"
 weight = 50
 color = "orchid1"
 footprint = "cloud · fallback experimental"
-enabled = true
+enabled = false
 
 [models.longcat-2-0]
 label = "LongCat 2.0"
@@ -612,7 +612,7 @@ tier = "cloud"
 weight = 55
 color = "dark_olive_green3"
 footprint = "cloud · legacy long-context fallback"
-enabled = true
+enabled = false
 
 [models.longcat-go]
 label = "LongCat 2.5 Preview (Go)"
@@ -626,7 +626,7 @@ tier = "cloud"
 weight = 70
 color = "chartreuse4"
 footprint = "cloud · massive context window, Go tier"
-enabled = true
+enabled = false
 
 [models.space-bunny-go]
 label = "Space Bunny (Go)"
@@ -641,7 +641,7 @@ weight = 70
 variant = "high"
 color = "dark_orchid"
 footprint = "cloud · high divergence, Go tier"
-enabled = true
+enabled = false
 
 [models.muse-spark-contributor]
 label = "Meta Muse Spark 1.3 Contributor"
@@ -656,7 +656,7 @@ weight = 65
 variant = "high"
 color = "light_sky_blue3"
 footprint = "cloud · skill authoring contributor, $0.10/M"
-enabled = true
+enabled = false
 
 [models.muse-spark-1-2]
 label = "Meta Muse Spark 1.2 Contributor"
@@ -670,5 +670,58 @@ tier = "cloud"
 weight = 55
 color = "light_slate_blue"
 footprint = "cloud · legacy experimental styling"
+enabled = false
+
+
+
+[models.beam-free]
+label = 'Beam (Free)'
+best_at = 'general-purpose coding assistant, fast implementation and debugging'
+domains = ["implementation", "debugging", "general"]
+cli = 'opencode'
+model = 'opencode/beam-free'
+verify = 'path'
+tier = 'cloud'
+weight = 85
+color = 'bright_cyan'
+footprint = 'cloud · free generalist'
 enabled = true
 
+[models.deepseek-v4-1-flash-free]
+label = 'DeepSeek V4.1 Flash (Free)'
+best_at = 'autonomous builder/coder agent loops, fast unit test creation, ShellCheck fixes, rapid AST edits'
+domains = ["implementation", "tests", "shell"]
+cli = 'opencode'
+model = 'opencode/deepseek-v4.1-flash-free'
+verify = 'path'
+tier = 'cloud'
+weight = 85
+color = 'deep_sky_blue1'
+footprint = 'cloud · fast autonomous coder'
+enabled = true
+
+[models.glm-5-3-flash-free]
+label = 'Zhipu GLM-5.3-Flash (Free)'
+best_at = 'fast tool-dispatching sub-agents, JSON payload parsing, standard unit-test mocking'
+domains = ["ui", "tests", "shell"]
+cli = 'opencode'
+model = 'opencode/glm-5.3-flash-free'
+verify = 'path'
+tier = 'cloud'
+weight = 80
+color = 'light_green'
+footprint = 'cloud · tool dispatcher'
+enabled = true
+
+[models.nemotron-3-5-super-vl-free]
+label = 'NVIDIA Nemotron 3.5 Super VL (Free)'
+best_at = 'vision-language understanding, chart and diagram analysis, screenshot-to-code, multimodal reasoning'
+domains = ["ui", "review", "research"]
+cli = 'opencode'
+model = 'opencode/nemotron-3.5-super-vl-free'
+verify = 'path'
+tier = 'cloud'
+weight = 90
+color = 'magenta'
+footprint = 'cloud · vision-language model'
+enabled = true

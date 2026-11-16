@@ -7,8 +7,15 @@ import asyncio
 
 import pytest
 
-from hexmind.core import (BUSY_STATUSES, REGISTRY, Orchestrator, Task, TeamBusy, TeamError,
-                          TEXT_ONLY)
+from hexmind.core import (
+    BUSY_STATUSES,
+    REGISTRY,
+    TEXT_ONLY,
+    Orchestrator,
+    Task,
+    TeamBusy,
+    TeamError,
+)
 from hexmind.relay import command
 
 
@@ -165,8 +172,9 @@ def test_sleep_removes_from_awake_but_keeps_the_model_known():
     assert ("team", {"action": "sleep", "model": "ling-flash"}) in events
 
 
-def test_wake_puts_it_back():
+def test_wake_puts_it_back(monkeypatch):
     orch, _ = make()
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "big-pickle", "ling-flash"])
     orch.sleep("ling-flash")
     assert "awake" in orch.wake("ling-flash")
     assert "ling-flash" in orch.members
@@ -265,8 +273,9 @@ def test_model_command_returns_a_reference_card():
     assert "longcat-preview" in reply, "the anti-pattern pointer must survive into the card"
 
 
-def test_sleep_and_wake_commands_round_trip():
+def test_sleep_and_wake_commands_round_trip(monkeypatch):
     orch, _ = make()
+    monkeypatch.setattr(REGISTRY, "available", lambda: ["claude", "agy", "big-pickle", "ling-flash"])
     assert "is asleep" in asyncio.run(command(orch, "/sleep ling-flash"))
     assert "ling-flash" not in orch.members
     assert "awake" in asyncio.run(command(orch, "/wake ling-flash"))

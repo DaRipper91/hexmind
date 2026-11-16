@@ -41,3 +41,4 @@ packages = ["hexmind", "hexmind.qt"]
 
 [tool.setuptools.package-data]
 hexmind = ["chains/*.toml", "hexmind.svg", "models.toml"]
+"hexmind.qt" = ["icons/*.svg"]

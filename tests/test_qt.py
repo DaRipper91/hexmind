@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("PySide6", reason="the qt extra is not installed")
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QTimer, Qt
 from PySide6.QtWidgets import QApplication
 
 from hexmind.qt import HexmindWidget
@@ -132,7 +132,8 @@ def test_a_request_is_planned_run_and_summarized(room):
     assert "all done" in said, "and the synthesis"
     assert widget.tasks.rowCount() == 2
     rows = [[widget.tasks.item(r, c).text() for c in range(5)] for r in range(2)]
-    assert rows[0][:4] == ["t1", "claude", "done", ""], rows
+    assert rows[0][:4] == ["t1", "claude", "● done", ""], rows
+    assert widget.tasks.item(0, 2).data(Qt.ItemDataRole.UserRole) == "done"
     assert {r[1] for r in rows} == {"claude", "agy"}, "both members should have been used"
     assert widget.status.text() == "ready" and widget.input.isEnabled()
 
@@ -215,6 +216,179 @@ def test_picking_a_lead_updates_the_room_and_the_roster(room):
     assert ["claude", "awake"] in team, team
 
 
+def test_team_save_does_not_deadlock(room):
+    """The save used to emit "team" while holding _orch_lock; the redraw it triggers calls snapshot(),
+    which takes the same lock, so the GUI hung forever. A MagicMock lock hid it. Use the real one."""
+    import faulthandler
+
+    widget = room()
+    widget._room.wait_until_ready()
+
+    faulthandler.dump_traceback_later(10, exit=True)
+    try:
+        widget._on_team_saved({"claude": True, "agy": True}, ["claude", "agy"])
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
+    assert not widget._room._orch_lock.locked()
+    names = {widget.team.item(r, 0).text() for r in range(widget.team.rowCount())}
+    assert names == {"claude", "agy"}
+
+
+def test_room_controls_lock_during_a_turn_and_a_refused_lead_snaps_back(room):
+    widget = room()
+    widget._room.wait_until_ready()
+
+    widget._on_turn_state(True)
+    assert not widget.leadBox.isEnabled()
+    assert not widget.teamButton.isEnabled()
+    assert not widget.auditBox.isEnabled()
+    widget._on_turn_state(False)
+    assert widget.leadBox.isEnabled()
+
+    # The palette's lead: path bypasses the disabled combo, so the room itself must say no.
+    widget._room._turn_in_flight = True
+    widget._room.change_lead("agy")
+    pump(200)
+    widget._room._turn_in_flight = False
+
+    assert "Lead change ignored" in widget.transcript.toPlainText()
+    assert widget.leadBox.currentText() == widget._room.orch.lead == "claude"
+
+
+def test_a_dropped_line_is_not_echoed_and_a_closed_room_refuses(room):
+    widget = room()
+    widget._room.wait_until_ready()
+
+    widget._room._turn_in_flight = True
+    widget._submit("/team")
+    widget._room._turn_in_flight = False
+    text = widget.transcript.toPlainText()
+    assert "you: /team" not in text and "/team" not in text.replace("Busy", "")
+    assert "Busy" in text
+
+    widget.close()
+    assert widget._room.submit("x") is False
+    assert widget._room._turn_in_flight is False
+
+
+class HangingBackend:
+    """A model that never answers, and records whether it was cancelled -- the only path on which
+    DirectBackend kills an agent's process group."""
+
+    def __init__(self) -> None:
+        self.started, self.cancelled = threading.Event(), threading.Event()
+
+    async def run(self, agent, prompt, cwd=None, schema=None):
+        self.started.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        return "never"
+
+
+def test_closing_mid_turn_cancels_the_running_agent(room):
+    backend = HangingBackend()
+    widget = room(backend=backend)
+    widget._room.wait_until_ready()
+
+    assert widget._room.submit("build the thing")
+    assert backend.started.wait(5)
+    widget.close()
+
+    assert backend.cancelled.is_set(), "a closed room left its agent running"
+
+
+def test_qsettings_is_hermetic(_hermetic_home):
+    from PySide6.QtCore import QSettings
+
+    assert QSettings("hexmind", "room").fileName().startswith(str(_hermetic_home))
+
+
+def test_agentdeck_panel_imports():
+    import importlib
+
+    importlib.import_module("hexmind.qt.agentdeck_panel")
+
+
+def test_room_survives_an_agentdeck_panel_error(room, monkeypatch):
+    from hexmind.qt import agentdeck_panel, widget as W
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("agentdeck API changed")
+
+    monkeypatch.setattr(W, "_load_agentdeck_items", lambda: (True, []))
+    monkeypatch.setattr(agentdeck_panel, "AgentdeckPanel", explode)
+    widget = room()
+    tabs = [widget._right.tabText(i) for i in range(widget._right.count())]
+    assert "Agentdeck" not in tabs and "Team" in tabs
+
+
+def test_tab_leaves_every_table(room):
+    """QTableWidget defaults to tabKeyNavigation=True: Tab cycled cells forever and the room's
+    focus chain dead-ended in the Team table."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QTableWidget
+
+    from hexmind.qt.agentdeck_panel import AgentdeckPanel
+    from hexmind.qt.model_selector import ModelSelectorDialog
+
+    widget = room()
+    widget.show()
+    widget.activateWindow()
+    widget.team.setFocus()
+    pump(50)
+    assert QApplication.focusWidget() is widget.team
+    QTest.keyClick(widget.team, Qt.Key.Key_Tab)
+    assert QApplication.focusWidget() is not widget.team
+
+    dialog, panel = ModelSelectorDialog(), AgentdeckPanel([])
+    tables = [*widget.findChildren(QTableWidget), dialog.table, panel.table]
+    assert len(tables) >= 5
+    assert [t for t in tables if t.tabKeyNavigation()] == []
+    dialog.deleteLater()
+    panel.deleteLater()
+
+
+def test_tab_order_follows_the_screen(room):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    widget = room()
+    widget.show()
+    widget.activateWindow()
+    widget.leadBox.setFocus()
+    pump(50)
+    seen = [QApplication.focusWidget()]
+    for _ in range(3):
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Tab)
+        seen.append(QApplication.focusWidget())
+    assert seen == [widget.leadBox, widget.teamButton, widget.auditBox, widget.transcript]
+
+
+def test_the_lead_label_names_the_lead_box(room):
+    widget = room()
+    assert widget.leadLabel.buddy() is widget.leadBox
+
+
+def test_top_bar_is_compact_and_steady(room):
+    widget = room()
+    widget.resize(1400, 900)
+    widget.show()
+    pump(50)
+    assert widget.leadBox.width() < 400
+
+    x = widget.teamButton.x()
+    widget._on_turn_state(True)
+    pump(50)
+    assert widget.turnMeter.text()
+    assert widget.teamButton.x() == x
+    widget._on_turn_state(False)
+
+
 # ---------- commands and the host signal ----------
 
 def test_a_slash_command_reaches_the_room(room, available_models):
@@ -253,6 +427,18 @@ def test_prose_in_a_title_is_not_mistaken_for_a_path(room):
 
     widget._on_task_activated(widget.tasks.item(1, 4))  # t2, "write the tests"
     assert seen == [], "a title that merely contains a slash-ish word is not a path"
+
+
+def test_keyboard_selection_fills_task_detail(room):
+    """Only mouse clicks used to fill the detail pane; arrow keys fire currentItemChanged."""
+    widget = room(backend=FakeBackend())
+    widget.input.setText("go")
+    widget.send()
+    pump()
+
+    widget.tasks.setCurrentCell(1, 1)
+    first = widget.tasks.item(1, 0).text()
+    assert first in widget.detail.toPlainText()
 
 
 # ---------- lifecycle ----------
@@ -450,14 +636,31 @@ def test_palette_commands_refresh_with_the_live_roster(room):
     assert {command.name for command in calls[0]} >= {"lead: claude", "lead: agy"}
 
 
-def test_task_detail_drawer_can_be_collapsed(room):
+def test_task_detail_starts_collapsed_and_toggles(room):
+    """Two equal empty panes used to fill the left column on the first frame."""
     widget = room()
-
-    widget.detail_toggle.click()
     assert widget.detail.isHidden() is True
 
     widget.detail_toggle.click()
     assert widget.detail.isHidden() is False
+
+    widget.detail_toggle.click()
+    assert widget.detail.isHidden() is True
+
+
+def test_layout_of_the_left_column(room):
+    widget = room()
+    widget.resize(1400, 900)
+    widget.show()
+    pump(50)
+    assert widget.detail_toggle.width() < 200
+
+    widget._on_message("claude", "hi")
+    assert widget.detail.toPlainText() == "", "messages no longer mirror into Task detail"
+
+    widget.detail_toggle.setChecked(True)
+    pump(50)
+    assert widget.transcript.height() > widget.detail.height()
 
 
 def test_the_widget_hands_the_audit_ledger_to_the_orchestrator(room):
@@ -552,3 +755,243 @@ def test_hand_brake_cancellation_aborts_in_flight_turn(room, available_models):
     assert not widget.stopButton.isEnabled()
     assert widget.turnMeter.text() == ""
     assert "Turn cancelled" in widget.transcript.toPlainText()
+
+
+def test_tab_bar_fits_without_scroll_at_1400(room, qapp):
+    """Task 3.4: Splitter proportions and tab bar fit at 1400px without scroll arrows."""
+    from hexmind.qt import theme
+    from PySide6.QtCore import Qt
+
+    old_sheet = qapp.styleSheet()
+    qapp.setStyleSheet(theme.stylesheet())
+    try:
+        widget = room()
+        widget.resize(1400, 900)
+        widget.show()
+        pump(50)
+
+        assert widget._split.widget(0).minimumWidth() == 420
+        sizes = widget._split.sizes()
+        assert sizes[0] >= 420 and sizes[1] > 0
+
+        bar = widget._right.tabBar()
+        assert bar.expanding() is False
+        assert widget._right.elideMode() == Qt.TextElideMode.ElideRight
+
+        union = bar.tabRect(0)
+        for i in range(1, bar.count()):
+            union = union.united(bar.tabRect(i))
+        assert union.width() <= bar.width(), (
+            f"tab bar union width ({union.width()}px) must fit in bar width ({bar.width()}px)"
+        )
+    finally:
+        qapp.setStyleSheet(old_sheet)
+
+
+def test_empty_states_for_tables_and_graph(room, qapp):
+    """Task 3.5: Empty states for Tasks, Team, Live Tap and Graph."""
+    from hexmind.qt import theme
+
+    old_sheet = qapp.styleSheet()
+    qapp.setStyleSheet(theme.stylesheet())
+    try:
+        widget = room()
+        widget.resize(1000, 700)
+        widget.show()
+        pump(50)
+
+        assert widget.tasks.empty_text == "No tasks yet. The lead's plan lands here."
+        assert widget.tasks.rowCount() == 0
+        img_tasks = widget.tasks.grab().toImage()
+        bg_tasks = img_tasks.pixelColor(10, 10)
+        w_t, h_t = img_tasks.width(), img_tasks.height()
+        tasks_has_ink = any(
+            img_tasks.pixelColor(x, y) != bg_tasks
+            for y in range(h_t // 3, (2 * h_t) // 3)
+            for x in range(w_t // 4, (3 * w_t) // 4)
+        )
+        assert tasks_has_ink, "empty Tasks table should paint centered hint text"
+
+        assert widget.graph is not None
+        assert not widget.graph._nodes
+        img_graph = widget.graph.grab().toImage()
+        bg_graph = img_graph.pixelColor(10, 10)
+        w_g, h_g = img_graph.width(), img_graph.height()
+        graph_has_ink = any(
+            img_graph.pixelColor(x, y) != bg_graph
+            for y in range(h_g // 3, (2 * h_g) // 3)
+            for x in range(w_g // 4, (3 * w_g) // 4)
+        )
+        assert graph_has_ink, "empty Graph view should paint centered hint text"
+
+        assert widget.live_tap.placeholderText() == "Live tap output appears during a turn."
+    finally:
+        qapp.setStyleSheet(old_sheet)
+
+
+def test_panel_spacing_stats_timeline_and_direct_line(qapp):
+    """Task 3.8: Stats margins, Timeline columns without hscroll at 600px, Direct Line intro."""
+    from hexmind.qt.chat import DirectLine
+    from hexmind.qt.stats import StatsPanel
+    from hexmind.qt.timeline import TimelinePanel
+
+    # 1. Stats outer margins
+    stats = StatsPanel()
+    margins = stats.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (8, 8, 8, 8)
+    stats.close()
+
+    # 2. Empty Timeline at 600px wide has no horizontal scrollbar
+    timeline = TimelinePanel()
+    timeline.resize(600, 400)
+    timeline.show()
+    pump(50)
+    assert timeline.table.horizontalScrollBar().isVisible() is False
+    timeline.close()
+
+    # 3. Direct Line outputs are taller than the intro box
+    chat = DirectLine()
+    chat.resize(800, 600)
+    chat.show()
+    pump(50)
+    assert chat.primary_output.height() > chat.transcript.height()
+    assert chat.transcript.maximumHeight() <= 100
+    chat.close()
+
+
+def test_transcript_renders_markdown_with_speaker_color(room):
+    """Task 4.1: transcript is a QTextBrowser that parses markdown and colors speakers."""
+    from hexmind.qt import theme
+
+    widget = room()
+    # 1. Lead speaker (claude is lead by default) gets VIOLET
+    widget._on_message("claude", "**t1** done")
+    plain = widget.transcript.toPlainText()
+    assert "t1 done" in plain
+    assert "**" not in plain
+
+    blk = widget.transcript.document().firstBlock()
+    frag = next(blk.begin()).fragment()
+    assert frag.text() == "claude: "
+    assert frag.charFormat().foreground().color().name().lower() == theme.VIOLET.lower()
+
+    # 2. Search finds t1 in rendered markdown
+    widget.searchBox.setText("t1")
+    widget._find_match()
+    assert widget.transcript.textCursor().selectedText() == "t1"
+
+    # 3. Non-lead member gets AGENT_COLOR
+    widget._on_message("agy", "working on it")
+    plain = widget.transcript.toPlainText()
+    assert "agy: working on it" in plain
+
+
+def test_tasks_and_team_tables_show_state_hues(room):
+    """Task 4.2: Tasks and Team tables use STATE_HUE plus status glyph."""
+    from PySide6.QtCore import Qt
+    from hexmind.core import Task
+    from hexmind.qt import theme
+
+    widget = room()
+    # 1. Inject a failed task
+    failed_task = Task("t_fail", "broken task", "claude", "fix it", status="failed", audit="disputed")
+    widget._on_task(failed_task)
+
+    item = widget.tasks.item(0, 2)
+    assert item.text() == "● failed"
+    assert item.data(Qt.ItemDataRole.UserRole) == "failed"
+    assert item.foreground().color().name().lower() == theme.state_hue("failed").lower()
+
+    audit_item = widget.tasks.item(0, 3)
+    assert audit_item.text() == "disputed"
+    assert audit_item.foreground().color().name().lower() == theme.RED.lower()
+
+    # 2. Team state column colors
+    lead_row = [r for r in range(widget.team.rowCount()) if widget.team.item(r, 0).text() == "claude"][0]
+    lead_state_item = widget.team.item(lead_row, 1)
+    assert lead_state_item.text() == "lead"
+    assert lead_state_item.foreground().color().name().lower() == theme.VIOLET.lower()
+
+
+def test_table_headers_are_left_aligned_and_not_scalloped(room):
+    """Task 4.6: Table headers are left-aligned and section border radii are removed."""
+    from PySide6.QtCore import Qt
+    from hexmind.qt import theme
+    from hexmind.qt.stats import StatsPanel
+    from hexmind.qt.timeline import TimelinePanel
+
+    widget = room()
+    assert widget.tasks.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+    assert widget.team.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    timeline = TimelinePanel()
+    assert timeline.table.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    stats = StatsPanel()
+    assert stats.table.horizontalHeader().defaultAlignment() & Qt.AlignmentFlag.AlignLeft
+
+    sheet = theme.stylesheet()
+    header_section_rule = [part for part in sheet.split("QHeaderView::section") if "}" in part][0].split("}")[0]
+    assert "border-top-left-radius" not in header_section_rule
+    assert "border-top-right-radius" not in header_section_rule
+
+
+def test_status_pill_styling_and_accessibility_announcement(room, monkeypatch):
+    """Task 4.10: status pill objectName, busy styling property, and QAccessible announcement."""
+    from PySide6 import QtGui
+    from hexmind.qt import theme
+
+    widget = room()
+    assert widget.status.objectName() == "roomStatus"
+    assert widget.status.property("busy") == "false"
+    assert "QLabel#roomStatus" in theme.stylesheet()
+    assert 'QLabel#roomStatus[busy="true"]' in theme.stylesheet()
+
+    announcements = []
+
+    def mock_update_accessibility(event):
+        announcements.append(event)
+
+    monkeypatch.setattr(QtGui.QAccessible, "updateAccessibility", mock_update_accessibility)
+
+    # Transition to busy
+    widget._on_turn_state(True)
+    assert widget.status.property("busy") == "true"
+    assert widget.status.text() == "working…"
+    assert len(announcements) == 1
+    if hasattr(QtGui, "QAccessibleAnnouncementEvent"):
+        assert isinstance(announcements[0], QtGui.QAccessibleAnnouncementEvent)
+        assert announcements[0].message() == "working…"
+
+    # Transition to ready
+    widget._on_turn_state(False)
+    assert widget.status.property("busy") == "false"
+    assert widget.status.text() == "ready"
+    assert len(announcements) == 2
+    if hasattr(QtGui, "QAccessibleAnnouncementEvent"):
+        assert announcements[1].message() == "ready"
+
+
+def test_swallowed_exceptions_are_logged_in_room(room, monkeypatch, caplog):
+    """Task 4.11: Swallowed exceptions in room panels log via logger.exception."""
+    import logging
+
+    widget = room()
+    assert widget.graph is not None
+
+    def bad_set_tasks(_tasks):
+        raise RuntimeError("boom graph failure")
+
+    monkeypatch.setattr(widget.graph, "set_tasks", bad_set_tasks)
+    with caplog.at_level(logging.ERROR):
+        widget._refresh_graph()
+
+    assert any(
+        "task graph refresh failed" in record.message or "boom graph failure" in str(record.exc_info)
+        for record in caplog.records
+    )
+
+
+
+
+

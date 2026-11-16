@@ -50,6 +50,11 @@ def resolve_agent_file(ref: str) -> Path | None:
 
     A reference that looks like a path (it contains a separator) is never searched for by name:
     if you wrote a path and it is not there, that is an error to report, not a hint to go looking.
+
+    Trust boundary: path-shaped references are read verbatim wherever they point — chain files
+    are user-authored and stages run as the user, so a `from =` can make hexmind read any
+    locally-readable file. Only author chains you trust, and never point `from =` at files you
+    did not write yourself.
     """
     direct = Path(ref).expanduser()
     if direct.is_file():

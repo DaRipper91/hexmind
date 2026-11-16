@@ -1,7 +1,7 @@
 # Hybrid Intelligence Blueprint & Model Operational Report
 ## Opencode-CLI Free Endpoints, Local Ollama Engines, and Cross-Tier Symbiosis
 
-This document is the master operational blueprint for local and cloud AI inference across your Fedora Asahi ARM64 environment. It covers the **8 free models in `opencode-cli`**, the **6 active local Ollama models**, their mappings to your installed skill ecosystem in [`/home/daripper/.agents/skills`](file:///home/daripper/.agents/skills), and the **Hybrid Local-to-API Synergy Architecture**.
+This document is the master operational blueprint for local and cloud AI inference across your Fedora Asahi ARM64 environment. It covers the **8 free models in `opencode-cli`**, the **6 active local Ollama models**, their mappings to your installed skill ecosystem in `/home/daripper/.agents/skills`, and the **Hybrid Local-to-API Synergy Architecture**.
 
 ---
 
@@ -100,7 +100,7 @@ flowchart TD
   - Auditing VPAT tables and mapping accessibility criteria against Section 508 / EN 301 549.
   - Analyzing financial earnings transcripts, SEC 10-K filings, and balance sheets.
   - Generating structured SQL aggregation queries, database normalization audits, and indexing performance models.
-* **Recommended Skills:** [`compliance-mapping`](file:///home/daripper/.agents/skills/compliance-mapping/SKILL.md), [`legal-compliance-mapping`](file:///home/daripper/.agents/skills/legal-compliance-mapping/SKILL.md), [`financial-report-search`](file:///home/daripper/.agents/skills/financial-report-search/SKILL.md), [`quantitative-analysis`](file:///home/daripper/.agents/skills/quantitative-analysis/SKILL.md), [`database-analyst`](file:///home/daripper/.agents/skills/database-analyst/SKILL.md), [`sql-optimization`](file:///home/daripper/.agents/skills/sql-optimization/SKILL.md).
+* **Recommended Skills:** `compliance-mapping` (`/home/daripper/.agents/skills/compliance-mapping/SKILL.md`), `legal-compliance-mapping` (`/home/daripper/.agents/skills/legal-compliance-mapping/SKILL.md`), `financial-report-search` (`/home/daripper/.agents/skills/financial-report-search/SKILL.md`), `quantitative-analysis` (`/home/daripper/.agents/skills/quantitative-analysis/SKILL.md`), `database-analyst` (`/home/daripper/.agents/skills/database-analyst/SKILL.md`), `sql-optimization` (`/home/daripper/.agents/skills/sql-optimization/SKILL.md`).
 * **Operational Guidelines:** Enforce strict JSON or Markdown table schemas; never allow ungrounded open-ended arithmetic estimates.
 
 #### 2. MiMo-V2.6-Flash
@@ -109,7 +109,7 @@ flowchart TD
   - Rapid UI component prototyping and front-end auditing.
   - Ingesting raw Chrome DevTools performance traces, DOM node trees, and accessibility trees.
   - Driving fast browser automation scripts (Playwright) and step-by-step screen reader narration loops.
-* **Recommended Skills:** [`frontend-design`](file:///home/daripper/.agents/skills/frontend-design/SKILL.md), [`chrome-devtools`](file:///home/daripper/.agents/skills/chrome-devtools/SKILL.md), [`screen-reader-lab`](file:///home/daripper/.agents/skills/screen-reader-lab/SKILL.md), [`webapp-testing`](file:///home/daripper/.agents/skills/webapp-testing/SKILL.md), [`playwright-explore-website`](file:///home/daripper/.agents/skills/playwright-explore-website/SKILL.md), [`web-component-specialist`](file:///home/daripper/.agents/skills/web-component-specialist/SKILL.md).
+* **Recommended Skills:** `frontend-design` (`/home/daripper/.agents/skills/frontend-design/SKILL.md`), `chrome-devtools` (`/home/daripper/.agents/skills/chrome-devtools/SKILL.md`), `screen-reader-lab` (`/home/daripper/.agents/skills/screen-reader-lab/SKILL.md`), `webapp-testing` (`/home/daripper/.agents/skills/webapp-testing/SKILL.md`), `playwright-explore-website` (`/home/daripper/.agents/skills/playwright-explore-website/SKILL.md`), `web-component-specialist` (`/home/daripper/.agents/skills/web-component-specialist/SKILL.md`).
 * **Operational Guidelines:** Keep conversational turns short and focused on atomic DOM or UI components; pipe raw DevTools selector dumps directly into context.
 
 #### 3. Space Bunny
@@ -118,7 +118,7 @@ flowchart TD
   - Brainstorming novel features, mechanics, and game engine rendering architectures.
   - Breaking through architectural roadblocks via cross-domain analogies and lateral thinking.
   - Generating engaging technical tutorials, narrative repository commit stories, and presentation slide decks.
-* **Recommended Skills:** [`brainstorming`](file:///home/daripper/.agents/skills/brainstorming/SKILL.md), [`feature-ideator`](file:///home/daripper/.agents/skills/feature-ideator/SKILL.md), [`lateral-thinking`](file:///home/daripper/.agents/skills/lateral-thinking/SKILL.md), [`game-engine`](file:///home/daripper/.agents/skills/game-engine/SKILL.md), [`repo-story-time`](file:///home/daripper/.agents/skills/repo-story-time/SKILL.md), [`comment-code-generate-a-tutorial`](file:///home/daripper/.agents/skills/comment-code-generate-a-tutorial/SKILL.md).
+* **Recommended Skills:** `brainstorming` (`/home/daripper/.agents/skills/brainstorming/SKILL.md`), `feature-ideator` (`/home/daripper/.agents/skills/feature-ideator/SKILL.md`), `lateral-thinking` (`/home/daripper/.agents/skills/lateral-thinking/SKILL.md`), `game-engine` (`/home/daripper/.agents/skills/game-engine/SKILL.md`), `repo-story-time` (`/home/daripper/.agents/skills/repo-story-time/SKILL.md`), `comment-code-generate-a-tutorial` (`/home/daripper/.agents/skills/comment-code-generate-a-tutorial/SKILL.md`).
 * **Operational Guidelines:** Use high temperature settings when unblocking creative deadlocks; mandate first-principles constraints to keep ideas physically implementable.
 
 #### 4. LongCat2.5 Preview
@@ -127,7 +127,7 @@ flowchart TD
   - Analyzing entire Repomix / aggregated codebase bundles in one context.
   - Postmortem aggregation across multiple historical incident files (`POMO_AGGREGATED.md`).
   - Cross-referencing disparate documentation, academic literature, and multi-file dependency trees.
-* **Recommended Skills:** [`cross-document-analyzer`](file:///home/daripper/.agents/skills/cross-document-analyzer/SKILL.md), [`cross-page-analyzer`](file:///home/daripper/.agents/skills/cross-page-analyzer/SKILL.md), [`postmortem-aggregator`](file:///home/daripper/.agents/skills/postmortem-aggregator/SKILL.md), [`repomix-manager`](file:///home/daripper/.agents/skills/repomix-manager/SKILL.md), [`literature-review`](file:///home/daripper/.agents/skills/literature-review/SKILL.md), [`research-synthesis`](file:///home/daripper/.agents/skills/research-synthesis/SKILL.md).
+* **Recommended Skills:** `cross-document-analyzer` (`/home/daripper/.agents/skills/cross-document-analyzer/SKILL.md`), `cross-page-analyzer` (`/home/daripper/.agents/skills/cross-page-analyzer/SKILL.md`), `postmortem-aggregator` (`/home/daripper/.agents/skills/postmortem-aggregator/SKILL.md`), `repomix-manager` (`/home/daripper/.agents/skills/repomix-manager/SKILL.md`), `literature-review` (`/home/daripper/.agents/skills/literature-review/SKILL.md`), `research-synthesis` (`/home/daripper/.agents/skills/research-synthesis/SKILL.md`).
 * **Operational Guidelines:** Combine multiple files into single structured blocks with explicit headers; require line-by-line citations (`file:///path#Lxx-Lyy`) for every synthesized finding.
 
 #### 5. Nemotron 3.5 Lightning
@@ -136,7 +136,7 @@ flowchart TD
   - Rapidly generating pytest, Jest, and unittest suites for newly implemented modules.
   - Automated formatting, lint rule remediation, and micro-complexity reduction.
   - Generating Conventional Git commit messages and handling GitHub CLI triage (`gh-cli`, `actions-manager`).
-* **Recommended Skills:** [`quick-fix`](file:///home/daripper/.agents/skills/quick-fix/SKILL.md), [`test-generation`](file:///home/daripper/.agents/skills/test-generation/SKILL.md), [`pytest-coverage`](file:///home/daripper/.agents/skills/pytest-coverage/SKILL.md), [`javascript-typescript-jest`](file:///home/daripper/.agents/skills/javascript-typescript-jest/SKILL.md), [`git-commit`](file:///home/daripper/.agents/skills/git-commit/SKILL.md), [`fedora-linux-triage`](file:///home/daripper/.agents/skills/fedora-linux-triage/SKILL.md).
+* **Recommended Skills:** `quick-fix` (`/home/daripper/.agents/skills/quick-fix/SKILL.md`), `test-generation` (`/home/daripper/.agents/skills/test-generation/SKILL.md`), `pytest-coverage` (`/home/daripper/.agents/skills/pytest-coverage/SKILL.md`), `javascript-typescript-jest` (`/home/daripper/.agents/skills/javascript-typescript-jest/SKILL.md`), `git-commit` (`/home/daripper/.agents/skills/git-commit/SKILL.md`), `fedora-linux-triage` (`/home/daripper/.agents/skills/fedora-linux-triage/SKILL.md`).
 * **Operational Guidelines:** Keep prompts atomic (one function or one failing test at a time); chain immediately into test runner commands for instant validation.
 
 #### 6. Nemotron 3 Ultra
@@ -146,7 +146,7 @@ flowchart TD
   - Deep security vulnerability scanning (AST injection, auth bypass, secret leakage).
   - High-performance concurrency tuning (Rust async runtimes, Python asyncio/multiprocessing, ARM64 memory models).
   - Ruthless code reviews and dismantling architectural anti-patterns.
-* **Recommended Skills:** [`plan-author`](file:///home/daripper/.agents/skills/plan-author/SKILL.md), [`plan-reviewer`](file:///home/daripper/.agents/skills/plan-reviewer/SKILL.md), [`technical-planning`](file:///home/daripper/.agents/skills/technical-planning/SKILL.md), [`system-design`](file:///home/daripper/.agents/skills/system-design/SKILL.md), [`create-architectural-decision-record`](file:///home/daripper/.agents/skills/create-architectural-decision-record/SKILL.md), [`ruthless-refactorer`](file:///home/daripper/.agents/skills/ruthless-refactorer/SKILL.md), [`security`](file:///home/daripper/.agents/skills/security/SKILL.md).
+* **Recommended Skills:** `plan-author` (`/home/daripper/.agents/skills/plan-author/SKILL.md`), `plan-reviewer` (`/home/daripper/.agents/skills/plan-reviewer/SKILL.md`), `technical-planning` (`/home/daripper/.agents/skills/technical-planning/SKILL.md`), `system-design` (`/home/daripper/.agents/skills/system-design/SKILL.md`), `create-architectural-decision-record` (`/home/daripper/.agents/skills/create-architectural-decision-record/SKILL.md`), `ruthless-refactorer` (`/home/daripper/.agents/skills/ruthless-refactorer/SKILL.md`), `security` (`/home/daripper/.agents/skills/security/SKILL.md`).
 * **Operational Guidelines:** Force chain-of-thought analysis on edge cases and failure modes before generating implementation code; require explicit algorithmic bounds ($O(n)$).
 
 #### 7. Big Pickle
@@ -156,7 +156,7 @@ flowchart TD
   - Relentless bug hunting and regression fixing where other models stall ("Ralph mode").
   - Test-Driven Development (TDD) cycles: writing failing tests, writing code, verifying green tests.
   - Tearing down and replacing legacy codebases (`rip-it-apart`).
-* **Recommended Skills:** [`code-implementer`](file:///home/daripper/.agents/skills/code-implementer/SKILL.md), [`load-pickle-persona`](file:///home/daripper/.agents/skills/load-pickle-persona/SKILL.md), [`ralph-mode`](file:///home/daripper/.agents/skills/ralph-mode/SKILL.md), [`persistence`](file:///home/daripper/.agents/skills/persistence/SKILL.md), [`test-driven-development`](file:///home/daripper/.agents/skills/test-driven-development/SKILL.md), [`rip-it-apart`](file:///home/daripper/.agents/skills/rip-it-apart/SKILL.md), [`verification-before-completion`](file:///home/daripper/.agents/skills/verification-before-completion/SKILL.md).
+* **Recommended Skills:** `code-implementer` (`/home/daripper/.agents/skills/code-implementer/SKILL.md`), `load-pickle-persona` (`/home/daripper/.agents/skills/load-pickle-persona/SKILL.md`), `ralph-mode` (`/home/daripper/.agents/skills/ralph-mode/SKILL.md`), `persistence` (`/home/daripper/.agents/skills/persistence/SKILL.md`), `test-driven-development` (`/home/daripper/.agents/skills/test-driven-development/SKILL.md`), `rip-it-apart` (`/home/daripper/.agents/skills/rip-it-apart/SKILL.md`), `verification-before-completion` (`/home/daripper/.agents/skills/verification-before-completion/SKILL.md`).
 * **Operational Guidelines:** Provide concrete pass/fail verification commands; never mark tasks done until execution confirms clean test runs.
 
 #### 8. Muse Spark 1.3
@@ -165,7 +165,7 @@ flowchart TD
   - Authoring and maintaining custom Agent Skills conforming to the open standard.
   - Designing and refining system instructions, hookify rules, and Cursor/Gemini rule sets.
   - Converting skills between platforms (Codex to Gemini CLI / opencode-cli extensions).
-* **Recommended Skills:** [`skills-author`](file:///home/daripper/.agents/skills/skills-author/SKILL.md), [`skill-creator`](file:///home/daripper/.agents/skills/skill-creator/SKILL.md), [`writing-skills`](file:///home/daripper/.agents/skills/writing-skills/SKILL.md), [`writing-rules`](file:///home/daripper/.agents/skills/writing-rules/SKILL.md), [`prompt_engineering`](file:///home/daripper/.agents/skills/prompt_engineering/SKILL.md), [`prompt-builder`](file:///home/daripper/.agents/skills/prompt-builder/SKILL.md).
+* **Recommended Skills:** `skills-author` (`/home/daripper/.agents/skills/skills-author/SKILL.md`), `skill-creator` (`/home/daripper/.agents/skills/skill-creator/SKILL.md`), `writing-skills` (`/home/daripper/.agents/skills/writing-skills/SKILL.md`), `writing-rules` (`/home/daripper/.agents/skills/writing-rules/SKILL.md`), `prompt_engineering` (`/home/daripper/.agents/skills/prompt_engineering/SKILL.md`), `prompt-builder` (`/home/daripper/.agents/skills/prompt-builder/SKILL.md`).
 * **Operational Guidelines:** Require strict adherence to YAML frontmatter and standard skill directory structures; benchmark prompt refinements against concrete evaluation suites.
 
 ---
@@ -178,7 +178,7 @@ flowchart TD
   - Primary offline generalist and logic engine when disconnected from cloud endpoints.
   - Local multi-turn code refactoring and dependency graph analysis.
   - Intermediate synthesis step between raw local data and high-level architectural plans.
-* **Recommended Skills:** [`python-specialist`](file:///home/daripper/.agents/skills/python-specialist/SKILL.md), [`database-analyst`](file:///home/daripper/.agents/skills/database-analyst/SKILL.md), [`refactor`](file:///home/daripper/.agents/skills/refactor/SKILL.md), [`code-simplifier`](file:///home/daripper/.agents/skills/code-simplifier/SKILL.md).
+* **Recommended Skills:** `python-specialist` (`/home/daripper/.agents/skills/python-specialist/SKILL.md`), `database-analyst` (`/home/daripper/.agents/skills/database-analyst/SKILL.md`), `refactor` (`/home/daripper/.agents/skills/refactor/SKILL.md`), `code-simplifier` (`/home/daripper/.agents/skills/code-simplifier/SKILL.md`).
 
 #### 10. `phi3:mini` (2.2 GB)
 * **Architecture & Focus:** Microsoft's 3.8B parameter heavily-curated synthetic reasoning engine. Optimized for fast logic, symbolic representation, and compact reasoning steps.
@@ -186,7 +186,7 @@ flowchart TD
   - Default reasoning backbone for **Aether** symbolic AI node graphs.
   - Fast context interrogation and decision trees without overhead.
   - Lightweight logic sanity checks before launching heavy background tasks.
-* **Recommended Skills:** [`using-co-researcher`](file:///home/daripper/.agents/skills/using-co-researcher/SKILL.md), [`what-context-needed`](file:///home/daripper/.agents/skills/what-context-needed/SKILL.md), [`explain-concept`](file:///home/daripper/.agents/skills/explain-concept/SKILL.md).
+* **Recommended Skills:** `using-co-researcher` (`/home/daripper/.agents/skills/using-co-researcher/SKILL.md`), `what-context-needed` (`/home/daripper/.agents/skills/what-context-needed/SKILL.md`), `explain-concept` (`/home/daripper/.agents/skills/explain-concept/SKILL.md`).
 
 #### 11. `moondream:latest` (1.7 GB)
 * **Architecture & Focus:** Ultra-compact 1.86B parameter Vision-Language Model with sub-400ms inference on Apple Silicon Unified Memory.
@@ -194,7 +194,7 @@ flowchart TD
   - **Garage / Vehicle Diagnostics:** Snapping photos of fuse box diagrams, wire harnesses, connector pinouts, and multimeter/OBD readouts via Pixel 10 Pro $\rightarrow$ `kdeconnect-cli`.
   - **Visual-to-UI Ingestion:** Parsing Penpot wireframes and terminal screenshot mockups into structural component hierarchies.
   - **A11y Alt-Text:** Generating automated visual descriptions for charts and non-semantic SVGs.
-* **Recommended Skills:** [`media-accessibility`](file:///home/daripper/.agents/skills/media-accessibility/SKILL.md), [`screen-reader-lab`](file:///home/daripper/.agents/skills/screen-reader-lab/SKILL.md), [`penpot-uiux-design`](file:///home/daripper/.agents/skills/penpot-uiux-design/SKILL.md).
+* **Recommended Skills:** `media-accessibility` (`/home/daripper/.agents/skills/media-accessibility/SKILL.md`), `screen-reader-lab` (`/home/daripper/.agents/skills/screen-reader-lab/SKILL.md`), `penpot-uiux-design` (`/home/daripper/.agents/skills/penpot-uiux-design/SKILL.md`).
 
 #### 12. `deepseek-r1:1.5b` (1.1 GB)
 * **Architecture & Focus:** Distilled 1.5B reasoning model exhibiting raw chain-of-thought `<think>` logic traces.
@@ -202,7 +202,7 @@ flowchart TD
   - Deep local debugging of tricky runtime exceptions, race conditions, and off-by-one errors.
   - Verifying edge cases and mathematical logic locally without cloud round-trips.
   - Offline fallback for `Nemotron 3 Ultra` planning and review loops.
-* **Recommended Skills:** [`systematic-debugging`](file:///home/daripper/.agents/skills/systematic-debugging/SKILL.md), [`debug-error`](file:///home/daripper/.agents/skills/debug-error/SKILL.md), [`edge-cases`](file:///home/daripper/.agents/skills/edge-cases/SKILL.md), [`verification-before-completion`](file:///home/daripper/.agents/skills/verification-before-completion/SKILL.md).
+* **Recommended Skills:** `systematic-debugging` (`/home/daripper/.agents/skills/systematic-debugging/SKILL.md`), `debug-error` (`/home/daripper/.agents/skills/debug-error/SKILL.md`), `edge-cases` (`/home/daripper/.agents/skills/edge-cases/SKILL.md`), `verification-before-completion` (`/home/daripper/.agents/skills/verification-before-completion/SKILL.md`).
 
 #### 13. `qwen2.5-coder:1.5b` (986 MB)
 * **Architecture & Focus:** Hyper-specialized code syntax model. Blazing fast token generation optimized for precision code completion and lint fixing.
@@ -210,7 +210,7 @@ flowchart TD
   - Local test generation (`pytest`, `jest`) and automated test runner remediation.
   - Generating Conventional Commit messages and fast bash/fish automation scripts.
   - Offline fallback for `Nemotron 3.5 Lightning`.
-* **Recommended Skills:** [`quick-fix`](file:///home/daripper/.agents/skills/quick-fix/SKILL.md), [`test-generation`](file:///home/daripper/.agents/skills/test-generation/SKILL.md), [`pytest-coverage`](file:///home/daripper/.agents/skills/pytest-coverage/SKILL.md), [`git-commit`](file:///home/daripper/.agents/skills/git-commit/SKILL.md).
+* **Recommended Skills:** `quick-fix` (`/home/daripper/.agents/skills/quick-fix/SKILL.md`), `test-generation` (`/home/daripper/.agents/skills/test-generation/SKILL.md`), `pytest-coverage` (`/home/daripper/.agents/skills/pytest-coverage/SKILL.md`), `git-commit` (`/home/daripper/.agents/skills/git-commit/SKILL.md`).
 
 #### 14. `samantha-mistral:latest` (4.1 GB)
 * **Architecture & Focus:** 7B Mistral fine-tune engineered for empathic dialogue, conversational pacing, and psychological reflection.
@@ -218,7 +218,7 @@ flowchart TD
   - **Voice/Dictation Triage Proxy:** Ingesting messy voice dictations from the garage via KDE Connect, stripping verbal fluff, and structuring thoughts into technical requirements.
   - **Aether Dialectic Mirror:** Challenging architectural assumptions, evaluating cognitive load, and preventing over-engineering in Seer/Aether scripts.
   - **Developer UX & Tutorial Evaluation:** Reviewing technical guides and CLI interactions for human clarity and ergonomics.
-* **Recommended Skills:** [`comment-code-generate-a-tutorial`](file:///home/daripper/.agents/skills/comment-code-generate-a-tutorial/SKILL.md), [`eli5`](file:///home/daripper/.agents/skills/eli5/SKILL.md), [`presentation`](file:///home/daripper/.agents/skills/presentation/SKILL.md).
+* **Recommended Skills:** `comment-code-generate-a-tutorial` (`/home/daripper/.agents/skills/comment-code-generate-a-tutorial/SKILL.md`), `eli5` (`/home/daripper/.agents/skills/eli5/SKILL.md`), `presentation` (`/home/daripper/.agents/skills/presentation/SKILL.md`).
 
 ---
 
@@ -240,7 +240,7 @@ flowchart TD
 1. **Ingestion:** `LongCat2.5 Preview` ingests the complete Repomix digest of the target project.
 2. **Audit & Threat Model:** `Nemotron 3 Ultra` reviews the architecture for concurrency bottlenecks and security vulnerabilities.
 3. **Execution:** `Big Pickle` refactors the codebase following the audit recommendations using strict TDD.
-4. **Micro-Triage:** `Nemotron 3.5 Lightning` or local `qwen2.5-coder` cleans up linting, generates git commit diffs, and updates [`AGENTS.md`](file:///home/daripper/AGENTS.md).
+4. **Micro-Triage:** `Nemotron 3.5 Lightning` or local `qwen2.5-coder` cleans up linting, generates git commit diffs, and updates `/home/daripper/AGENTS.md`.
 
 ---
 ---

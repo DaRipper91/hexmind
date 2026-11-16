@@ -409,3 +409,31 @@ def test_bar_height_leaves_a_gap_between_rows(ledger):
     """Rows are one unit apart, so a bar thicker than 1.0 would make adjacent rows touch and the
     stack would read as a single block."""
     assert 0 < stats.BAR_HEIGHT < 1
+
+
+def test_zero_failures_ledger_shows_caption_and_hides_hurts_plot(panel, tmp_path):
+    """Task 4.8: When total failed count is 0, hurts chart is hidden and caption is shown."""
+    zero_fails_ledger = {
+        "claude": {
+            "tests": {"pass": 5, "fail": 0},
+            "security": {"pass": 2, "fail": 0},
+        },
+    }
+    path = tmp_path / "zero_fails.json"
+    path.write_text(json.dumps(zero_fails_ledger), encoding="utf-8")
+
+    p = panel(str(path), agents=["claude"])
+    p.show()
+    assert p.trouble_caption.isVisible()
+    assert p.trouble_caption.text() == "No failures recorded yet."
+    if stats.HAVE_PG:
+        assert not p.trouble_plot.isVisible()
+
+
+@pytest.mark.skipif(not stats.HAVE_PG, reason="pyqtgraph is not installed")
+def test_stats_count_chart_uses_integer_ticks(panel, ledger):
+    """Task 4.8: bottom axis tick spacing is set to (1, 1)."""
+    p = panel(ledger, agents=ROSTER)
+    assert p.agent_plot is not None
+    assert p.agent_plot.getAxis("bottom")._tickSpacing == [(1, 0.0), (1, 0.0)]
+
